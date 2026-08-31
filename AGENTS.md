@@ -1,0 +1,111 @@
+# Project Guardrails
+
+These instructions apply to the entire repository.
+
+## Required reading order
+
+Before changing code:
+
+1. Read this file.
+2. Read `CODEMAP.md` for the smallest relevant path.
+3. Read `docs/ARCHITECTURE.md` only for the affected boundary.
+4. Read `docs/PROJECT_PLAN.md` only when changing scope, milestones, or product behavior.
+
+When documents disagree, authority is:
+
+```text
+AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comments
+```
+
+`CODEMAP.md` describes the current tree; it does not override architecture.
+
+## Hard boundaries
+
+### 1. Keep one modular monolith
+
+- MUST ship one Go application with Web, MCP, CLI, and scheduled-job entry points.
+- MUST keep business modules in-process behind Go interfaces.
+- MUST NOT introduce microservices, a message broker, or distributed transactions without an approved architecture change.
+
+### 2. Protect dependency direction
+
+- `domain` MUST import no database, HTTP, OSS, MCP, OneBound, or framework package.
+- `application` MAY depend on domain types and ports, never concrete infrastructure adapters.
+- Web, MCP, CLI, and scheduler MUST call application services; they MUST NOT write SQL or call storage/provider SDKs directly.
+- Infrastructure adapters MAY depend inward; inward packages MUST NOT depend outward.
+
+### 3. Keep business writes behind use cases
+
+- Every mutation MUST go through an application service that validates tenant, invariants, and transaction boundaries.
+- MCP MUST expose semantic tools, never arbitrary SQL or filesystem access.
+- HTTP handlers MUST remain transport adapters, not business-logic containers.
+
+### 4. Support exactly two databases
+
+- SQLite is the default local database; PostgreSQL is the SaaS database.
+- MUST use `database/sql`, sqlc-generated queries, and explicit Store adapters.
+- MUST NOT add a runtime ORM or claim compatibility with an untested database.
+- Every schema change MUST include matching SQLite and PostgreSQL forward migrations with the same version.
+- Existing persisted data MUST NOT be destructively rewritten or dropped in a normal application upgrade.
+- Every business table MUST carry `tenant_id`, including local-only deployments.
+
+### 5. Never use floating point for money
+
+- Monetary amounts MUST use signed integer minor units plus ISO currency code.
+- All internal statistics MUST use the tenant base currency.
+- A non-base-currency record MUST preserve original amount, currency, rate, rate date, and rate source.
+- Base currency MUST be locked after the first monetary record.
+
+### 6. Preserve lifecycle history
+
+- Confirmed asset events are append-only.
+- Corrections MUST void and replace; they MUST NOT overwrite the original economic event.
+- Transactions may group events, but asset events remain the lifecycle source of truth.
+
+### 7. Keep attachments storage-neutral
+
+- All attachment I/O MUST go through `BlobStore` and the shared `ObjectKeyMapper`.
+- Local filesystem and Aliyun OSS MUST use the same logical object key.
+- Database rows MUST store `store_id` and `object_key`, never absolute paths, permanent public URLs, or signed URLs.
+- Switching the default store MUST NOT make existing attachments unreadable.
+
+### 8. Keep market providers replaceable
+
+- OneBound MUST remain an adapter behind `MarketDataProvider`.
+- Provider adapters may authenticate, request, paginate, rate-limit, and map fields.
+- Provider adapters MUST NOT own matching, deduplication, outlier filtering, aggregation, FX conversion, or valuation policy.
+- Every saved market point MUST retain provider, observation time, original currency, sample count, and calculation provenance.
+
+### 9. Keep secrets out of persisted project data
+
+- Secrets MUST NOT enter Git, logs, fixtures, migration files, or ordinary database configuration rows.
+- Local secrets may come from `.env`; production secrets MUST be injectable as environment variables or secret references.
+- `.env` MUST remain ignored; `.env.example` contains names only.
+
+### 10. Keep the AI outside the application core
+
+- The application MUST NOT require a model API key for its core operation.
+- The AI Harness owns screenshot understanding and conversation.
+- The application owns validation, confirmation, persistence, valuation, and audit history.
+
+### 11. Test every compatibility boundary
+
+- Store behavior MUST run against both SQLite and PostgreSQL.
+- Blob behavior MUST run against local storage and an OSS-compatible test double or isolated test bucket.
+- Provider normalization MUST be tested with recorded, secret-free fixtures.
+- A migration change is incomplete without an old-version upgrade test.
+
+### 12. Reject scope drift
+
+- MUST NOT add speculative abstractions with no second real implementation or immediate boundary requirement.
+- MUST NOT replace server-rendered HTML with a SPA without an approved architecture change.
+- MUST NOT introduce a second service merely to organize code.
+- When a request conflicts with a hard boundary, stop and propose an explicit architecture-document change first.
+
+## Change discipline
+
+- Update `CODEMAP.md` in the same change when paths, entry points, or ownership move.
+- Update `docs/ARCHITECTURE.md` in the same change when a boundary, dependency, persistence rule, or deployment shape changes.
+- Update `docs/PROJECT_PLAN.md` only when product scope or implementation phases change.
+- Prefer the smallest implementation that preserves these invariants.
+
