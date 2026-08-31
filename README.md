@@ -1,4 +1,4 @@
-# Item LCC Track
+# AssetLoop / 物迹
 
 AI-assisted personal asset lifecycle, resale valuation, and holding-cost tracker.
 
@@ -18,4 +18,3 @@ The repository is currently in architecture and planning stage.
 - Local attachments by default, Aliyun OSS supported.
 - OneBound as the first replaceable market-data provider.
 - Tenant base-currency accounting with original-currency audit evidence.
-

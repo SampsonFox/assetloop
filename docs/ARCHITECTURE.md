@@ -1,10 +1,10 @@
 # System Architecture
 
-This document is the architectural source of truth for Item LCC Track. It defines the system's stable shape independently from the delivery plan.
+This document is the architectural source of truth for AssetLoop (物迹). It defines the system's stable shape independently from the delivery plan.
 
 ## 1. Architectural intent
 
-Item LCC Track is a modular Go monolith that runs locally with no required external service and can later run as a multi-tenant SaaS without replacing its domain or application layers.
+AssetLoop (物迹) is a modular Go monolith that runs locally with no required external service and can later run as a multi-tenant SaaS without replacing its domain or application layers.
 
 The architecture optimizes for:
 
@@ -23,7 +23,7 @@ The architecture optimizes for:
                              | semantic MCP calls
                              v
 +---------+       +----------+-----------+       +----------------+
-| Browser |------>| Item LCC Track       |<------| OS Cron / Worker|
+| Browser |------>| AssetLoop / 物迹      |<------| OS Cron / Worker|
 +---------+ HTTP  | Web + MCP + CLI      | jobs  +----------------+
                   +----------+-----------+
                              |
@@ -255,4 +255,3 @@ A change requires updating this document before implementation if it does any of
 - weakens auditability, secret handling, or data-upgrade safety.
 
 Implementation convenience alone is not sufficient justification. The change must state the new invariant, migration path, and compatibility tests.
-

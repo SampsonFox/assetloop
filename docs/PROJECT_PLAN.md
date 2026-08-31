@@ -1,4 +1,4 @@
-# Item LCC Track 项目计划
+# AssetLoop / 物迹 项目计划
 
 状态：规划完成，待进入基础工程阶段  
 最后更新：2026-08-31
@@ -84,11 +84,11 @@ SQLite PG   Local OSS    OneBound Other
 同一个可执行程序提供子命令：
 
 ```text
-item-lcc-track serve
-item-lcc-track mcp
-item-lcc-track migrate
-item-lcc-track refresh
-item-lcc-track install-scheduler
+assetloop serve
+assetloop mcp
+assetloop migrate
+assetloop refresh
+assetloop install-scheduler
 ```
 
 通过 CI 构建 Windows、Linux、macOS 的独立二进制和可选 Docker 镜像。
@@ -393,7 +393,7 @@ HTTP_ADDR=127.0.0.1:8080
 LOG_LEVEL=info
 
 DB_DRIVER=sqlite
-DB_DSN=./data/item-lcc-track.db
+DB_DSN=./data/assetloop.db
 
 ATTACHMENT_DEFAULT_STORE=local
 ATTACHMENT_LOCAL_ROOT=./data/blobs
@@ -401,7 +401,7 @@ ATTACHMENT_LOCAL_ROOT=./data/blobs
 OSS_PROVIDER=aliyun
 ALIYUN_OSS_ENDPOINT=https://oss-cn-shanghai.aliyuncs.com
 ALIYUN_OSS_REGION=cn-shanghai
-ALIYUN_OSS_BUCKET=item-lcc-track
+ALIYUN_OSS_BUCKET=assetloop
 ALIYUN_OSS_ACCESS_KEY_ID=
 ALIYUN_OSS_ACCESS_KEY_SECRET=
 ALIYUN_OSS_PATH_PREFIX=
@@ -463,7 +463,7 @@ refresh_market_price
 ## 14. 建议目录结构
 
 ```text
-cmd/item-lcc-track/
+cmd/assetloop/
 internal/
 ├── domain/
 ├── application/

@@ -17,7 +17,7 @@ Status: architecture-only repository; paths marked **planned** do not exist yet.
 
 | Path | Responsibility |
 |---|---|
-| `cmd/item-lcc-track/` | Single binary and subcommand wiring |
+| `cmd/assetloop/` | Single binary and subcommand wiring |
 | `internal/web/` | HTTP transport, templates, static assets |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
@@ -82,4 +82,3 @@ Web/MCP -> attachment use case -> attachment metadata Store
 ## Maintenance rule
 
 Do not list every file. List stable entry points, ports, and ownership boundaries. Once code exists, use `rg` inside the selected path rather than loading the whole repository.
-
