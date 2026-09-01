@@ -81,6 +81,20 @@ func TestUnauthenticatedDashboardRedirectsToLogin(t *testing.T) {
 	}
 }
 
+func TestParseFormDatePreservesCalendarDateAcrossTimezone(t *testing.T) {
+	previousLocal := time.Local
+	time.Local = time.FixedZone("Asia/Shanghai", 8*60*60)
+	t.Cleanup(func() { time.Local = previousLocal })
+
+	got, err := parseFormDate("2026-08-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if formatted := got.Format("2006-01-02"); formatted != "2026-08-01" {
+		t.Fatalf("rate date shifted across timezone: got %s", formatted)
+	}
+}
+
 func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	handler := newTestHandler(t)
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
@@ -196,10 +210,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("confirm sale draft: status=%d body=%s", confirmed.Code, confirmed.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "web-fixture", "正确维修金额", "已作废"} {
+	for _, want := range []string{"7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "已作废"} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
+	}
+	if strings.Contains(detail.Body.String(), "2026-07-31") {
+		t.Fatalf("FX rate date shifted to the prior day: %s", detail.Body.String())
 	}
 	dashboard := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
 	for _, want := range []string{"具体物品", "7270.00 CNY", "730.00 CNY", "收入 8000.00 CNY"} {

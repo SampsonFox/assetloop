@@ -80,6 +80,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"money": domain.FormatMinor, "eventLabel": eventLabel, "eventClass": eventClass,
 		"dateTime":      func(value time.Time) string { return value.Local().Format("2006-01-02 15:04") },
 		"dateTimeInput": func(value time.Time) string { return value.Local().Format("2006-01-02T15:04") },
+		"date":          func(value time.Time) string { return value.Format("2006-01-02") },
 		"rate":          formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
 	for _, page := range []string{"setup", "login", "dashboard", "members", "catalog", "asset", "event_correct", "imports", "import_confirm", "error"} {
@@ -787,11 +788,11 @@ func parseFormTime(value string) (time.Time, error) {
 }
 
 func parseFormDate(value string) (time.Time, error) {
-	parsed, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(value), time.Local)
+	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(value))
 	if err != nil {
 		return time.Time{}, errors.New("汇率日期格式无效")
 	}
-	return parsed.UTC(), nil
+	return parsed, nil
 }
 
 func eventLabel(value domain.AssetEventType) string {
