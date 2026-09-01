@@ -263,7 +263,7 @@ dev baseline
     |
     +-- dev-<scope> | feature/<scope> | fix/<scope>
                     |
-                    +-- checkpoint commits + CI
+                    +-- checkpoint commits + tests + secret scan
                     |
                     +-- squash PR --> uat (protected)
                                          |
@@ -275,5 +275,7 @@ dev baseline
 ```
 
 `dev`, `uat`, and `prod` are permanent. Work branches are disposable; permanent branches are not. UAT and production builds share one workflow and differ only by GitHub environment, retention, and the final production-release step. This prevents a separately maintained production build path from drifting away from the artifact tested in UAT.
+
+The GitHub repository is public, so repository visibility is a security boundary: all tracked content and delivery metadata are assumed public. GitHub Push Protection blocks supported credential patterns before acceptance, while the required `secret-scan` CI job scans the complete fetched Git history with a checksum-pinned Gitleaks release. Runtime secrets remain outside Git in local `.env` files, GitHub Environment secrets, or a production secret manager.
 
 Rollback is Git-based: revert the smallest offending commit or revert the promotion pull request, then run the same pipeline again. Database rollback remains forward-only and uses a corrective migration; branch rollback never runs destructive down migrations against persisted data.

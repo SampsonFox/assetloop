@@ -12,6 +12,22 @@ This is the required delivery workflow for AssetLoop. It is part of the project 
 
 `uat` and `prod` are protected on GitHub. Both require a pull request and passing CI; force pushes and deletion are disabled.
 
+## Public repository and secret safety
+
+The GitHub repository is intentionally public. Assume that every commit, branch, pull request, Action log, artifact name, issue, and review comment is immediately visible outside the project.
+
+Before every checkpoint push:
+
+1. keep real local values only in ignored `.env` files;
+2. keep `.env.example`, fixtures, migrations, screenshots, and logs free of real credentials;
+3. inspect the staged diff for credentials and private infrastructure details;
+4. let GitHub Push Protection reject supported secret patterns;
+5. require the `secret-scan` CI job, which scans the complete fetched Git history with a checksum-pinned Gitleaks release.
+
+GitHub Secret Protection and Push Protection must remain enabled. `secret-scan` is a required status check for both `uat` and `prod` alongside `test`.
+
+If a secret may have been exposed, stop promotion. Revoke or rotate it first; then remove it from the working tree and Git history, re-run a full-history scan, and only then resume development. Deleting the current file alone is not remediation because prior commits remain public.
+
 ## Work branches
 
 - `dev-<scope>`: a substantial product or architecture slice. A slash is intentionally not used because Git cannot store permanent `dev` and `dev/<scope>` refs at the same time.
@@ -30,7 +46,7 @@ fix/sqlite-upgrade-lock
 
 ## Promotion
 
-1. Run formatting, sqlc generation, tests, vet, and the relevant local smoke test.
+1. Run formatting, sqlc generation, tests, vet, secret scanning, and the relevant local smoke test.
 2. Push the work branch and open a pull request to `uat`.
 3. Squash merge after CI passes so UAT receives one coherent change.
 4. Delete the short-lived branch.
