@@ -14,7 +14,7 @@ This is the required delivery workflow for AssetLoop. It is part of the project 
 
 ## Work branches
 
-- `dev/<scope>`: a substantial product or architecture slice.
+- `dev-<scope>`: a substantial product or architecture slice. A slash is intentionally not used because Git cannot store permanent `dev` and `dev/<scope>` refs at the same time.
 - `feature/<scope>`: a focused feature added after the main slice exists.
 - `fix/<scope>`: a defect correction.
 
@@ -23,7 +23,7 @@ Create a work branch from the latest permanent `dev` baseline. Keep its scope si
 Examples:
 
 ```text
-dev/asset-lifecycle
+dev-asset-lifecycle
 feature/csv-export
 fix/sqlite-upgrade-lock
 ```
@@ -68,4 +68,3 @@ Environment-specific secrets and variables belong in their matching GitHub Envir
 - UAT rollback: revert the squash commit or promotion pull request, then rebuild UAT artifacts.
 - Production rollback: revert through a new pull request to `prod`; do not rewrite production history.
 - Database rollback: add a corrective forward migration. Never use a destructive down migration on user data.
-

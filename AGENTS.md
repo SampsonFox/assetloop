@@ -105,7 +105,7 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 ### 13. Preserve the delivery chain
 
 - `dev`, `uat`, and `prod` are permanent branches; `dev` is the default development baseline.
-- Substantial work MUST use a short-lived `dev/<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`.
+- Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`.
 - Commit and push each independently verified checkpoint. Do not accumulate unrelated work in one commit.
 - Promote tested work to `uat` through a squash-merged pull request, then delete the short-lived branch and fast-forward permanent `dev` to the accepted `uat` baseline.
 - Promote only a tested `uat` commit to `prod` through a pull request. `uat` and `prod` MUST reject direct pushes, force pushes, and deletion.

@@ -261,7 +261,7 @@ Implementation convenience alone is not sufficient justification. The change mus
 ```text
 dev baseline
     |
-    +-- dev/<scope> | feature/<scope> | fix/<scope>
+    +-- dev-<scope> | feature/<scope> | fix/<scope>
                     |
                     +-- checkpoint commits + CI
                     |
