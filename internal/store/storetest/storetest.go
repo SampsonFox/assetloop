@@ -11,7 +11,18 @@ import (
 	"github.com/SampsonFox/assetloop/internal/domain"
 )
 
-func Run(t *testing.T, store application.Store) {
+type Store interface {
+	application.Store
+	application.AuthStore
+}
+
+func Run(t *testing.T, store Store) {
+	t.Helper()
+	t.Run("asset", func(t *testing.T) { runAsset(t, store) })
+	t.Run("auth", func(t *testing.T) { runAuth(t, store) })
+}
+
+func runAsset(t *testing.T, store application.Store) {
 	t.Helper()
 	ctx := context.Background()
 	asset := domain.Asset{
@@ -52,5 +63,46 @@ func Run(t *testing.T, store application.Store) {
 	_, err = store.GetAsset(ctx, "99999999-9999-4999-8999-999999999999", asset.ID)
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("cross-tenant read should return sql.ErrNoRows, got %v", err)
+	}
+}
+
+func runAuth(t *testing.T, store Store) {
+	t.Helper()
+	ctx := context.Background()
+	needsSetup, err := store.AuthNeedsSetup(ctx)
+	if err != nil || !needsSetup {
+		t.Fatalf("fresh store should need auth setup: needs=%v err=%v", needsSetup, err)
+	}
+	service := application.NewAuthService(store)
+	credential, err := service.Setup(ctx, application.SetupAuth{
+		TenantName: "Store Test", BaseCurrency: "CNY", Username: "store-owner", Password: "store owner password",
+	})
+	if err != nil {
+		t.Fatalf("setup auth: %v", err)
+	}
+	got, err := service.Authenticate(ctx, credential.Token)
+	if err != nil || got != credential.Principal {
+		t.Fatalf("session principal mismatch: got=%+v want=%+v err=%v", got, credential.Principal, err)
+	}
+	if _, err := service.AddMember(ctx, got, application.AddMember{Username: "store-viewer", Password: "store viewer password", Role: application.RoleViewer}); err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	members, err := service.ListMembers(ctx, got)
+	if err != nil || len(members) != 2 {
+		t.Fatalf("list members: count=%d err=%v", len(members), err)
+	}
+	err = store.CreateSession(ctx, application.Session{
+		TokenHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		TenantID:  "99999999-9999-4999-8999-999999999999", UserID: got.UserID,
+		CreatedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	if err == nil {
+		t.Fatal("cross-tenant session should violate membership foreign key")
+	}
+	if err := service.Logout(ctx, credential.Token); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if _, err := service.Authenticate(ctx, credential.Token); !errors.Is(err, application.ErrUnauthorized) {
+		t.Fatalf("deleted session should be unauthorized, got %v", err)
 	}
 }

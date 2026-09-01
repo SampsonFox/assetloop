@@ -1,0 +1,28 @@
+{{define "base"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{.Title}} · AssetLoop 物迹</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">AssetLoop <span>物迹</span></a>
+    {{if .Principal}}
+    <nav aria-label="主导航">
+      <a href="/">概览</a>
+      {{if eq .Principal.Role "owner"}}<a href="/admin/members">成员</a>{{end}}
+    </nav>
+    <div class="account">
+      <span>{{.Principal.Username}} · {{.Principal.Role}}</span>
+      <form action="/logout" method="post">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button class="link-button" type="submit">退出</button>
+      </form>
+    </div>
+    {{end}}
+  </header>
+  <main class="shell">{{template "content" .}}</main>
+</body>
+</html>{{end}}

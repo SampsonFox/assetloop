@@ -4,6 +4,10 @@
 
 package sqlitedb
 
+import (
+	"database/sql"
+)
+
 type Asset struct {
 	ID          string
 	TenantID    string
@@ -35,10 +39,43 @@ type ProductVariant struct {
 	CreatedAt string
 }
 
+type SecurityAuditEvent struct {
+	ID           string
+	TenantID     string
+	ActorUserID  sql.NullString
+	Action       string
+	TargetUserID sql.NullString
+	Detail       string
+	OccurredAt   string
+}
+
+type Session struct {
+	TokenHash string
+	TenantID  string
+	UserID    string
+	ExpiresAt string
+	CreatedAt string
+}
+
 type Tenant struct {
 	ID                 string
 	Name               string
 	BaseCurrency       string
 	BaseCurrencyLocked int64
+	CreatedAt          string
+}
+
+type TenantMembership struct {
+	TenantID  string
+	UserID    string
+	Role      string
+	CreatedAt string
+}
+
+type User struct {
+	ID                 string
+	Username           string
+	UsernameNormalized string
+	PasswordHash       string
 	CreatedAt          string
 }
