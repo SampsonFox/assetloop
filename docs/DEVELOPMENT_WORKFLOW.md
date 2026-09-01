@@ -10,6 +10,8 @@ This is the required delivery workflow for AssetLoop. It is part of the project 
 | `uat` | Accepted release candidate under user testing | Never | Never |
 | `prod` | Published production history | Never | Never |
 
+The GitHub repository default branch is `prod`, so visitors and ordinary repository links resolve to published production history. `dev` remains the default baseline for creating development branches; changing the GitHub default branch does not authorize development or direct pushes on `prod`.
+
 `uat` and `prod` are protected on GitHub. Both require a pull request and passing CI; force pushes and deletion are disabled.
 
 ## Public repository and secret safety

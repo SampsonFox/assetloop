@@ -109,6 +109,7 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 ### 13. Preserve the delivery chain
 
 - `dev`, `uat`, and `prod` are permanent branches; `dev` is the default development baseline.
+- The GitHub repository default branch MUST be `prod`, so public visitors land on published production history; this does not make `prod` a development baseline.
 - Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`.
 - Commit and push each independently verified checkpoint. Do not accumulate unrelated work in one commit.
 - Promote tested work to `uat` through a squash-merged pull request, then delete the short-lived branch and fast-forward permanent `dev` to the accepted `uat` baseline.
