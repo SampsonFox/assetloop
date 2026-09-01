@@ -113,7 +113,8 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 - Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`.
 - Commit and push each independently verified checkpoint. Do not accumulate unrelated work in one commit.
 - Promote tested work to `uat` through a squash-merged pull request, then delete the short-lived branch and fast-forward permanent `dev` to the accepted `uat` baseline.
-- Promote only a tested `uat` commit to `prod` through a pull request. `uat` and `prod` MUST reject direct pushes, force pushes, and deletion.
+- Promote only a tested `uat` commit to `prod` through a pull request, using a merge commit so `uat` remains in production ancestry. `uat` and `prod` MUST reject direct pushes, force pushes, and deletion.
+- If legacy history makes `prod` not an ancestor of `uat`, align it through a dedicated `prod -> uat` pull request using a merge commit. This ancestry-only synchronization is the sole exception to squash-merging pull requests into `uat`; its resulting tree MUST preserve the already tested UAT content.
 - `uat` and `prod` MUST use the same packaging workflow with separate GitHub environments. Production publication MUST consume artifacts produced and smoke-tested by that workflow.
 - A production defect follows `fix/<scope> -> uat -> prod`; it MUST NOT bypass UAT validation.
 

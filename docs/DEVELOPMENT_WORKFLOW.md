@@ -56,7 +56,9 @@ fix/sqlite-upgrade-lock
 6. Let the UAT packaging workflow build and smoke-test its artifacts.
 7. Test the UAT artifact, not a separately built local binary.
 8. Open a pull request from `uat` to `prod` only after UAT acceptance.
-9. Merge after required checks; the same workflow rebuilds, smoke-tests, and publishes the production artifacts.
+9. Merge with a merge commit after required checks; do not squash or rebase the UAT-to-Prod PR. The same workflow rebuilds, smoke-tests, and publishes the production artifacts.
+
+The merge-commit rule keeps `uat` in `prod` ancestry. If legacy history or an external repository operation makes `prod` cease to be an ancestor of `uat`, create `fix/prod-history-alignment` from `uat`, merge `prod` into it, verify that the resulting tree preserves the accepted UAT content, and return it through a pull request to `uat`. Merge that ancestry-only PR with a merge commit. This is the only non-squash exception for a pull request into `uat`; run the normal CI and UAT packaging gates again before production promotion.
 
 Parallel work branches may continue from an older `dev`, but they must incorporate the latest accepted baseline before promotion.
 
