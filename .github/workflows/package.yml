@@ -85,7 +85,7 @@ jobs:
           go build -trimpath -ldflags="-s -w" -o "dist/${package}/assetloop${{ matrix.extension }}" ./cmd/assetloop
           cp README.md .env.example "dist/${package}/"
           tar -C dist -czf "dist/${package}.tar.gz" "${package}"
-          sha256sum "dist/${package}.tar.gz" > "dist/${package}.tar.gz.sha256"
+          (cd dist && sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256")
       - uses: actions/upload-artifact@v7
         with:
           name: assetloop-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
