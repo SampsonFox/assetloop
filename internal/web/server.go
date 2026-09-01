@@ -41,6 +41,7 @@ type Options struct {
 type Server struct {
 	auth      *application.AuthService
 	catalog   *application.CatalogService
+	lifecycle *application.LifecycleService
 	db        Pinger
 	options   Options
 	templates map[string]*template.Template
@@ -48,29 +49,47 @@ type Server struct {
 }
 
 type pageData struct {
-	Title            string
-	CSRFToken        string
-	Error            string
-	Principal        *application.Principal
-	Members          []application.Member
-	Categories       []domain.ItemCategory
-	Models           []domain.ProductModel
-	Variants         []domain.ProductVariant
-	Assets           []domain.Asset
-	Asset            *domain.Asset
-	CanManageCatalog bool
+	Title              string
+	CSRFToken          string
+	Error              string
+	Principal          *application.Principal
+	Members            []application.Member
+	Categories         []domain.ItemCategory
+	Models             []domain.ProductModel
+	Variants           []domain.ProductVariant
+	Assets             []domain.Asset
+	Asset              *domain.Asset
+	CanManageCatalog   bool
+	Events             []domain.AssetEvent
+	Summary            domain.AssetSummary
+	Drafts             []domain.ImportDraft
+	Draft              *domain.ImportDraft
+	BaseCurrency       string
+	BaseCurrencyLocked bool
+	NowValue           string
+	CanManageLifecycle bool
+	AssetCount         int
+	TotalExpenseMinor  int64
+	TotalIncomeMinor   int64
+	TotalNetMinor      int64
 }
 
-func New(auth *application.AuthService, catalog *application.CatalogService, db Pinger, options Options) (*Server, error) {
+func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
 	templates := map[string]*template.Template{}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "catalog", "asset", "error"} {
-		parsed, err := template.ParseFS(assets, "templates/base.html", "templates/"+page+".html")
+	funcs := template.FuncMap{
+		"money": domain.FormatMinor, "eventLabel": eventLabel, "eventClass": eventClass,
+		"dateTime":      func(value time.Time) string { return value.Local().Format("2006-01-02 15:04") },
+		"dateTimeInput": func(value time.Time) string { return value.Local().Format("2006-01-02T15:04") },
+		"rate":          formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
+	}
+	for _, page := range []string{"setup", "login", "dashboard", "members", "catalog", "asset", "event_correct", "imports", "import_confirm", "error"} {
+		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
 		}
 		templates[page] = parsed
 	}
-	return &Server{auth: auth, catalog: catalog, db: db, options: options, templates: templates, limiter: newLoginLimiter(5, 5*time.Minute)}, nil
+	return &Server{auth: auth, catalog: catalog, lifecycle: lifecycle, db: db, options: options, templates: templates, limiter: newLoginLimiter(5, 5*time.Minute)}, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -90,6 +109,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /catalog/variants", s.createVariant)
 	mux.HandleFunc("POST /catalog/assets", s.createAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
+	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
+	mux.HandleFunc("GET /events/{id}/correct", s.correctEventForm)
+	mux.HandleFunc("POST /events/{id}/correct", s.correctEvent)
+	mux.HandleFunc("GET /imports", s.importsPage)
+	mux.HandleFunc("POST /imports", s.createImportDraft)
+	mux.HandleFunc("GET /imports/{id}", s.confirmImportForm)
+	mux.HandleFunc("POST /imports/{id}/confirm", s.confirmImport)
 	staticFS, _ := fs.Sub(assets, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return securityHeaders(mux)
@@ -179,15 +205,273 @@ func (s *Server) assetDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	asset, err := s.catalog.GetAsset(r.Context(), principal, r.PathValue("id"))
+	s.renderAsset(w, r, http.StatusOK, principal, r.PathValue("id"), "")
+}
+
+func (s *Server) createAssetEvent(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	cmd, err := s.recordEventFromForm(r, principal, r.PathValue("id"), domain.AssetEventType(r.FormValue("event_type")))
+	if err == nil {
+		_, err = s.lifecycle.Record(r.Context(), principal, cmd)
+	}
+	if err != nil {
+		if errors.Is(err, application.ErrForbidden) {
+			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能修改生命周期记录"})
+			return
+		}
+		s.renderAsset(w, r, http.StatusUnprocessableEntity, principal, r.PathValue("id"), err.Error())
+		return
+	}
+	http.Redirect(w, r, "/assets/"+r.PathValue("id"), http.StatusSeeOther)
+}
+
+func (s *Server) correctEventForm(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	if !principal.Can(application.CapabilityManageLifecycle) {
+		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能更正生命周期记录"})
+		return
+	}
+	event, err := s.lifecycle.GetEvent(r.Context(), principal, r.PathValue("id"))
+	if err != nil || event.Type == domain.AssetEventVoid || event.IsVoided {
+		s.renderError(w, http.StatusNotFound, errors.New("可更正记录不存在"))
+		return
+	}
+	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, http.StatusOK, "event_correct", pageData{
+		Title: "更正生命周期记录", CSRFToken: s.ensureCSRF(w, r), Principal: &principal,
+		Events: []domain.AssetEvent{event}, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
+		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
+	})
+}
+
+func (s *Server) correctEvent(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	original, err := s.lifecycle.GetEvent(r.Context(), principal, r.PathValue("id"))
+	if err == nil {
+		var cmd application.RecordEvent
+		cmd, err = s.recordEventFromForm(r, principal, original.AssetID, original.Type)
+		if err == nil {
+			_, err = s.lifecycle.Correct(r.Context(), principal, original.ID, cmd)
+		}
+	}
+	if err != nil {
+		if errors.Is(err, application.ErrForbidden) {
+			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能更正生命周期记录"})
+			return
+		}
+		s.renderError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	http.Redirect(w, r, "/assets/"+original.AssetID, http.StatusSeeOther)
+}
+
+func (s *Server) importsPage(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	s.renderImports(w, r, http.StatusOK, principal, "")
+}
+
+func (s *Server) createImportDraft(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	currency := r.FormValue("currency")
+	amount, err := domain.ParseMajorAmount(r.FormValue("amount"), currency)
+	if err == nil {
+		var occurredAt time.Time
+		occurredAt, err = parseFormTime(r.FormValue("occurred_at"))
+		if err == nil {
+			_, err = s.lifecycle.CreateDraft(r.Context(), principal, application.CreateImportDraft{
+				AssetID: r.FormValue("asset_id"), Type: domain.AssetEventType(r.FormValue("event_type")),
+				AmountMinor: amount, Currency: currency, OccurredAt: occurredAt, Source: r.FormValue("source"),
+				ExternalReference: r.FormValue("external_reference"), Notes: r.FormValue("notes"), RawText: r.FormValue("raw_text"),
+			})
+		}
+	}
+	if err != nil {
+		if errors.Is(err, application.ErrForbidden) {
+			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能创建导入记录"})
+			return
+		}
+		s.renderImports(w, r, http.StatusUnprocessableEntity, principal, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/imports", http.StatusSeeOther)
+}
+
+func (s *Server) confirmImportForm(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	if !principal.Can(application.CapabilityManageLifecycle) {
+		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能确认导入记录"})
+		return
+	}
+	draft, err := s.lifecycle.GetDraft(r.Context(), principal, r.PathValue("id"))
+	if err != nil || draft.Status != "pending" {
+		s.renderError(w, http.StatusNotFound, errors.New("待确认记录不存在"))
+		return
+	}
+	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, http.StatusOK, "import_confirm", pageData{
+		Title: "确认导入", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Draft: &draft,
+		BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
+		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
+		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
+	})
+}
+
+func (s *Server) confirmImport(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	draft, err := s.lifecycle.GetDraft(r.Context(), principal, r.PathValue("id"))
+	confirmation := application.ConfirmImport{}
+	if err == nil {
+		baseCurrency, _, baseErr := s.lifecycle.BaseCurrency(r.Context(), principal)
+		if baseErr != nil {
+			err = baseErr
+		} else if draft.Currency != baseCurrency {
+			confirmation.FXRateScaled, err = domain.ParseFXRate(r.FormValue("fx_rate"))
+			if err == nil {
+				confirmation.FXRateDate, err = parseFormDate(r.FormValue("fx_rate_date"))
+			}
+			confirmation.FXRateSource = r.FormValue("fx_rate_source")
+			confirmation.FXConfirmed = r.FormValue("fx_confirmed") == "on"
+		}
+	}
+	if err == nil {
+		_, err = s.lifecycle.ConfirmDraft(r.Context(), principal, draft.ID, confirmation)
+	}
+	if err != nil {
+		if errors.Is(err, application.ErrForbidden) {
+			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能确认导入记录"})
+			return
+		}
+		s.renderError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	http.Redirect(w, r, "/assets/"+draft.AssetID, http.StatusSeeOther)
+}
+
+func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, assetID, message string) {
+	asset, err := s.catalog.GetAsset(r.Context(), principal, assetID)
 	if err != nil {
 		s.renderError(w, http.StatusNotFound, errors.New("物品不存在"))
 		return
 	}
-	s.render(w, http.StatusOK, "asset", pageData{
-		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal,
-		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+	events, summary, err := s.lifecycle.Timeline(r.Context(), principal, assetID)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	_, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, status, "asset", pageData{
+		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: events,
+		Summary: summary, BaseCurrency: summary.BaseCurrency, BaseCurrencyLocked: locked,
+		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
+		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
 	})
+}
+
+func (s *Server) renderImports(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
+	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	drafts, err := s.lifecycle.PendingDrafts(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, status, "imports", pageData{
+		Title: "待确认导入", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Assets: snapshot.Assets, Drafts: drafts, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
+		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
+		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
+	})
+}
+
+func (s *Server) recordEventFromForm(r *http.Request, principal application.Principal, assetID string, eventType domain.AssetEventType) (application.RecordEvent, error) {
+	currency, err := domain.NormalizeCurrency(r.FormValue("currency"))
+	if err != nil {
+		return application.RecordEvent{}, err
+	}
+	amount, err := domain.ParseMajorAmount(r.FormValue("amount"), currency)
+	if err != nil {
+		return application.RecordEvent{}, err
+	}
+	occurredAt, err := parseFormTime(r.FormValue("occurred_at"))
+	if err != nil {
+		return application.RecordEvent{}, err
+	}
+	cmd := application.RecordEvent{
+		AssetID: assetID, Type: eventType, AmountMinor: amount, Currency: currency,
+		OccurredAt: occurredAt, Source: r.FormValue("source"),
+		ExternalReference: r.FormValue("external_reference"), Notes: r.FormValue("notes"),
+	}
+	baseCurrency, _, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	if err != nil {
+		return application.RecordEvent{}, err
+	}
+	if currency != baseCurrency {
+		cmd.FXRateScaled, err = domain.ParseFXRate(r.FormValue("fx_rate"))
+		if err != nil {
+			return application.RecordEvent{}, err
+		}
+		cmd.FXRateDate, err = parseFormDate(r.FormValue("fx_rate_date"))
+		if err != nil {
+			return application.RecordEvent{}, err
+		}
+		cmd.FXRateSource = r.FormValue("fx_rate_source")
+		cmd.FXConfirmed = r.FormValue("fx_confirmed") == "on"
+	}
+	return cmd, nil
 }
 
 func (s *Server) renderCatalogError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
@@ -225,7 +509,31 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.render(w, http.StatusOK, "dashboard", pageData{Title: "概览", CSRFToken: s.ensureCSRF(w, r), Principal: &principal})
+	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	baseCurrency, _, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	data := pageData{
+		Title: "概览", CSRFToken: s.ensureCSRF(w, r), Principal: &principal,
+		AssetCount: len(snapshot.Assets), BaseCurrency: baseCurrency,
+	}
+	for _, asset := range snapshot.Assets {
+		_, summary, err := s.lifecycle.Timeline(r.Context(), principal, asset.ID)
+		if err != nil {
+			s.renderError(w, http.StatusInternalServerError, err)
+			return
+		}
+		data.TotalExpenseMinor += summary.ExpenseMinor
+		data.TotalIncomeMinor += summary.IncomeMinor
+		data.TotalNetMinor += summary.NetCashflowMinor
+	}
+	s.render(w, http.StatusOK, "dashboard", data)
 }
 
 func (s *Server) setupForm(w http.ResponseWriter, r *http.Request) {
@@ -466,4 +774,57 @@ func (l *loginLimiter) Reset(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.items, key)
+}
+
+func parseFormTime(value string) (time.Time, error) {
+	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02"} {
+		parsed, err := time.ParseInLocation(layout, strings.TrimSpace(value), time.Local)
+		if err == nil {
+			return parsed.UTC(), nil
+		}
+	}
+	return time.Time{}, errors.New("日期时间格式无效")
+}
+
+func parseFormDate(value string) (time.Time, error) {
+	parsed, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(value), time.Local)
+	if err != nil {
+		return time.Time{}, errors.New("汇率日期格式无效")
+	}
+	return parsed.UTC(), nil
+}
+
+func eventLabel(value domain.AssetEventType) string {
+	switch value {
+	case domain.AssetEventPurchase:
+		return "买入"
+	case domain.AssetEventRepair:
+		return "维修"
+	case domain.AssetEventSale:
+		return "卖出"
+	case domain.AssetEventVoid:
+		return "作废"
+	default:
+		return string(value)
+	}
+}
+
+func eventClass(value domain.AssetEventType) string {
+	if value == domain.AssetEventSale {
+		return "income"
+	}
+	if value == domain.AssetEventVoid {
+		return "void"
+	}
+	return "expense"
+}
+
+func formatRate(value int64) string {
+	whole := value / domain.FXRateScale
+	fraction := fmt.Sprintf("%08d", value%domain.FXRateScale)
+	fraction = strings.TrimRight(fraction, "0")
+	if fraction == "" {
+		return fmt.Sprintf("%d", whole)
+	}
+	return fmt.Sprintf("%d.%s", whole, fraction)
 }

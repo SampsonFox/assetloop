@@ -36,5 +36,11 @@ table { width:100%; border-collapse:collapse; } th,td { padding:12px 10px; borde
 .details { display:grid; grid-template-columns:110px 1fr; gap:10px 16px; margin:0; }
 .details dt { color:var(--muted); }
 .details dd { margin:0; font-weight:700; }
+.wide { grid-column:1/-1; }
+.check { grid-template-columns:auto 1fr; align-items:center; }
+.check input { width:auto; }
+.is-voided { opacity:.52; text-decoration:line-through; }
+.event-income .badge { background:#e3f4e8; }
+.event-void .badge { background:#ececec; color:#666; }
 @media (max-width:760px) { .topbar { flex-wrap:wrap; padding:14px 5vw; } nav { order:3; width:100%; } .account { margin-left:auto; } .shell { padding:36px 0; } .grid,.two-column { grid-template-columns:1fr; } .auth-card { padding:25px; } }
 @media (max-width:760px) { .form-grid { grid-template-columns:1fr; } }

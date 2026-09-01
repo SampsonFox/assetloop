@@ -20,6 +20,56 @@ type Asset struct {
 	Notes           string
 }
 
+type AssetEvent struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+}
+
+type AssetTransaction struct {
+	ID                string
+	TenantID          string
+	OccurredAt        string
+	Source            string
+	ExternalReference string
+	Notes             string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+type ImportDraft struct {
+	ID                     string
+	TenantID               string
+	AssetID                string
+	EventType              string
+	AmountMinor            int64
+	Currency               string
+	OccurredAt             string
+	Source                 string
+	ExternalReference      string
+	Notes                  string
+	RawText                string
+	Status                 string
+	CreatedByUserID        string
+	CreatedAt              string
+	ConfirmedTransactionID sql.NullString
+}
+
 type ItemCategory struct {
 	ID        string
 	TenantID  string

@@ -1,0 +1,17 @@
+{{define "content"}}
+<div class="page-heading"><div><p class="eyebrow">人工复核</p><h1>确认导入记录</h1></div><a href="/imports">返回</a></div>
+<section class="two-column">
+  <article class="card"><h2>识别内容</h2><dl class="details"><dt>事件</dt><dd>{{eventLabel .Draft.EventType}}</dd><dt>原始金额</dt><dd>{{money .Draft.AmountMinor .Draft.Currency}}</dd><dt>时间</dt><dd>{{dateTime .Draft.OccurredAt}}</dd><dt>来源</dt><dd>{{.Draft.Source}}</dd><dt>凭证号</dt><dd>{{.Draft.ExternalReference}}</dd></dl><p class="section-gap">{{.Draft.RawText}}</p></article>
+  <article class="card"><h2>落库规则</h2><p>系统统计统一使用 {{.BaseCurrency}}。{{if eq .Draft.Currency .BaseCurrency}}本次与本位币一致，原币与汇率字段将保持为空。{{else}}本次为非本位币，必须确认汇率、日期和来源，同时保留全部原始证据。{{end}}</p></article>
+</section>
+{{if .CanManageLifecycle}}<section class="card section-gap"><form class="stack" action="/imports/{{.Draft.ID}}/confirm" method="post">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{if ne .Draft.Currency .BaseCurrency}}
+  <label>汇率（1 {{.Draft.Currency}} = {{.BaseCurrency}}）<input name="fx_rate" required inputmode="decimal"></label>
+  <label>汇率日期<input type="date" name="fx_rate_date" value="{{.NowValue | printf "%.10s"}}" required></label>
+  <label>汇率来源<input name="fx_rate_source" required></label>
+  <label class="check"><input type="checkbox" name="fx_confirmed" required>我确认按上述日期和汇率换算后落库</label>
+  {{end}}
+  <button type="submit">确认并写入生命周期</button>
+</form></section>{{end}}
+{{end}}

@@ -15,6 +15,7 @@ type Store interface {
 	application.Store
 	application.AuthStore
 	application.CatalogStore
+	application.LifecycleStore
 }
 
 func Run(t *testing.T, store Store) {
@@ -22,6 +23,133 @@ func Run(t *testing.T, store Store) {
 	t.Run("asset", func(t *testing.T) { runAsset(t, store) })
 	t.Run("auth", func(t *testing.T) { runAuth(t, store) })
 	t.Run("catalog", func(t *testing.T) { runCatalog(t, store) })
+	t.Run("lifecycle", func(t *testing.T) { runLifecycle(t, store) })
+}
+
+func runLifecycle(t *testing.T, store Store) {
+	t.Helper()
+	ctx := context.Background()
+	owner, err := store.FirstPrincipal(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := application.NewCatalogService(store)
+	snapshot, err := catalog.Snapshot(ctx, owner)
+	if err != nil || len(snapshot.Assets) != 1 {
+		t.Fatalf("get lifecycle asset: assets=%d err=%v", len(snapshot.Assets), err)
+	}
+	asset := snapshot.Assets[0]
+	service := application.NewLifecycleService(store)
+	purchase, err := service.Record(ctx, owner, application.RecordEvent{
+		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 10_000, Currency: "USD",
+		FXRateScaled: 710_000_000, FXRateDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		FXRateSource: "store-test", FXConfirmed: true, OccurredAt: time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC),
+		Source: "manual", ExternalReference: "ORDER-001", Notes: "purchase",
+	})
+	if err != nil {
+		t.Fatalf("record foreign-currency purchase: %v", err)
+	}
+	if purchase.BaseAmountMinor != -71_000 || purchase.FX == nil || purchase.FX.OriginalCurrency != "USD" {
+		t.Fatalf("purchase conversion evidence mismatch: %+v", purchase)
+	}
+	_, locked, err := service.BaseCurrency(ctx, owner)
+	if err != nil || !locked {
+		t.Fatalf("base currency should lock after first money event: locked=%v err=%v", locked, err)
+	}
+	repair, err := service.Record(ctx, owner, application.RecordEvent{
+		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: 20_000, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), Notes: "screen repair",
+	})
+	if err != nil {
+		t.Fatalf("record repair: %v", err)
+	}
+	replacement, err := service.Correct(ctx, owner, repair.ID, application.RecordEvent{
+		AmountMinor: 15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), Notes: "corrected repair",
+	})
+	if err != nil {
+		t.Fatalf("correct repair: %v", err)
+	}
+	if replacement.ReplacesEventID != repair.ID || replacement.BaseAmountMinor != -15_000 {
+		t.Fatalf("replacement mismatch: %+v", replacement)
+	}
+	draft, err := service.CreateDraft(ctx, owner, application.CreateImportDraft{
+		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: 800_000, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), Source: "ai-import",
+		ExternalReference: "SALE-001", Notes: "sale", RawText: "recognized sale receipt",
+	})
+	if err != nil {
+		t.Fatalf("create import draft: %v", err)
+	}
+	if _, err := service.ConfirmDraft(ctx, owner, draft.ID, application.ConfirmImport{}); err != nil {
+		t.Fatalf("confirm base-currency import draft: %v", err)
+	}
+	if _, err := service.ConfirmDraft(ctx, owner, draft.ID, application.ConfirmImport{}); !errors.Is(err, application.ErrDraftNotPending) {
+		t.Fatalf("confirmed draft must not be confirmed twice, got %v", err)
+	}
+	if drafts, err := service.PendingDrafts(ctx, owner); err != nil || len(drafts) != 0 {
+		t.Fatalf("confirmed draft should leave pending list: drafts=%d err=%v", len(drafts), err)
+	}
+	events, summary, err := service.Timeline(ctx, owner, asset.ID)
+	if err != nil {
+		t.Fatalf("timeline: %v", err)
+	}
+	if len(events) != 5 || summary.ExpenseMinor != 86_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 714_000 || summary.Status != "已卖出" {
+		t.Fatalf("unexpected lifecycle result: events=%d summary=%+v", len(events), summary)
+	}
+	if events[len(events)-1].FX != nil {
+		t.Fatalf("base-currency sale should keep original-currency evidence nullable: %+v", events[len(events)-1])
+	}
+	originalRepair, err := store.GetAssetEvent(ctx, owner.TenantID, repair.ID)
+	if err != nil || !originalRepair.IsVoided || originalRepair.Notes != "screen repair" {
+		t.Fatalf("original repair should remain unchanged and voided: %+v err=%v", originalRepair, err)
+	}
+	if _, err := service.Correct(ctx, owner, repair.ID, application.RecordEvent{AmountMinor: 1, Currency: "CNY", OccurredAt: time.Now()}); !errors.Is(err, application.ErrAlreadyVoided) {
+		t.Fatalf("second correction should fail, got %v", err)
+	}
+	viewer := owner
+	viewer.Role = application.RoleViewer
+	if _, _, err := service.Timeline(ctx, viewer, asset.ID); err != nil {
+		t.Fatalf("viewer should read lifecycle: %v", err)
+	}
+	if _, err := service.Record(ctx, viewer, application.RecordEvent{}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer lifecycle write should be forbidden, got %v", err)
+	}
+}
+
+func AssertAssetEventsAppendOnly(t *testing.T, db *sql.DB, driver string) {
+	t.Helper()
+	var eventID string
+	if err := db.QueryRow("SELECT id FROM asset_events LIMIT 1").Scan(&eventID); err != nil {
+		t.Fatalf("find event for append-only test: %v", err)
+	}
+	placeholder := "?"
+	if driver == "postgres" {
+		placeholder = "$1"
+	}
+	if _, err := db.Exec("UPDATE asset_events SET notes = 'mutated' WHERE id = "+placeholder, eventID); err == nil {
+		t.Fatal("direct asset event update should be rejected")
+	}
+	if _, err := db.Exec("DELETE FROM asset_events WHERE id = "+placeholder, eventID); err == nil {
+		t.Fatal("direct asset event delete should be rejected")
+	}
+}
+
+func AssertBaseCurrencyLocked(t *testing.T, db *sql.DB, driver string) {
+	t.Helper()
+	lockedPredicate := "base_currency_locked = 1"
+	if driver == "postgres" {
+		lockedPredicate = "base_currency_locked = TRUE"
+	}
+	if _, err := db.Exec("UPDATE tenants SET base_currency = 'USD' WHERE " + lockedPredicate); err == nil {
+		t.Fatal("locked base currency update should be rejected")
+	}
+	var currency string
+	if err := db.QueryRow("SELECT base_currency FROM tenants WHERE " + lockedPredicate + " LIMIT 1").Scan(&currency); err != nil {
+		t.Fatalf("read locked base currency: %v", err)
+	}
+	if currency != "CNY" {
+		t.Fatalf("locked base currency changed: %q", currency)
+	}
 }
 
 func runCatalog(t *testing.T, store Store) {

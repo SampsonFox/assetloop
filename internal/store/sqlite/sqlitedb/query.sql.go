@@ -10,6 +10,26 @@ import (
 	"database/sql"
 )
 
+const confirmImportDraft = `-- name: ConfirmImportDraft :execrows
+UPDATE import_drafts
+SET status = 'confirmed', confirmed_transaction_id = ?
+WHERE tenant_id = ? AND id = ? AND status = 'pending'
+`
+
+type ConfirmImportDraftParams struct {
+	ConfirmedTransactionID sql.NullString
+	TenantID               string
+	ID                     string
+}
+
+func (q *Queries) ConfirmImportDraft(ctx context.Context, arg ConfirmImportDraftParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, confirmImportDraft, arg.ConfirmedTransactionID, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT COUNT(*) FROM users
 `
@@ -39,6 +59,91 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) error 
 		arg.TenantID,
 		arg.VariantID,
 		arg.DisplayName,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createAssetEvent = `-- name: CreateAssetEvent :exec
+INSERT INTO asset_events
+    (id, tenant_id, asset_id, transaction_id, event_type, base_amount_minor,
+     base_currency, original_amount_minor, original_currency, fx_rate_scaled,
+     fx_rate_date, fx_rate_source, notes, voids_event_id, replaces_event_id,
+     occurred_at, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateAssetEventParams struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+}
+
+func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventParams) error {
+	_, err := q.db.ExecContext(ctx, createAssetEvent,
+		arg.ID,
+		arg.TenantID,
+		arg.AssetID,
+		arg.TransactionID,
+		arg.EventType,
+		arg.BaseAmountMinor,
+		arg.BaseCurrency,
+		arg.OriginalAmountMinor,
+		arg.OriginalCurrency,
+		arg.FxRateScaled,
+		arg.FxRateDate,
+		arg.FxRateSource,
+		arg.Notes,
+		arg.VoidsEventID,
+		arg.ReplacesEventID,
+		arg.OccurredAt,
+		arg.CreatedByUserID,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createAssetTransaction = `-- name: CreateAssetTransaction :exec
+INSERT INTO asset_transactions
+    (id, tenant_id, occurred_at, source, external_reference, notes, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateAssetTransactionParams struct {
+	ID                string
+	TenantID          string
+	OccurredAt        string
+	Source            string
+	ExternalReference string
+	Notes             string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+func (q *Queries) CreateAssetTransaction(ctx context.Context, arg CreateAssetTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, createAssetTransaction,
+		arg.ID,
+		arg.TenantID,
+		arg.OccurredAt,
+		arg.Source,
+		arg.ExternalReference,
+		arg.Notes,
+		arg.CreatedByUserID,
 		arg.CreatedAt,
 	)
 	return err
@@ -94,6 +199,50 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.ID,
 		arg.TenantID,
 		arg.Name,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createImportDraft = `-- name: CreateImportDraft :exec
+INSERT INTO import_drafts
+    (id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+     source, external_reference, notes, raw_text, status, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateImportDraftParams struct {
+	ID                string
+	TenantID          string
+	AssetID           string
+	EventType         string
+	AmountMinor       int64
+	Currency          string
+	OccurredAt        string
+	Source            string
+	ExternalReference string
+	Notes             string
+	RawText           string
+	Status            string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+func (q *Queries) CreateImportDraft(ctx context.Context, arg CreateImportDraftParams) error {
+	_, err := q.db.ExecContext(ctx, createImportDraft,
+		arg.ID,
+		arg.TenantID,
+		arg.AssetID,
+		arg.EventType,
+		arg.AmountMinor,
+		arg.Currency,
+		arg.OccurredAt,
+		arg.Source,
+		arg.ExternalReference,
+		arg.Notes,
+		arg.RawText,
+		arg.Status,
+		arg.CreatedByUserID,
 		arg.CreatedAt,
 	)
 	return err
@@ -497,6 +646,110 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 	return i, err
 }
 
+const getAssetEvent = `-- name: GetAssetEvent :one
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided
+FROM asset_events e
+WHERE e.tenant_id = ? AND e.id = ?
+`
+
+type GetAssetEventParams struct {
+	TenantID string
+	ID       string
+}
+
+type GetAssetEventRow struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+	IsVoided            bool
+}
+
+func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (GetAssetEventRow, error) {
+	row := q.db.QueryRowContext(ctx, getAssetEvent, arg.TenantID, arg.ID)
+	var i GetAssetEventRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.AssetID,
+		&i.TransactionID,
+		&i.EventType,
+		&i.BaseAmountMinor,
+		&i.BaseCurrency,
+		&i.OriginalAmountMinor,
+		&i.OriginalCurrency,
+		&i.FxRateScaled,
+		&i.FxRateDate,
+		&i.FxRateSource,
+		&i.Notes,
+		&i.VoidsEventID,
+		&i.ReplacesEventID,
+		&i.OccurredAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.IsVoided,
+	)
+	return i, err
+}
+
+const getImportDraft = `-- name: GetImportDraft :one
+SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+       source, external_reference, notes, raw_text, status, created_by_user_id,
+       created_at, confirmed_transaction_id
+FROM import_drafts
+WHERE tenant_id = ? AND id = ?
+`
+
+type GetImportDraftParams struct {
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) GetImportDraft(ctx context.Context, arg GetImportDraftParams) (ImportDraft, error) {
+	row := q.db.QueryRowContext(ctx, getImportDraft, arg.TenantID, arg.ID)
+	var i ImportDraft
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.AssetID,
+		&i.EventType,
+		&i.AmountMinor,
+		&i.Currency,
+		&i.OccurredAt,
+		&i.Source,
+		&i.ExternalReference,
+		&i.Notes,
+		&i.RawText,
+		&i.Status,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.ConfirmedTransactionID,
+	)
+	return i, err
+}
+
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
 SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
 FROM sessions s
@@ -530,6 +783,109 @@ func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincip
 		&i.TenantName,
 	)
 	return i, err
+}
+
+const getTenantBaseCurrency = `-- name: GetTenantBaseCurrency :one
+SELECT base_currency, base_currency_locked
+FROM tenants
+WHERE id = ?
+`
+
+type GetTenantBaseCurrencyRow struct {
+	BaseCurrency       string
+	BaseCurrencyLocked int64
+}
+
+func (q *Queries) GetTenantBaseCurrency(ctx context.Context, id string) (GetTenantBaseCurrencyRow, error) {
+	row := q.db.QueryRowContext(ctx, getTenantBaseCurrency, id)
+	var i GetTenantBaseCurrencyRow
+	err := row.Scan(&i.BaseCurrency, &i.BaseCurrencyLocked)
+	return i, err
+}
+
+const listAssetEvents = `-- name: ListAssetEvents :many
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided
+FROM asset_events e
+WHERE e.tenant_id = ? AND e.asset_id = ?
+ORDER BY e.occurred_at, e.created_at, e.id
+`
+
+type ListAssetEventsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+type ListAssetEventsRow struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+	IsVoided            bool
+}
+
+func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams) ([]ListAssetEventsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetEvents, arg.TenantID, arg.AssetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetEventsRow
+	for rows.Next() {
+		var i ListAssetEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AssetID,
+			&i.TransactionID,
+			&i.EventType,
+			&i.BaseAmountMinor,
+			&i.BaseCurrency,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.FxRateScaled,
+			&i.FxRateDate,
+			&i.FxRateSource,
+			&i.Notes,
+			&i.VoidsEventID,
+			&i.ReplacesEventID,
+			&i.OccurredAt,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.IsVoided,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAssets = `-- name: ListAssets :many
@@ -725,6 +1081,54 @@ func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModels
 	return items, nil
 }
 
+const listPendingImportDrafts = `-- name: ListPendingImportDrafts :many
+SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+       source, external_reference, notes, raw_text, status, created_by_user_id,
+       created_at, confirmed_transaction_id
+FROM import_drafts
+WHERE tenant_id = ? AND status = 'pending'
+ORDER BY created_at, id
+`
+
+func (q *Queries) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]ImportDraft, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingImportDrafts, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ImportDraft
+	for rows.Next() {
+		var i ImportDraft
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AssetID,
+			&i.EventType,
+			&i.AmountMinor,
+			&i.Currency,
+			&i.OccurredAt,
+			&i.Source,
+			&i.ExternalReference,
+			&i.Notes,
+			&i.RawText,
+			&i.Status,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.ConfirmedTransactionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVariants = `-- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
        v.model_id, m.name AS model_name, v.name, v.created_at
@@ -776,4 +1180,20 @@ func (q *Queries) ListVariants(ctx context.Context, tenantID string) ([]ListVari
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockTenantBaseCurrency = `-- name: LockTenantBaseCurrency :exec
+UPDATE tenants
+SET base_currency_locked = 1
+WHERE id = ? AND base_currency = ?
+`
+
+type LockTenantBaseCurrencyParams struct {
+	ID           string
+	BaseCurrency string
+}
+
+func (q *Queries) LockTenantBaseCurrency(ctx context.Context, arg LockTenantBaseCurrencyParams) error {
+	_, err := q.db.ExecContext(ctx, lockTenantBaseCurrency, arg.ID, arg.BaseCurrency)
+	return err
 }

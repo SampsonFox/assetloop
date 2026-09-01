@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/config"
+	"github.com/SampsonFox/assetloop/internal/domain"
 	basestore "github.com/SampsonFox/assetloop/internal/store"
 	"github.com/SampsonFox/assetloop/internal/store/postgres"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
@@ -22,6 +24,7 @@ type scenarioStore interface {
 	application.Store
 	application.AuthStore
 	application.CatalogStore
+	application.LifecycleStore
 }
 
 func TestFullElementScenario(t *testing.T) {
@@ -107,6 +110,59 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	}
 	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, "禁止写入"); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer should not mutate catalog, got %v", err)
+	}
+
+	lifecycle := application.NewLifecycleService(store)
+	purchaseDraft, err := lifecycle.CreateDraft(ctx, owner, application.CreateImportDraft{
+		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 100_000, Currency: "USD",
+		OccurredAt: time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC), Source: "ai-harness",
+		ExternalReference: "ORDER-FULL-001", Notes: "foreign purchase", RawText: "USD 1000.00",
+	})
+	if err != nil {
+		t.Fatalf("create purchase draft: %v", err)
+	}
+	purchase, err := lifecycle.ConfirmDraft(ctx, owner, purchaseDraft.ID, application.ConfirmImport{
+		FXRateScaled: 712_000_000, FXRateDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		FXRateSource: "full-element-fixture", FXConfirmed: true,
+	})
+	if err != nil {
+		t.Fatalf("confirm foreign purchase draft: %v", err)
+	}
+	if purchase.BaseAmountMinor != -712_000 || purchase.FX == nil || purchase.FX.OriginalAmountMinor != 100_000 || purchase.FX.OriginalCurrency != "USD" {
+		t.Fatalf("purchase money evidence mismatch: %+v", purchase)
+	}
+	_, locked, err := lifecycle.BaseCurrency(ctx, owner)
+	if err != nil || !locked {
+		t.Fatalf("base currency should lock after confirmed purchase: locked=%v err=%v", locked, err)
+	}
+	repair, err := lifecycle.Record(ctx, owner, application.RecordEvent{
+		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: 20_000, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 10, 10, 0, 0, 0, time.UTC), Source: "manual", Notes: "initial repair amount",
+	})
+	if err != nil {
+		t.Fatalf("record repair: %v", err)
+	}
+	if _, err := lifecycle.Correct(ctx, owner, repair.ID, application.RecordEvent{
+		AmountMinor: 15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 10, 10, 0, 0, 0, time.UTC),
+		Source: "manual-correction", Notes: "corrected repair amount",
+	}); err != nil {
+		t.Fatalf("correct repair: %v", err)
+	}
+	if _, err := lifecycle.Record(ctx, owner, application.RecordEvent{
+		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: 800_000, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC), Source: "manual", ExternalReference: "SALE-FULL-001", Notes: "sold",
+	}); err != nil {
+		t.Fatalf("record sale: %v", err)
+	}
+	events, summary, err := lifecycle.Timeline(ctx, viewerSession.Principal, asset.ID)
+	if err != nil {
+		t.Fatalf("viewer lifecycle timeline: %v", err)
+	}
+	if len(events) != 5 || summary.ExpenseMinor != 727_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 73_000 || summary.Status != "已卖出" {
+		t.Fatalf("full lifecycle mismatch: events=%d summary=%+v", len(events), summary)
+	}
+	if _, err := lifecycle.Record(ctx, viewerSession.Principal, application.RecordEvent{}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer should not mutate lifecycle, got %v", err)
 	}
 	var auditCount int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM security_audit_events WHERE tenant_id = "+placeholder(driver), owner.TenantID).Scan(&auditCount); err != nil {

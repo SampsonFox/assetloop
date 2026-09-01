@@ -36,3 +36,16 @@ type CatalogStore interface {
 	ListAssets(context.Context, string) ([]domain.Asset, error)
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 }
+
+type LifecycleStore interface {
+	GetAsset(context.Context, string, string) (domain.Asset, error)
+	TenantBaseCurrency(context.Context, string) (string, bool, error)
+	AppendAssetEvent(context.Context, domain.AssetTransaction, domain.AssetEvent) error
+	GetAssetEvent(context.Context, string, string) (domain.AssetEvent, error)
+	ListAssetEvents(context.Context, string, string) ([]domain.AssetEvent, error)
+	CorrectAssetEvent(context.Context, domain.AssetTransaction, domain.AssetEvent, domain.AssetEvent) error
+	CreateImportDraft(context.Context, domain.ImportDraft) error
+	ListPendingImportDrafts(context.Context, string) ([]domain.ImportDraft, error)
+	GetImportDraft(context.Context, string, string) (domain.ImportDraft, error)
+	ConfirmImportDraft(context.Context, string, domain.AssetTransaction, domain.AssetEvent) error
+}
