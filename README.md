@@ -22,7 +22,7 @@ The repository now contains the v0.1 foundation: one Go binary, embedded dual-di
 
 ## Run locally
 
-Go 1.25.7 or newer is required for development. Runtime defaults need no external service.
+Go 1.26 or newer is required for development. Runtime defaults need no external service.
 
 ```sh
 go run ./cmd/assetloop migrate
