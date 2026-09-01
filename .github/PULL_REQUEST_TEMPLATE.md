@@ -7,6 +7,8 @@ Describe the single change this pull request promotes.
 - [ ] Formatting and sqlc generation are current
 - [ ] `go test ./...` passes
 - [ ] `go vet ./...` passes
+- [ ] No real credentials, private infrastructure values, or sensitive logs are included
+- [ ] Full-history `secret-scan` passes
 - [ ] Relevant local or packaged smoke test passes
 - [ ] Both database migrations were added when schema changed
 - [ ] `CODEMAP.md` and architecture/plan documents were updated when required
@@ -16,4 +18,3 @@ Describe the single change this pull request promotes.
 - [ ] Target branch is `uat`, or this is an accepted `uat -> prod` promotion
 - [ ] UAT was tested using the packaged artifact before production promotion
 - [ ] The source work branch can be deleted after squash merge
-

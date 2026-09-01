@@ -25,7 +25,7 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | `internal/application/` | Asset use case, validation, and Store port |
 | `internal/domain/` | Pure asset and integer-minor-unit money types |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
-| `.github/workflows/ci.yml` | Pull-request and branch validation |
+| `.github/workflows/ci.yml` | Pull-request and branch validation, including full-history secret scanning |
 | `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |
 
 ## Infrastructure adapters
