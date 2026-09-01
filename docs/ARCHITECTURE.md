@@ -277,6 +277,17 @@ Both shapes invoke the same application services and domain model.
 - Market refresh failure never corrupts the last valid price point.
 - Economic records remain reconstructable from append-only events and FX evidence.
 
+### 12.1 Regression and full-element verification
+
+Each accepted behavior leaves an automated regression test at the narrowest useful layer. A
+single `TestFullElementScenario` is the executable product spine: it starts with authentication
+and tenant isolation, then grows to cover catalog, concrete assets, lifecycle events, original
+currency evidence, corrections, and Web access as those slices are delivered.
+
+The scenario runs through application services and the real SQLite and PostgreSQL Store adapters.
+UAT runs it before packaging, and packaged-binary smoke tests remain a separate gate so an
+in-process test cannot substitute for verifying the shipped artifact.
+
 ## 13. Architecture change protocol
 
 A change requires updating this document before implementation if it does any of the following:

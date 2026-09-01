@@ -48,7 +48,7 @@ fix/sqlite-upgrade-lock
 
 ## Promotion
 
-1. Run formatting, sqlc generation, tests, vet, secret scanning, and the relevant local smoke test.
+1. Run formatting, sqlc generation, tests, vet, secret scanning, the full-element scenario, and the relevant local smoke test.
 2. Push the work branch and open a pull request to `uat`.
 3. Squash merge after CI passes so UAT receives one coherent change.
 4. Delete the short-lived branch.
@@ -59,6 +59,22 @@ fix/sqlite-upgrade-lock
 9. Merge after required checks; the same workflow rebuilds, smoke-tests, and publishes the production artifacts.
 
 Parallel work branches may continue from an older `dev`, but they must incorporate the latest accepted baseline before promotion.
+
+## Regression test ladder
+
+Every feature changes production behavior and its automated evidence together. Choose the
+narrowest layer that proves the behavior and keep the test after release:
+
+1. domain tests for money, event, and invariant calculations;
+2. application tests for validation, authorization, and use-case orchestration;
+3. the shared Store conformance suite for every persistence behavior on SQLite and PostgreSQL;
+4. `httptest` coverage for authentication, CSRF, routing, status codes, and rendered Web flows;
+5. `TestFullElementScenario` for the cumulative supported user journey.
+
+A bug fix begins with a failing regression test. A feature is incomplete if its test is missing,
+skipped, or only exercises one supported database. Pull-request CI runs the normal suite; the UAT
+packaging validation explicitly runs `TestFullElementScenario` with both database adapters before
+any artifact is built. The packaged-binary smoke test remains mandatory after that in-process gate.
 
 ## UAT defects and production fixes
 
