@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: assetloop
+          POSTGRES_PASSWORD: assetloop
+          POSTGRES_DB: assetloop_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U assetloop -d assetloop_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_DSN: postgres://assetloop:assetloop@localhost:5432/assetloop_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+      - run: sqlc generate
+      - run: git diff --exit-code
+      - run: go test ./...
+      - run: go vet ./...
+

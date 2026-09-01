@@ -1,0 +1,19 @@
+version: "2"
+sql:
+  - engine: sqlite
+    schema: migrations/sqlite
+    queries: internal/store/sqlite/query.sql
+    gen:
+      go:
+        package: sqlitedb
+        out: internal/store/sqlite/sqlitedb
+        emit_interface: false
+  - engine: postgresql
+    schema: migrations/postgres
+    queries: internal/store/postgres/query.sql
+    gen:
+      go:
+        package: postgresdb
+        out: internal/store/postgres/postgresdb
+        sql_package: database/sql
+        emit_interface: false
