@@ -110,12 +110,21 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 
 - `dev`, `uat`, and `prod` are permanent branches; `dev` is the default development baseline.
 - The GitHub repository default branch MUST be `prod`, so public visitors land on published production history; this does not make `prod` a development baseline.
-- Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`.
+- Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`. Production promotion MUST use a short-lived `release/<scope>` branch based on the current `prod`.
 - Commit and push each independently verified checkpoint. Do not accumulate unrelated work in one commit.
 - Promote tested work to `uat` through a squash-merged pull request, then delete the short-lived branch and fast-forward permanent `dev` to the accepted `uat` baseline.
-- Promote only a tested `uat` commit to `prod` through a pull request. `uat` and `prod` MUST reject direct pushes, force pushes, and deletion.
+- Promote only accepted UAT content to `prod`: reconcile the tested UAT tree into a `release/<scope>` branch based on current `prod`, verify that its application tree matches the accepted UAT commit except explicit release metadata, and squash-merge its pull request to `prod`. `uat` and `prod` MUST reject direct pushes, force pushes, deletion, and non-linear history.
 - `uat` and `prod` MUST use the same packaging workflow with separate GitHub environments. Production publication MUST consume artifacts produced and smoke-tested by that workflow.
 - A production defect follows `fix/<scope> -> uat -> prod`; it MUST NOT bypass UAT validation.
+
+### 14. Grow regression coverage with every feature
+
+- Every new observable behavior MUST include an automated regression test in the same change.
+- Every bug fix MUST first add or identify a test that fails for the defect and passes after the fix.
+- Use the narrowest sufficient layer: pure domain tests, application policy tests, shared Store conformance tests, or HTTP handler tests.
+- The repository MUST maintain one named full-element scenario that grows with each accepted vertical slice and exercises the supported flow through real application services and Store adapters.
+- UAT validation MUST run the full-element scenario against both SQLite and PostgreSQL before packaging; a missing, skipped, or partially selected database run is a failure.
+- Existing regression coverage MUST NOT be removed while the behavior remains supported. Replacing a test requires equal or stronger evidence.
 
 ## Change discipline
 

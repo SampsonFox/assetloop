@@ -23,6 +23,8 @@ func TestStoreConformanceAndSafeRemigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	storetest.Run(t, sqlite.New(db))
+	storetest.AssertAssetEventsAppendOnly(t, db, "sqlite")
+	storetest.AssertBaseCurrencyLocked(t, db, "sqlite")
 	if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
 		t.Fatalf("repeat migration: %v", err)
 	}

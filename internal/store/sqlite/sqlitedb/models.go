@@ -4,12 +4,70 @@
 
 package sqlitedb
 
+import (
+	"database/sql"
+)
+
 type Asset struct {
-	ID          string
-	TenantID    string
-	VariantID   string
-	DisplayName string
-	CreatedAt   string
+	ID              string
+	TenantID        string
+	VariantID       string
+	DisplayName     string
+	CreatedAt       string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+}
+
+type AssetEvent struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+}
+
+type AssetTransaction struct {
+	ID                string
+	TenantID          string
+	OccurredAt        string
+	Source            string
+	ExternalReference string
+	Notes             string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+type ImportDraft struct {
+	ID                     string
+	TenantID               string
+	AssetID                string
+	EventType              string
+	AmountMinor            int64
+	Currency               string
+	OccurredAt             string
+	Source                 string
+	ExternalReference      string
+	Notes                  string
+	RawText                string
+	Status                 string
+	CreatedByUserID        string
+	CreatedAt              string
+	ConfirmedTransactionID sql.NullString
 }
 
 type ItemCategory struct {
@@ -35,10 +93,43 @@ type ProductVariant struct {
 	CreatedAt string
 }
 
+type SecurityAuditEvent struct {
+	ID           string
+	TenantID     string
+	ActorUserID  sql.NullString
+	Action       string
+	TargetUserID sql.NullString
+	Detail       string
+	OccurredAt   string
+}
+
+type Session struct {
+	TokenHash string
+	TenantID  string
+	UserID    string
+	ExpiresAt string
+	CreatedAt string
+}
+
 type Tenant struct {
 	ID                 string
 	Name               string
 	BaseCurrency       string
 	BaseCurrencyLocked int64
+	CreatedAt          string
+}
+
+type TenantMembership struct {
+	TenantID  string
+	UserID    string
+	Role      string
+	CreatedAt string
+}
+
+type User struct {
+	ID                 string
+	Username           string
+	UsernameNormalized string
+	PasswordHash       string
 	CreatedAt          string
 }

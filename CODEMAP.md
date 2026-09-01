@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and full Web paths remain planned.
+Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only lifecycle vertical slices are implemented. Attachment, market, MCP, and scheduler paths continue as later slices.
 
 ## Authority map
 
@@ -19,11 +19,11 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport, templates, static assets |
+| `internal/web/` | HTTP transport, auth/member screens, catalog, lifecycle, FX confirmation, import review, templates, static assets |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
-| `internal/application/` | Asset use case, validation, and Store port |
-| `internal/domain/` | Pure asset and integer-minor-unit money types |
+| `internal/application/` | Authentication, catalog, lifecycle/import use cases, validation, and inward ports |
+| `internal/domain/` | Pure catalog/lifecycle types plus exact minor-unit money and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
 | `.github/workflows/ci.yml` | Pull-request and branch validation, including full-history secret scanning |
 | `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |
@@ -51,13 +51,27 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | `ObjectKeyMapper` | `internal/blob/key_mapper.go` | one shared mapper |
 | `MarketDataProvider` | `internal/application/ports.go` | OneBound, Manual |
 | `FXProvider` | `internal/application/ports.go` | selected FX source |
+| `AuthStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
+| `CatalogStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
+| `LifecycleStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
+
+## Regression spine
+
+| Path | Coverage |
+|---|---|
+| `internal/application/*_test.go` | validation, exact money/FX conversion, auth, catalog, lifecycle, and role policy |
+| `internal/store/storetest/` | shared dual-database auth/catalog/lifecycle behavior, FX evidence, append-only correction, locks, and tenant isolation |
+| `internal/store/migration_upgrade_test.go` | previous-schema upgrade without data loss |
+| `internal/web/*_test.go` | auth, CSRF, catalog, non-base FX confirmation, correction, import confirmation, totals, and role denial |
+| `internal/integration/full_element_test.go` | cumulative auth → catalog → foreign purchase → repair correction → sale scenario on both databases |
 
 ## Read paths by task
 
 | Task | Start here | Then read only |
 |---|---|---|
 | Change money or FX behavior | `internal/domain/` | relevant application use case and Store mapping |
-| Add lifecycle event | domain asset-event files | application use case, both Store adapters, both migrations if schema changes |
+| Add lifecycle event | `internal/domain/lifecycle.go` | `internal/application/lifecycle.go`, both lifecycle adapters and migration pair |
+| Change asset catalog | `internal/application/catalog.go` | domain asset types, both catalog adapters, Web catalog templates |
 | Add database field | both migration directories | both sqlc query directories, Store conformance tests |
 | Add attachment behavior | blob port and key mapper | local and Aliyun adapters, attachment application service |
 | Add market provider | market port | provider adapter plus shared normalization pipeline |

@@ -5,17 +5,72 @@
 package postgresdb
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type Asset struct {
-	ID          uuid.UUID
-	TenantID    uuid.UUID
-	VariantID   uuid.UUID
-	DisplayName string
-	CreatedAt   time.Time
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	VariantID       uuid.UUID
+	DisplayName     string
+	CreatedAt       time.Time
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+}
+
+type AssetEvent struct {
+	ID                  uuid.UUID
+	TenantID            uuid.UUID
+	AssetID             uuid.UUID
+	TransactionID       uuid.UUID
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullTime
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        uuid.NullUUID
+	ReplacesEventID     uuid.NullUUID
+	OccurredAt          time.Time
+	CreatedByUserID     uuid.UUID
+	CreatedAt           time.Time
+}
+
+type AssetTransaction struct {
+	ID                uuid.UUID
+	TenantID          uuid.UUID
+	OccurredAt        time.Time
+	Source            string
+	ExternalReference string
+	Notes             string
+	CreatedByUserID   uuid.UUID
+	CreatedAt         time.Time
+}
+
+type ImportDraft struct {
+	ID                     uuid.UUID
+	TenantID               uuid.UUID
+	AssetID                uuid.UUID
+	EventType              string
+	AmountMinor            int64
+	Currency               string
+	OccurredAt             time.Time
+	Source                 string
+	ExternalReference      string
+	Notes                  string
+	RawText                string
+	Status                 string
+	CreatedByUserID        uuid.UUID
+	CreatedAt              time.Time
+	ConfirmedTransactionID uuid.NullUUID
 }
 
 type ItemCategory struct {
@@ -41,10 +96,43 @@ type ProductVariant struct {
 	CreatedAt time.Time
 }
 
+type SecurityAuditEvent struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	ActorUserID  uuid.NullUUID
+	Action       string
+	TargetUserID uuid.NullUUID
+	Detail       string
+	OccurredAt   time.Time
+}
+
+type Session struct {
+	TokenHash string
+	TenantID  uuid.UUID
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
 type Tenant struct {
 	ID                 uuid.UUID
 	Name               string
 	BaseCurrency       string
 	BaseCurrencyLocked bool
+	CreatedAt          time.Time
+}
+
+type TenantMembership struct {
+	TenantID  uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+	CreatedAt time.Time
+}
+
+type User struct {
+	ID                 uuid.UUID
+	Username           string
+	UsernameNormalized string
+	PasswordHash       string
 	CreatedAt          time.Time
 }
