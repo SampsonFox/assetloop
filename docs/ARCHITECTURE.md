@@ -126,6 +126,9 @@ Tenant
 `ProductVariant` contains only attributes that affect market identity and price, such as storage capacity. `Asset` contains instance attributes such as serial number and normally color. Category-specific condition schemes map assets and market listings to comparable condition codes.
 
 Transactions group related cash and lifecycle effects, while asset events remain the append-only lifecycle record.
+Confirmed events cannot be updated or deleted at either Store or database level. A correction
+atomically appends a zero-value void event plus a replacement economic event that references the
+original; the original row remains unchanged and queryable.
 
 ## 6. Money architecture
 
@@ -141,6 +144,13 @@ The tenant base currency is the accounting and statistics currency. When an orig
 Original money + FX rate/date/source -> Base money -> all internal statistics
 ```
 
+Rates are stored as signed-safe fixed-point integers scaled by `100,000,000` and mean “base major
+units per original major unit.” Conversion applies the ISO minor-unit exponent for both currencies
+and rounds once to the nearest base minor unit. Floating point is never used for persisted or
+calculated money. When the original currency equals the base currency, original amount/currency
+and FX evidence remain null; otherwise all evidence fields are mandatory and user confirmation is
+required. The confirmation screen defaults the rate date to the current date.
+
 The first monetary record locks the tenant base currency. Changing it later requires a dedicated, audited migration operation, not a settings edit.
 
 ## 7. Persistence architecture
@@ -150,6 +160,11 @@ The first monetary record locks the tenant base currency. Changing it later requ
 `Store` exposes business-oriented operations, not a generic repository per table. Each operation owns its database transaction when atomicity is required.
 
 SQLite and PostgreSQL have independent SQL and sqlc output, with a shared conformance suite. Vendor-specific SQL stays inside its adapter.
+
+The lifecycle Store atomically creates the grouping transaction and event, locks the base currency,
+and—for corrections or import confirmation—writes every related row in the same database
+transaction. `import_drafts` holds untrusted AI/manual extraction proposals; only an explicit
+confirmation can promote one pending draft into a confirmed lifecycle transaction.
 
 ### 7.2 Migration rules
 

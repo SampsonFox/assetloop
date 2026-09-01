@@ -140,3 +140,79 @@ ORDER BY u.username_normalized;
 INSERT INTO security_audit_events
     (id, tenant_id, actor_user_id, action, target_user_id, detail, occurred_at)
 VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetTenantBaseCurrency :one
+SELECT base_currency, base_currency_locked
+FROM tenants
+WHERE id = ?;
+
+-- name: LockTenantBaseCurrency :exec
+UPDATE tenants
+SET base_currency_locked = 1
+WHERE id = ? AND base_currency = ?;
+
+-- name: CreateAssetTransaction :exec
+INSERT INTO asset_transactions
+    (id, tenant_id, occurred_at, source, external_reference, notes, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: CreateAssetEvent :exec
+INSERT INTO asset_events
+    (id, tenant_id, asset_id, transaction_id, event_type, base_amount_minor,
+     base_currency, original_amount_minor, original_currency, fx_rate_scaled,
+     fx_rate_date, fx_rate_source, notes, voids_event_id, replaces_event_id,
+     occurred_at, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetAssetEvent :one
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided
+FROM asset_events e
+WHERE e.tenant_id = ? AND e.id = ?;
+
+-- name: ListAssetEvents :many
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided
+FROM asset_events e
+WHERE e.tenant_id = ? AND e.asset_id = ?
+ORDER BY e.occurred_at, e.created_at, e.id;
+
+-- name: CreateImportDraft :exec
+INSERT INTO import_drafts
+    (id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+     source, external_reference, notes, raw_text, status, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: ListPendingImportDrafts :many
+SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+       source, external_reference, notes, raw_text, status, created_by_user_id,
+       created_at, confirmed_transaction_id
+FROM import_drafts
+WHERE tenant_id = ? AND status = 'pending'
+ORDER BY created_at, id;
+
+-- name: GetImportDraft :one
+SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+       source, external_reference, notes, raw_text, status, created_by_user_id,
+       created_at, confirmed_transaction_id
+FROM import_drafts
+WHERE tenant_id = ? AND id = ?;
+
+-- name: ConfirmImportDraft :execrows
+UPDATE import_drafts
+SET status = 'confirmed', confirmed_transaction_id = ?
+WHERE tenant_id = ? AND id = ? AND status = 'pending';

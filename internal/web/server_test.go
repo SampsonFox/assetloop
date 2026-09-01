@@ -141,6 +141,73 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 
+	unconfirmedFX := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
+		"csrf_token": {csrf.Value}, "event_type": {"purchase"}, "amount": {"1000.00"}, "currency": {"USD"},
+		"fx_rate": {"7.12"}, "fx_rate_date": {"2026-08-01"}, "fx_rate_source": {"web-fixture"},
+		"occurred_at": {"2026-08-01T10:00"}, "source": {"manual"},
+	}, []*http.Cookie{ownerSession, csrf})
+	if unconfirmedFX.Code != http.StatusUnprocessableEntity || !strings.Contains(unconfirmedFX.Body.String(), "FX conversion must be confirmed") {
+		t.Fatalf("unconfirmed FX should be rejected: status=%d body=%s", unconfirmedFX.Code, unconfirmedFX.Body.String())
+	}
+	purchase := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
+		"csrf_token": {csrf.Value}, "event_type": {"purchase"}, "amount": {"1000.00"}, "currency": {"USD"},
+		"fx_rate": {"7.12"}, "fx_rate_date": {"2026-08-01"}, "fx_rate_source": {"web-fixture"}, "fx_confirmed": {"on"},
+		"occurred_at": {"2026-08-01T10:00"}, "source": {"manual"}, "external_reference": {"ORDER-WEB-001"}, "notes": {"美元买入"},
+	}, []*http.Cookie{ownerSession, csrf})
+	if purchase.Code != http.StatusSeeOther {
+		t.Fatalf("record purchase: status=%d body=%s", purchase.Code, purchase.Body.String())
+	}
+	repair := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
+		"csrf_token": {csrf.Value}, "event_type": {"repair"}, "amount": {"200.00"}, "currency": {"CNY"},
+		"occurred_at": {"2026-08-10T10:00"}, "source": {"manual"}, "notes": {"初始维修金额"},
+	}, []*http.Cookie{ownerSession, csrf})
+	if repair.Code != http.StatusSeeOther {
+		t.Fatalf("record repair: status=%d body=%s", repair.Code, repair.Body.String())
+	}
+	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
+	correctionLinks := regexp.MustCompile(`/events/([0-9a-f-]{36})/correct`).FindAllStringSubmatch(detail.Body.String(), -1)
+	if len(correctionLinks) != 2 {
+		t.Fatalf("expected purchase and repair correction links: %s", detail.Body.String())
+	}
+	corrected := request(t, handler, http.MethodPost, "/events/"+correctionLinks[1][1]+"/correct", url.Values{
+		"csrf_token": {csrf.Value}, "amount": {"150.00"}, "currency": {"CNY"},
+		"occurred_at": {"2026-08-10T10:00"}, "source": {"manual-correction"}, "notes": {"正确维修金额"},
+	}, []*http.Cookie{ownerSession, csrf})
+	if corrected.Code != http.StatusSeeOther {
+		t.Fatalf("correct repair: status=%d body=%s", corrected.Code, corrected.Body.String())
+	}
+	draft := request(t, handler, http.MethodPost, "/imports", url.Values{
+		"csrf_token": {csrf.Value}, "asset_id": {match[1]}, "event_type": {"sale"}, "amount": {"8000.00"},
+		"currency": {"CNY"}, "occurred_at": {"2026-08-20T10:00"}, "source": {"ai-harness"},
+		"external_reference": {"SALE-WEB-001"}, "notes": {"卖出"}, "raw_text": {"识别到卖出金额 8000 CNY"},
+	}, []*http.Cookie{ownerSession, csrf})
+	if draft.Code != http.StatusSeeOther {
+		t.Fatalf("create sale draft: status=%d body=%s", draft.Code, draft.Body.String())
+	}
+	imports := request(t, handler, http.MethodGet, "/imports", nil, []*http.Cookie{ownerSession, csrf})
+	draftMatch := regexp.MustCompile(`/imports/([0-9a-f-]{36})`).FindStringSubmatch(imports.Body.String())
+	if len(draftMatch) != 2 || !strings.Contains(imports.Body.String(), "8000.00 CNY") {
+		t.Fatalf("pending import not shown: %s", imports.Body.String())
+	}
+	confirmed := request(t, handler, http.MethodPost, "/imports/"+draftMatch[1]+"/confirm", url.Values{
+		"csrf_token": {csrf.Value},
+	}, []*http.Cookie{ownerSession, csrf})
+	if confirmed.Code != http.StatusSeeOther {
+		t.Fatalf("confirm sale draft: status=%d body=%s", confirmed.Code, confirmed.Body.String())
+	}
+	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{"7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "web-fixture", "正确维修金额", "已作废"} {
+		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
+			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
+		}
+	}
+	dashboard := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{"具体物品", "7270.00 CNY", "730.00 CNY", "收入 8000.00 CNY"} {
+		if dashboard.Code != http.StatusOK || !strings.Contains(dashboard.Body.String(), want) {
+			t.Fatalf("dashboard totals missing %q: status=%d body=%s", want, dashboard.Code, dashboard.Body.String())
+		}
+	}
+
 	created = request(t, handler, http.MethodPost, "/admin/members", url.Values{
 		"csrf_token": {csrf.Value}, "username": {"viewer"}, "password": {"viewer secure password"}, "role": {"viewer"},
 	}, []*http.Cookie{ownerSession, csrf})
@@ -160,6 +227,16 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}, []*http.Cookie{viewerSession, csrf})
 	if forbidden.Code != http.StatusForbidden {
 		t.Fatalf("viewer catalog write: got %d, want %d", forbidden.Code, http.StatusForbidden)
+	}
+	forbidden = request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
+		"csrf_token": {csrf.Value}, "event_type": {"repair"}, "amount": {"1.00"}, "currency": {"CNY"}, "occurred_at": {"2026-08-21T10:00"},
+	}, []*http.Cookie{viewerSession, csrf})
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("viewer lifecycle write: got %d, want %d", forbidden.Code, http.StatusForbidden)
+	}
+	forbidden = request(t, handler, http.MethodGet, "/events/"+correctionLinks[0][1]+"/correct", nil, []*http.Cookie{viewerSession, csrf})
+	if forbidden.Code != http.StatusForbidden {
+		t.Fatalf("viewer correction form: got %d, want %d", forbidden.Code, http.StatusForbidden)
 	}
 }
 
@@ -188,7 +265,8 @@ func newTestHandler(t *testing.T) http.Handler {
 	adapter := sqlite.New(db)
 	auth := application.NewAuthService(adapter)
 	catalog := application.NewCatalogService(adapter)
-	server, err := New(auth, catalog, db, Options{AuthMode: "local"})
+	lifecycle := application.NewLifecycleService(adapter)
+	server, err := New(auth, catalog, lifecycle, db, Options{AuthMode: "local"})
 	if err != nil {
 		t.Fatal(err)
 	}

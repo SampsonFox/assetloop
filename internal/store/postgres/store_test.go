@@ -26,4 +26,6 @@ func TestStoreConformance(t *testing.T) {
 		t.Fatal(err)
 	}
 	storetest.Run(t, postgres.New(db))
+	storetest.AssertAssetEventsAppendOnly(t, db, "postgres")
+	storetest.AssertBaseCurrencyLocked(t, db, "postgres")
 }

@@ -70,6 +70,16 @@ func runUpgradeTest(t *testing.T, cfg config.Database) {
 	if err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&users); err != nil {
 		t.Fatalf("new auth schema is unavailable after upgrade: %v", err)
 	}
+	var events, drafts int
+	if err := db.QueryRow("SELECT COUNT(*) FROM asset_events").Scan(&events); err != nil {
+		t.Fatalf("new lifecycle schema is unavailable after upgrade: %v", err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM import_drafts").Scan(&drafts); err != nil {
+		t.Fatalf("new import draft schema is unavailable after upgrade: %v", err)
+	}
+	if events != 0 || drafts != 0 {
+		t.Fatalf("upgrade should not fabricate lifecycle records: events=%d drafts=%d", events, drafts)
+	}
 }
 
 func applyVersionOne(t *testing.T, db *sql.DB, driver string) {

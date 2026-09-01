@@ -2,7 +2,7 @@
 
 AI-assisted personal asset lifecycle, resale valuation, and holding-cost tracker.
 
-The repository contains the v0.1 foundation plus two Web vertical slices: local account setup with tenant RBAC, and tenant-isolated category/model/price-variant/concrete-asset management backed by matching SQLite/PostgreSQL adapters.
+The repository contains the v0.1 foundation plus authentication/RBAC, tenant-isolated asset catalog management, and append-only purchase/repair/sale lifecycle tracking with exact base-currency accounting and matching SQLite/PostgreSQL adapters.
 
 ## Start here
 
@@ -32,6 +32,8 @@ go run ./cmd/assetloop serve
 The default SQLite database is `./data/assetloop.db`; health is available at `http://127.0.0.1:8080/healthz`. Open `http://127.0.0.1:8080/setup` on first start to create the tenant Owner. Copy `.env.example` to `.env` only when overriding defaults.
 
 After setup, open `/catalog` to create categories, models, price-distinguishing variants such as 256GB/512GB, and individual assets with serial number, color, purchase channel, and notes.
+
+Each asset detail page accepts purchase, repair, sale, and append-only corrections. Non-base-currency entries require explicit rate/date/source confirmation and preserve the original evidence while all totals use the tenant base currency. `/imports` exercises the same pending-review boundary intended for AI Harness screenshot extraction.
 
 `AUTH_MODE=local` is the secure default. `AUTH_MODE=disabled` is accepted only when `HTTP_ADDR` is loopback-only and creates an implicit local Owner.
 
