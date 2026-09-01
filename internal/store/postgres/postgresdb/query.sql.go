@@ -46,6 +46,61 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) error 
 	return err
 }
 
+const createCatalogAsset = `-- name: CreateCatalogAsset :exec
+INSERT INTO assets
+    (id, tenant_id, variant_id, display_name, serial_number, color, purchase_channel, notes, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+`
+
+type CreateCatalogAssetParams struct {
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	VariantID       uuid.UUID
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	CreatedAt       time.Time
+}
+
+func (q *Queries) CreateCatalogAsset(ctx context.Context, arg CreateCatalogAssetParams) error {
+	_, err := q.db.ExecContext(ctx, createCatalogAsset,
+		arg.ID,
+		arg.TenantID,
+		arg.VariantID,
+		arg.DisplayName,
+		arg.SerialNumber,
+		arg.Color,
+		arg.PurchaseChannel,
+		arg.Notes,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createCategory = `-- name: CreateCategory :exec
+INSERT INTO item_categories (id, tenant_id, name, created_at)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateCategoryParams struct {
+	ID        uuid.UUID
+	TenantID  uuid.UUID
+	Name      string
+	CreatedAt time.Time
+}
+
+func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, createCategory,
+		arg.ID,
+		arg.TenantID,
+		arg.Name,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const createMembership = `-- name: CreateMembership :exec
 INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
 VALUES ($1, $2, $3, $4)
@@ -63,6 +118,30 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 		arg.TenantID,
 		arg.UserID,
 		arg.Role,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createModel = `-- name: CreateModel :exec
+INSERT INTO product_models (id, tenant_id, category_id, name, created_at)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateModelParams struct {
+	ID         uuid.UUID
+	TenantID   uuid.UUID
+	CategoryID uuid.UUID
+	Name       string
+	CreatedAt  time.Time
+}
+
+func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) error {
+	_, err := q.db.ExecContext(ctx, createModel,
+		arg.ID,
+		arg.TenantID,
+		arg.CategoryID,
+		arg.Name,
 		arg.CreatedAt,
 	)
 	return err
@@ -161,6 +240,30 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Username,
 		arg.UsernameNormalized,
 		arg.PasswordHash,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createVariant = `-- name: CreateVariant :exec
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateVariantParams struct {
+	ID        uuid.UUID
+	TenantID  uuid.UUID
+	ModelID   uuid.UUID
+	Name      string
+	CreatedAt time.Time
+}
+
+func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) error {
+	_, err := q.db.ExecContext(ctx, createVariant,
+		arg.ID,
+		arg.TenantID,
+		arg.ModelID,
+		arg.Name,
 		arg.CreatedAt,
 	)
 	return err
@@ -343,7 +446,8 @@ func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error)
 const getAsset = `-- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.created_at
+       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
@@ -357,16 +461,20 @@ type GetAssetParams struct {
 }
 
 type GetAssetRow struct {
-	ID           uuid.UUID
-	TenantID     uuid.UUID
-	CategoryID   uuid.UUID
-	CategoryName string
-	ModelID      uuid.UUID
-	ModelName    string
-	VariantID    uuid.UUID
-	VariantName  string
-	DisplayName  string
-	CreatedAt    time.Time
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	CategoryID      uuid.UUID
+	CategoryName    string
+	ModelID         uuid.UUID
+	ModelName       string
+	VariantID       uuid.UUID
+	VariantName     string
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	CreatedAt       time.Time
 }
 
 func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow, error) {
@@ -382,6 +490,10 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 		&i.VariantID,
 		&i.VariantName,
 		&i.DisplayName,
+		&i.SerialNumber,
+		&i.Color,
+		&i.PurchaseChannel,
+		&i.Notes,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -422,6 +534,109 @@ func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincip
 	return i, err
 }
 
+const listAssets = `-- name: ListAssets :many
+SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
+       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       a.purchase_channel, a.notes, a.created_at
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE a.tenant_id = $1
+ORDER BY a.created_at DESC, a.id
+`
+
+type ListAssetsRow struct {
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	CategoryID      uuid.UUID
+	CategoryName    string
+	ModelID         uuid.UUID
+	ModelName       string
+	VariantID       uuid.UUID
+	VariantName     string
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	CreatedAt       time.Time
+}
+
+func (q *Queries) ListAssets(ctx context.Context, tenantID uuid.UUID) ([]ListAssetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssets, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetsRow
+	for rows.Next() {
+		var i ListAssetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.ModelID,
+			&i.ModelName,
+			&i.VariantID,
+			&i.VariantName,
+			&i.DisplayName,
+			&i.SerialNumber,
+			&i.Color,
+			&i.PurchaseChannel,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCategories = `-- name: ListCategories :many
+SELECT id, tenant_id, name, created_at
+FROM item_categories
+WHERE tenant_id = $1
+ORDER BY name, id
+`
+
+func (q *Queries) ListCategories(ctx context.Context, tenantID uuid.UUID) ([]ItemCategory, error) {
+	rows, err := q.db.QueryContext(ctx, listCategories, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemCategory
+	for rows.Next() {
+		var i ItemCategory
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMembers = `-- name: ListMembers :many
 SELECT u.id AS user_id, u.username, tm.role, tm.created_at
 FROM tenant_memberships tm
@@ -450,6 +665,106 @@ func (q *Queries) ListMembers(ctx context.Context, tenantID uuid.UUID) ([]ListMe
 			&i.UserID,
 			&i.Username,
 			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModels = `-- name: ListModels :many
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, m.name, m.created_at
+FROM product_models m
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = $1
+ORDER BY c.name, m.name, m.id
+`
+
+type ListModelsRow struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	CategoryID   uuid.UUID
+	CategoryName string
+	Name         string
+	CreatedAt    time.Time
+}
+
+func (q *Queries) ListModels(ctx context.Context, tenantID uuid.UUID) ([]ListModelsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listModels, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModelsRow
+	for rows.Next() {
+		var i ListModelsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVariants = `-- name: ListVariants :many
+SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
+       v.model_id, m.name AS model_name, v.name, v.created_at
+FROM product_variants v
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE v.tenant_id = $1
+ORDER BY c.name, m.name, v.name, v.id
+`
+
+type ListVariantsRow struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	CategoryID   uuid.UUID
+	CategoryName string
+	ModelID      uuid.UUID
+	ModelName    string
+	Name         string
+	CreatedAt    time.Time
+}
+
+func (q *Queries) ListVariants(ctx context.Context, tenantID uuid.UUID) ([]ListVariantsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listVariants, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVariantsRow
+	for rows.Next() {
+		var i ListVariantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.ModelID,
+			&i.ModelName,
+			&i.Name,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

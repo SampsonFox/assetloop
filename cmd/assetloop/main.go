@@ -54,6 +54,7 @@ func run(args []string) error {
 		var appStore interface {
 			application.Store
 			application.AuthStore
+			application.CatalogStore
 		}
 		if cfg.Database.Driver == "sqlite" {
 			appStore = sqlitestore.New(db)
@@ -61,6 +62,7 @@ func run(args []string) error {
 			appStore = postgresstore.New(db)
 		}
 		auth := application.NewAuthService(appStore)
+		catalog := application.NewCatalogService(appStore)
 		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local"}
 		if cfg.AuthMode == "disabled" {
 			principal, err := auth.EnsureDisabledPrincipal(context.Background())
@@ -69,7 +71,7 @@ func run(args []string) error {
 			}
 			options.DisabledPrincipal = principal
 		}
-		webServer, err := webtransport.New(auth, db, options)
+		webServer, err := webtransport.New(auth, catalog, db, options)
 		if err != nil {
 			return err
 		}

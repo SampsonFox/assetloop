@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="page-heading">
+  <div><p class="eyebrow">具体物品</p><h1>{{.Asset.DisplayName}}</h1></div>
+  <a href="/catalog">返回目录</a>
+</div>
+<section class="two-column">
+  <article class="card">
+    <h2>归属规格</h2>
+    <dl class="details">
+      <dt>类别</dt><dd>{{.Asset.Category}}</dd>
+      <dt>型号</dt><dd>{{.Asset.Model}}</dd>
+      <dt>价格规格</dt><dd>{{.Asset.Variant}}</dd>
+      <dt>序列号</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd>
+      <dt>颜色</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd>
+      <dt>购买渠道</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd>
+    </dl>
+  </article>
+  <article class="card"><h2>备注</h2><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">暂无备注</span>{{end}}</p></article>
+</section>
+<section class="card section-gap"><h2>生命周期</h2><p class="muted">买入、维修、卖出和更正记录将在下一阶段显示在这里。</p></section>
+{{end}}

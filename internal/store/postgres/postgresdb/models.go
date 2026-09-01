@@ -11,11 +11,15 @@ import (
 )
 
 type Asset struct {
-	ID          uuid.UUID
-	TenantID    uuid.UUID
-	VariantID   uuid.UUID
-	DisplayName string
-	CreatedAt   time.Time
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	VariantID       uuid.UUID
+	DisplayName     string
+	CreatedAt       time.Time
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
 }
 
 type ItemCategory struct {

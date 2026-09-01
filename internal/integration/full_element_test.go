@@ -21,6 +21,7 @@ import (
 type scenarioStore interface {
 	application.Store
 	application.AuthStore
+	application.CatalogStore
 }
 
 func TestFullElementScenario(t *testing.T) {
@@ -73,16 +74,39 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		t.Fatalf("viewer should not list members, got %v", err)
 	}
 
-	assetService := application.NewAssetService(store)
-	asset, err := assetService.Create(ctx, application.CreateAsset{
-		TenantID: owner.TenantID, Category: "手机", Model: "示例手机 Pro", Variant: "256GB", DisplayName: "全要素测试手机",
+	catalog := application.NewCatalogService(store)
+	category, err := catalog.CreateCategory(ctx, owner, "手机")
+	if err != nil {
+		t.Fatalf("create category: %v", err)
+	}
+	model, err := catalog.CreateModel(ctx, owner, application.CreateModel{CategoryID: category.ID, Name: "示例手机 Pro"})
+	if err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	variant256, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB"})
+	if err != nil {
+		t.Fatalf("create 256GB variant: %v", err)
+	}
+	if _, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"}); err != nil {
+		t.Fatalf("create 512GB variant: %v", err)
+	}
+	asset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{
+		VariantID: variant256.ID, DisplayName: "全要素测试手机", SerialNumber: "FULL-ELEMENT-001",
+		Color: "钛金属", PurchaseChannel: "官方商城", Notes: "全要素目录记录",
 	})
 	if err != nil {
-		t.Fatalf("create baseline asset: %v", err)
+		t.Fatalf("create catalog asset: %v", err)
 	}
-	got, err := store.GetAsset(ctx, owner.TenantID, asset.ID)
-	if err != nil || got.DisplayName != "全要素测试手机" {
-		t.Fatalf("get baseline asset: got=%+v err=%v", got, err)
+	got, err := catalog.GetAsset(ctx, owner, asset.ID)
+	if err != nil || got.DisplayName != "全要素测试手机" || got.SerialNumber != "FULL-ELEMENT-001" || got.Variant != "256GB" {
+		t.Fatalf("get catalog asset: got=%+v err=%v", got, err)
+	}
+	snapshot, err := catalog.Snapshot(ctx, viewerSession.Principal)
+	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 2 || len(snapshot.Assets) != 1 {
+		t.Fatalf("viewer catalog snapshot: %+v err=%v", snapshot, err)
+	}
+	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, "禁止写入"); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer should not mutate catalog, got %v", err)
 	}
 	var auditCount int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM security_audit_events WHERE tenant_id = "+placeholder(driver), owner.TenantID).Scan(&auditCount); err != nil {
