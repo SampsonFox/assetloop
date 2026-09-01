@@ -11,6 +11,7 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | Non-negotiable rules | `AGENTS.md` |
 | System boundaries and data flow | `docs/ARCHITECTURE.md` |
 | Product scope and delivery phases | `docs/PROJECT_PLAN.md` |
+| Branching, promotion, packaging, rollback | `docs/DEVELOPMENT_WORKFLOW.md` |
 | Find the relevant package | this file |
 
 ## Entry points
@@ -24,6 +25,8 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | `internal/application/` | Asset use case, validation, and Store port |
 | `internal/domain/` | Pure asset and integer-minor-unit money types |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
+| `.github/workflows/ci.yml` | Pull-request and branch validation |
+| `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |
 
 ## Infrastructure adapters
 
@@ -62,6 +65,7 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | Change Web screen | `internal/web/` | called application service and template only |
 | Change deployment config | `internal/config/` | `.env.example`, README deployment section |
 | Change architecture | `AGENTS.md` | `docs/ARCHITECTURE.md`, then affected code |
+| Change Git/release workflow | `docs/DEVELOPMENT_WORKFLOW.md` | `AGENTS.md`, delivery architecture, GitHub workflows |
 
 ## Core execution flows
 

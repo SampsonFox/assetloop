@@ -1,0 +1,151 @@
+name: Package
+
+on:
+  push:
+    branches: [uat, prod]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release source
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: assetloop
+          POSTGRES_PASSWORD: assetloop
+          POSTGRES_DB: assetloop_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U assetloop -d assetloop_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_POSTGRES_DSN: postgres://assetloop:assetloop@localhost:5432/assetloop_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+      - run: sqlc generate
+      - run: git diff --exit-code
+      - run: go test ./...
+      - run: go vet ./...
+
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            extension: ""
+          - goos: linux
+            goarch: arm64
+            extension: ""
+          - goos: windows
+            goarch: amd64
+            extension: .exe
+          - goos: darwin
+            goarch: amd64
+            extension: ""
+          - goos: darwin
+            goarch: arm64
+            extension: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build archive
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          package="assetloop-${GITHUB_REF_NAME}-${GOOS}-${GOARCH}"
+          mkdir -p "dist/${package}"
+          go build -trimpath -ldflags="-s -w" -o "dist/${package}/assetloop${{ matrix.extension }}" ./cmd/assetloop
+          cp README.md .env.example "dist/${package}/"
+          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          sha256sum "dist/${package}.tar.gz" > "dist/${package}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assetloop-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  smoke-package:
+    name: Smoke packaged SQLite binary
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: assetloop-${{ github.ref_name }}-linux-amd64
+          path: artifact
+      - name: Verify checksum and runtime
+        run: |
+          cd artifact
+          sha256sum --check *.sha256
+          tar -xzf *.tar.gz
+          binary="$(find . -type f -name assetloop | head -1)"
+          chmod +x "${binary}"
+          export DB_DRIVER=sqlite
+          export DB_DSN="${RUNNER_TEMP}/assetloop-smoke.db"
+          export HTTP_ADDR=127.0.0.1:18080
+          "${binary}" migrate
+          "${binary}" serve &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18080/healthz | grep --quiet '^ok$'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+  publish-prod:
+    name: Publish production release
+    if: github.event_name == 'push' && github.ref_name == 'prod'
+    needs: smoke-package
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: assetloop-prod-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "prod-${GITHUB_RUN_NUMBER}"
+          artifacts/*
+          --repo "${GITHUB_REPOSITORY}"
+          --target "${GITHUB_SHA}"
+          --title "AssetLoop prod-${GITHUB_RUN_NUMBER}"
+          --generate-notes
+

@@ -255,3 +255,25 @@ A change requires updating this document before implementation if it does any of
 - weakens auditability, secret handling, or data-upgrade safety.
 
 Implementation convenience alone is not sufficient justification. The change must state the new invariant, migration path, and compatibility tests.
+
+## 14. Delivery architecture
+
+```text
+dev baseline
+    |
+    +-- dev/<scope> | feature/<scope> | fix/<scope>
+                    |
+                    +-- checkpoint commits + CI
+                    |
+                    +-- squash PR --> uat (protected)
+                                         |
+                                  package + smoke test
+                                         |
+                                    PR --> prod (protected)
+                                         |
+                                  package + GitHub release
+```
+
+`dev`, `uat`, and `prod` are permanent. Work branches are disposable; permanent branches are not. UAT and production builds share one workflow and differ only by GitHub environment, retention, and the final production-release step. This prevents a separately maintained production build path from drifting away from the artifact tested in UAT.
+
+Rollback is Git-based: revert the smallest offending commit or revert the promotion pull request, then run the same pipeline again. Database rollback remains forward-only and uses a corrective migration; branch rollback never runs destructive down migrations against persisted data.

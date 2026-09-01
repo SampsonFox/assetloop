@@ -540,6 +540,7 @@ docs/
 ### 阶段 6：发布与 SaaS 准备
 
 - GitHub Actions 多平台发布。
+- 固化 `dev -> uat -> prod` 晋级、受保护分支和隔离打包环境。
 - SQLite 升级备份和恢复验证。
 - PostgreSQL 发布迁移 Job。
 - Docker 镜像和健康检查。

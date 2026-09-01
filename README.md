@@ -10,6 +10,7 @@ The repository now contains the v0.1 foundation: one Go binary, embedded dual-di
 - [Code map](CODEMAP.md)
 - [System architecture](docs/ARCHITECTURE.md)
 - [Project plan](docs/PROJECT_PLAN.md)
+- [Development and release workflow](docs/DEVELOPMENT_WORKFLOW.md)
 
 ## Confirmed baseline
 
