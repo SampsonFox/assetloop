@@ -34,8 +34,8 @@ jobs:
     env:
       TEST_POSTGRES_DSN: postgres://assetloop:assetloop@localhost:5432/assetloop_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -69,8 +69,8 @@ jobs:
             goarch: arm64
             extension: ""
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -86,7 +86,7 @@ jobs:
           cp README.md .env.example "dist/${package}/"
           tar -C dist -czf "dist/${package}.tar.gz" "${package}"
           sha256sum "dist/${package}.tar.gz" > "dist/${package}.tar.gz.sha256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: assetloop-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
@@ -100,7 +100,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: assetloop-${{ github.ref_name }}-linux-amd64
           path: artifact
@@ -133,7 +133,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: assetloop-prod-*
           path: artifacts
@@ -148,4 +148,3 @@ jobs:
           --target "${GITHUB_SHA}"
           --title "AssetLoop prod-${GITHUB_RUN_NUMBER}"
           --generate-notes
-

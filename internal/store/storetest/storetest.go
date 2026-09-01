@@ -30,9 +30,12 @@ func Run(t *testing.T, store application.Store) {
 	if err != nil {
 		t.Fatalf("get asset: %v", err)
 	}
-	if got != asset {
+	gotCreatedAt, wantCreatedAt := got.CreatedAt, asset.CreatedAt
+	got.CreatedAt, asset.CreatedAt = time.Time{}, time.Time{}
+	if got != asset || !gotCreatedAt.Equal(wantCreatedAt) {
 		t.Fatalf("asset mismatch:\n got: %+v\nwant: %+v", got, asset)
 	}
+	got.CreatedAt, asset.CreatedAt = gotCreatedAt, wantCreatedAt
 	second := asset
 	second.ID = "66666666-6666-4666-8666-666666666666"
 	second.CategoryID = "77777777-7777-4777-8777-777777777777"

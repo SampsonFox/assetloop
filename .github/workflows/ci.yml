@@ -27,8 +27,8 @@ jobs:
     env:
       TEST_POSTGRES_DSN: postgres://assetloop:assetloop@localhost:5432/assetloop_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -37,4 +37,3 @@ jobs:
       - run: git diff --exit-code
       - run: go test ./...
       - run: go vet ./...
-
