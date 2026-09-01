@@ -30,7 +30,7 @@
     <tbody>{{range .Events}}<tr class="event-{{eventClass .Type}} {{if .IsVoided}}is-voided{{end}}">
       <td>{{dateTime .OccurredAt}}</td><td><span class="badge">{{eventLabel .Type}}</span>{{if .IsVoided}} 已作废{{end}}</td>
       <td>{{money .BaseAmountMinor .BaseCurrency}}</td>
-      <td>{{if .FX}}{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<br><span class="muted">{{dateTime .FX.RateDate}} · {{.FX.RateSource}}</span>{{else}}—{{end}}</td>
+      <td>{{if .FX}}{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<br><span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span>{{else}}—{{end}}</td>
       <td>{{.Notes}}</td>
       <td>{{if $.CanManageLifecycle}}{{if canCorrect .}}<a href="/events/{{.ID}}/correct">更正</a>{{end}}{{end}}</td>
     </tr>{{end}}</tbody>
