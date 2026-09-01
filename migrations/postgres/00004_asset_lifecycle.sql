@@ -54,11 +54,13 @@ CREATE UNIQUE INDEX asset_events_void_once_idx
     ON asset_events(tenant_id, voids_event_id)
     WHERE voids_event_id IS NOT NULL;
 
+-- +goose StatementBegin
 CREATE FUNCTION assetloop_reject_asset_event_mutation() RETURNS trigger AS $$
 BEGIN
     RAISE EXCEPTION 'asset events are append-only';
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER asset_events_no_update
 BEFORE UPDATE ON asset_events
@@ -93,6 +95,7 @@ CREATE TABLE import_drafts (
 CREATE INDEX import_drafts_tenant_status_time_idx
     ON import_drafts(tenant_id, status, created_at);
 
+-- +goose StatementBegin
 CREATE FUNCTION assetloop_guard_base_currency() RETURNS trigger AS $$
 BEGIN
     IF OLD.base_currency_locked AND NEW.base_currency <> OLD.base_currency THEN
@@ -101,6 +104,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 CREATE TRIGGER tenants_base_currency_locked
 BEFORE UPDATE OF base_currency ON tenants
