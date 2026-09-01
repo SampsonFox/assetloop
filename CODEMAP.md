@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation plus local authentication/RBAC Web shell implemented. Catalog, lifecycle, attachment, market, MCP, and scheduler paths continue as vertical slices.
+Status: v0.1 foundation, local authentication/RBAC, and the asset catalog vertical slice are implemented. Lifecycle, attachment, market, MCP, and scheduler paths continue as vertical slices.
 
 ## Authority map
 
@@ -19,11 +19,11 @@ Status: v0.1 foundation plus local authentication/RBAC Web shell implemented. Ca
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport, local login/setup, CSRF, member management, templates, static assets |
+| `internal/web/` | HTTP transport, local login/setup, CSRF, member management, catalog/asset pages, templates, static assets |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
-| `internal/application/` | Asset use case, validation, and Store port |
-| `internal/domain/` | Pure asset and integer-minor-unit money types |
+| `internal/application/` | Authentication, catalog and asset use cases, validation, and inward ports |
+| `internal/domain/` | Pure category/model/variant/asset and integer-minor-unit money types |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
 | `.github/workflows/ci.yml` | Pull-request and branch validation, including full-history secret scanning |
 | `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |
@@ -52,16 +52,17 @@ Status: v0.1 foundation plus local authentication/RBAC Web shell implemented. Ca
 | `MarketDataProvider` | `internal/application/ports.go` | OneBound, Manual |
 | `FXProvider` | `internal/application/ports.go` | selected FX source |
 | `AuthStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
+| `CatalogStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 
 ## Regression spine
 
 | Path | Coverage |
 |---|---|
-| `internal/application/*_test.go` | validation, password/session behavior, and role capability policy |
-| `internal/store/storetest/` | shared SQLite/PostgreSQL Store behavior and tenant isolation |
+| `internal/application/*_test.go` | validation, password/session behavior, catalog rules, and role capability policy |
+| `internal/store/storetest/` | shared SQLite/PostgreSQL auth/catalog behavior, parent integrity, uniqueness, and tenant isolation |
 | `internal/store/migration_upgrade_test.go` | previous-schema upgrade without data loss |
-| `internal/web/*_test.go` | setup, login, CSRF, rate limiting, routing, and role denial |
-| `internal/integration/full_element_test.go` | cumulative `TestFullElementScenario` run on SQLite and PostgreSQL |
+| `internal/web/*_test.go` | setup, login, CSRF, rate limiting, catalog hierarchy, asset detail, and role denial |
+| `internal/integration/full_element_test.go` | cumulative auth plus full catalog `TestFullElementScenario` on SQLite and PostgreSQL |
 
 ## Read paths by task
 
@@ -69,6 +70,7 @@ Status: v0.1 foundation plus local authentication/RBAC Web shell implemented. Ca
 |---|---|---|
 | Change money or FX behavior | `internal/domain/` | relevant application use case and Store mapping |
 | Add lifecycle event | domain asset-event files | application use case, both Store adapters, both migrations if schema changes |
+| Change asset catalog | `internal/application/catalog.go` | domain asset types, both catalog adapters, Web catalog templates |
 | Add database field | both migration directories | both sqlc query directories, Store conformance tests |
 | Add attachment behavior | blob port and key mapper | local and Aliyun adapters, attachment application service |
 | Add market provider | market port | provider adapter plus shared normalization pipeline |

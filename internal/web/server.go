@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/SampsonFox/assetloop/internal/application"
+	"github.com/SampsonFox/assetloop/internal/domain"
 )
 
 const (
@@ -39,6 +40,7 @@ type Options struct {
 
 type Server struct {
 	auth      *application.AuthService
+	catalog   *application.CatalogService
 	db        Pinger
 	options   Options
 	templates map[string]*template.Template
@@ -46,23 +48,29 @@ type Server struct {
 }
 
 type pageData struct {
-	Title     string
-	CSRFToken string
-	Error     string
-	Principal *application.Principal
-	Members   []application.Member
+	Title            string
+	CSRFToken        string
+	Error            string
+	Principal        *application.Principal
+	Members          []application.Member
+	Categories       []domain.ItemCategory
+	Models           []domain.ProductModel
+	Variants         []domain.ProductVariant
+	Assets           []domain.Asset
+	Asset            *domain.Asset
+	CanManageCatalog bool
 }
 
-func New(auth *application.AuthService, db Pinger, options Options) (*Server, error) {
+func New(auth *application.AuthService, catalog *application.CatalogService, db Pinger, options Options) (*Server, error) {
 	templates := map[string]*template.Template{}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "error"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "catalog", "asset", "error"} {
 		parsed, err := template.ParseFS(assets, "templates/base.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
 		}
 		templates[page] = parsed
 	}
-	return &Server{auth: auth, db: db, options: options, templates: templates, limiter: newLoginLimiter(5, 5*time.Minute)}, nil
+	return &Server{auth: auth, catalog: catalog, db: db, options: options, templates: templates, limiter: newLoginLimiter(5, 5*time.Minute)}, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -76,9 +84,131 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /admin/members", s.members)
 	mux.HandleFunc("POST /admin/members", s.addMember)
+	mux.HandleFunc("GET /catalog", s.catalogPage)
+	mux.HandleFunc("POST /catalog/categories", s.createCategory)
+	mux.HandleFunc("POST /catalog/models", s.createModel)
+	mux.HandleFunc("POST /catalog/variants", s.createVariant)
+	mux.HandleFunc("POST /catalog/assets", s.createAsset)
+	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
 	staticFS, _ := fs.Sub(assets, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return securityHeaders(mux)
+}
+
+func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	s.renderCatalog(w, r, http.StatusOK, principal, "")
+}
+
+func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.catalog.CreateCategory(r.Context(), principal, r.FormValue("name")); err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	_, err := s.catalog.CreateModel(r.Context(), principal, application.CreateModel{
+		CategoryID: r.FormValue("category_id"), Name: r.FormValue("name"),
+	})
+	if err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	_, err := s.catalog.CreateVariant(r.Context(), principal, application.CreateVariant{
+		ModelID: r.FormValue("model_id"), Name: r.FormValue("name"),
+	})
+	if err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	_, err := s.catalog.CreateAsset(r.Context(), principal, application.CreateCatalogAsset{
+		VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
+		SerialNumber: r.FormValue("serial_number"), Color: r.FormValue("color"),
+		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
+	})
+	if err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) assetDetail(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	asset, err := s.catalog.GetAsset(r.Context(), principal, r.PathValue("id"))
+	if err != nil {
+		s.renderError(w, http.StatusNotFound, errors.New("物品不存在"))
+		return
+	}
+	s.render(w, http.StatusOK, "asset", pageData{
+		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal,
+		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+	})
+}
+
+func (s *Server) renderCatalogError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
+	if errors.Is(err, application.ErrForbidden) {
+		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能修改物品目录"})
+		return
+	}
+	s.renderCatalog(w, r, http.StatusUnprocessableEntity, principal, err.Error())
+}
+
+func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
+	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, status, "catalog", pageData{
+		Title: "物品目录", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
+		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+	})
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

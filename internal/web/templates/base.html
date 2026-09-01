@@ -12,6 +12,7 @@
     {{if .Principal}}
     <nav aria-label="主导航">
       <a href="/">概览</a>
+      <a href="/catalog">物品目录</a>
       {{if eq .Principal.Role "owner"}}<a href="/admin/members">成员</a>{{end}}
     </nav>
     <div class="account">

@@ -14,12 +14,72 @@ import (
 type Store interface {
 	application.Store
 	application.AuthStore
+	application.CatalogStore
 }
 
 func Run(t *testing.T, store Store) {
 	t.Helper()
 	t.Run("asset", func(t *testing.T) { runAsset(t, store) })
 	t.Run("auth", func(t *testing.T) { runAuth(t, store) })
+	t.Run("catalog", func(t *testing.T) { runCatalog(t, store) })
+}
+
+func runCatalog(t *testing.T, store Store) {
+	t.Helper()
+	ctx := context.Background()
+	owner, err := store.FirstPrincipal(ctx)
+	if err != nil {
+		t.Fatalf("get catalog owner: %v", err)
+	}
+	service := application.NewCatalogService(store)
+	category, err := service.CreateCategory(ctx, owner, "Phone")
+	if err != nil {
+		t.Fatalf("create category: %v", err)
+	}
+	model, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: category.ID, Name: "Example Pro"})
+	if err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	variant256, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB"})
+	if err != nil {
+		t.Fatalf("create 256GB variant: %v", err)
+	}
+	if _, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"}); err != nil {
+		t.Fatalf("create 512GB variant: %v", err)
+	}
+	asset, err := service.CreateAsset(ctx, owner, application.CreateCatalogAsset{
+		VariantID: variant256.ID, DisplayName: "Daily Phone", SerialNumber: "SERIAL-001",
+		Color: "Black", PurchaseChannel: "Official Store", Notes: "Complete catalog record",
+	})
+	if err != nil {
+		t.Fatalf("create catalog asset: %v", err)
+	}
+	if asset.Category != "Phone" || asset.Model != "Example Pro" || asset.Variant != "256GB" || asset.SerialNumber != "SERIAL-001" {
+		t.Fatalf("catalog asset was not hydrated: %+v", asset)
+	}
+	snapshot, err := service.Snapshot(ctx, owner)
+	if err != nil {
+		t.Fatalf("catalog snapshot: %v", err)
+	}
+	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 2 || len(snapshot.Assets) != 1 {
+		t.Fatalf("unexpected catalog counts: categories=%d models=%d variants=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Variants), len(snapshot.Assets))
+	}
+	viewer := owner
+	viewer.Role = application.RoleViewer
+	if _, err := service.CreateCategory(ctx, viewer, "Forbidden"); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer catalog write should be forbidden, got %v", err)
+	}
+	if _, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: "99999999-9999-4999-8999-999999999999", Name: "Cross tenant"}); err == nil {
+		t.Fatal("model with unavailable category should fail")
+	}
+	if _, err := service.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: variant256.ID, DisplayName: "Duplicate serial", SerialNumber: "SERIAL-001"}); err == nil {
+		t.Fatal("duplicate non-empty serial should fail")
+	}
+	foreign := owner
+	foreign.TenantID = "99999999-9999-4999-8999-999999999999"
+	if _, err := service.GetAsset(ctx, foreign, asset.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("cross-tenant catalog read should be hidden, got %v", err)
+	}
 }
 
 func runAsset(t *testing.T, store application.Store) {
