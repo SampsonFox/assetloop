@@ -11,8 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/config"
 	"github.com/SampsonFox/assetloop/internal/store"
+	postgresstore "github.com/SampsonFox/assetloop/internal/store/postgres"
+	sqlitestore "github.com/SampsonFox/assetloop/internal/store/sqlite"
+	webtransport "github.com/SampsonFox/assetloop/internal/web"
 )
 
 func main() {
@@ -47,30 +51,38 @@ func run(args []string) error {
 				return err
 			}
 		}
-		return serve(cfg.HTTPAddr, db)
+		var appStore interface {
+			application.Store
+			application.AuthStore
+		}
+		if cfg.Database.Driver == "sqlite" {
+			appStore = sqlitestore.New(db)
+		} else {
+			appStore = postgresstore.New(db)
+		}
+		auth := application.NewAuthService(appStore)
+		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local"}
+		if cfg.AuthMode == "disabled" {
+			principal, err := auth.EnsureDisabledPrincipal(context.Background())
+			if err != nil {
+				return fmt.Errorf("initialize disabled authentication: %w", err)
+			}
+			options.DisabledPrincipal = principal
+		}
+		webServer, err := webtransport.New(auth, db, options)
+		if err != nil {
+			return err
+		}
+		return serve(cfg.HTTPAddr, webServer.Handler())
 	default:
 		return fmt.Errorf("unknown command %q; usage: assetloop <serve|migrate>", args[0])
 	}
 }
 
-type pinger interface {
-	PingContext(context.Context) error
-}
-
-func serve(addr string, db pinger) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := db.PingContext(r.Context()); err != nil {
-			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("ok\n"))
-	})
-
+func serve(addr string, handler http.Handler) error {
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

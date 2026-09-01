@@ -7,7 +7,19 @@ package sqlitedb
 
 import (
 	"context"
+	"database/sql"
 )
+
+const countUsers = `-- name: CountUsers :one
+SELECT COUNT(*) FROM users
+`
+
+func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createAsset = `-- name: CreateAsset :exec
 INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)
@@ -29,6 +41,135 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) error 
 		arg.DisplayName,
 		arg.CreatedAt,
 	)
+	return err
+}
+
+const createMembership = `-- name: CreateMembership :exec
+INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
+VALUES (?, ?, ?, ?)
+`
+
+type CreateMembershipParams struct {
+	TenantID  string
+	UserID    string
+	Role      string
+	CreatedAt string
+}
+
+func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) error {
+	_, err := q.db.ExecContext(ctx, createMembership,
+		arg.TenantID,
+		arg.UserID,
+		arg.Role,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createSecurityAuditEvent = `-- name: CreateSecurityAuditEvent :exec
+INSERT INTO security_audit_events
+    (id, tenant_id, actor_user_id, action, target_user_id, detail, occurred_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateSecurityAuditEventParams struct {
+	ID           string
+	TenantID     string
+	ActorUserID  sql.NullString
+	Action       string
+	TargetUserID sql.NullString
+	Detail       string
+	OccurredAt   string
+}
+
+func (q *Queries) CreateSecurityAuditEvent(ctx context.Context, arg CreateSecurityAuditEventParams) error {
+	_, err := q.db.ExecContext(ctx, createSecurityAuditEvent,
+		arg.ID,
+		arg.TenantID,
+		arg.ActorUserID,
+		arg.Action,
+		arg.TargetUserID,
+		arg.Detail,
+		arg.OccurredAt,
+	)
+	return err
+}
+
+const createSession = `-- name: CreateSession :exec
+INSERT INTO sessions (token_hash, tenant_id, user_id, expires_at, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateSessionParams struct {
+	TokenHash string
+	TenantID  string
+	UserID    string
+	ExpiresAt string
+	CreatedAt string
+}
+
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createSession,
+		arg.TokenHash,
+		arg.TenantID,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createTenant = `-- name: CreateTenant :exec
+INSERT INTO tenants (id, name, base_currency, created_at) VALUES (?, ?, ?, ?)
+`
+
+type CreateTenantParams struct {
+	ID           string
+	Name         string
+	BaseCurrency string
+	CreatedAt    string
+}
+
+func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) error {
+	_, err := q.db.ExecContext(ctx, createTenant,
+		arg.ID,
+		arg.Name,
+		arg.BaseCurrency,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createUser = `-- name: CreateUser :exec
+INSERT INTO users (id, username, username_normalized, password_hash, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateUserParams struct {
+	ID                 string
+	Username           string
+	UsernameNormalized string
+	PasswordHash       string
+	CreatedAt          string
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
+	_, err := q.db.ExecContext(ctx, createUser,
+		arg.ID,
+		arg.Username,
+		arg.UsernameNormalized,
+		arg.PasswordHash,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions WHERE token_hash = ?
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, tokenHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, tokenHash)
 	return err
 }
 
@@ -133,6 +274,70 @@ func (q *Queries) EnsureVariant(ctx context.Context, arg EnsureVariantParams) (s
 	return id, err
 }
 
+const findAccountByUsername = `-- name: FindAccountByUsername :one
+SELECT u.id AS user_id, u.username, u.password_hash,
+       tm.tenant_id, tm.role, t.name AS tenant_name
+FROM users u
+JOIN tenant_memberships tm ON tm.user_id = u.id
+JOIN tenants t ON t.id = tm.tenant_id
+WHERE u.username_normalized = ?
+ORDER BY tm.created_at
+LIMIT 1
+`
+
+type FindAccountByUsernameRow struct {
+	UserID       string
+	Username     string
+	PasswordHash string
+	TenantID     string
+	Role         string
+	TenantName   string
+}
+
+func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized string) (FindAccountByUsernameRow, error) {
+	row := q.db.QueryRowContext(ctx, findAccountByUsername, usernameNormalized)
+	var i FindAccountByUsernameRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.TenantID,
+		&i.Role,
+		&i.TenantName,
+	)
+	return i, err
+}
+
+const firstPrincipal = `-- name: FirstPrincipal :one
+SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name
+FROM users u
+JOIN tenant_memberships tm ON tm.user_id = u.id
+JOIN tenants t ON t.id = tm.tenant_id
+ORDER BY u.created_at, tm.created_at
+LIMIT 1
+`
+
+type FirstPrincipalRow struct {
+	TenantID   string
+	UserID     string
+	Username   string
+	Role       string
+	TenantName string
+}
+
+func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error) {
+	row := q.db.QueryRowContext(ctx, firstPrincipal)
+	var i FirstPrincipalRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.UserID,
+		&i.Username,
+		&i.Role,
+		&i.TenantName,
+	)
+	return i, err
+}
+
 const getAsset = `-- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
@@ -178,4 +383,82 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getSessionPrincipal = `-- name: GetSessionPrincipal :one
+SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
+FROM sessions s
+JOIN users u ON u.id = s.user_id
+JOIN tenant_memberships tm ON tm.tenant_id = s.tenant_id AND tm.user_id = s.user_id
+JOIN tenants t ON t.id = s.tenant_id
+WHERE s.token_hash = ? AND s.expires_at > ?
+`
+
+type GetSessionPrincipalParams struct {
+	TokenHash string
+	ExpiresAt string
+}
+
+type GetSessionPrincipalRow struct {
+	TenantID   string
+	UserID     string
+	Username   string
+	Role       string
+	TenantName string
+}
+
+func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincipalParams) (GetSessionPrincipalRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionPrincipal, arg.TokenHash, arg.ExpiresAt)
+	var i GetSessionPrincipalRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.UserID,
+		&i.Username,
+		&i.Role,
+		&i.TenantName,
+	)
+	return i, err
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT u.id AS user_id, u.username, tm.role, tm.created_at
+FROM tenant_memberships tm
+JOIN users u ON u.id = tm.user_id
+WHERE tm.tenant_id = ?
+ORDER BY u.username_normalized
+`
+
+type ListMembersRow struct {
+	UserID    string
+	Username  string
+	Role      string
+	CreatedAt string
+}
+
+func (q *Queries) ListMembers(ctx context.Context, tenantID string) ([]ListMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMembers, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembersRow
+	for rows.Next() {
+		var i ListMembersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 )
@@ -17,6 +18,7 @@ type Config struct {
 	Environment string
 	HTTPAddr    string
 	LogLevel    string
+	AuthMode    string
 	Database    Database
 }
 
@@ -25,6 +27,7 @@ func Load(dotenvPath string) (Config, error) {
 		"APP_ENV":   "local",
 		"HTTP_ADDR": "127.0.0.1:8080",
 		"LOG_LEVEL": "info",
+		"AUTH_MODE": "local",
 		"DB_DRIVER": "sqlite",
 		"DB_DSN":    "./data/assetloop.db",
 	}
@@ -47,16 +50,36 @@ func Load(dotenvPath string) (Config, error) {
 	if strings.TrimSpace(values["HTTP_ADDR"]) == "" {
 		return Config{}, errors.New("HTTP_ADDR must not be empty")
 	}
+	authMode := strings.ToLower(strings.TrimSpace(values["AUTH_MODE"]))
+	if authMode != "local" && authMode != "disabled" {
+		return Config{}, fmt.Errorf("AUTH_MODE must be local or disabled, got %q", authMode)
+	}
+	if authMode == "disabled" && !isLoopbackAddress(values["HTTP_ADDR"]) {
+		return Config{}, errors.New("AUTH_MODE=disabled requires a loopback HTTP_ADDR")
+	}
 
 	return Config{
 		Environment: values["APP_ENV"],
 		HTTPAddr:    values["HTTP_ADDR"],
 		LogLevel:    values["LOG_LEVEL"],
+		AuthMode:    authMode,
 		Database: Database{
 			Driver: driver,
 			DSN:    values["DB_DSN"],
 		},
 	}, nil
+}
+
+func isLoopbackAddress(addr string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func loadDotenv(path string, values map[string]string) error {

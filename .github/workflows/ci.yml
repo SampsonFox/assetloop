@@ -46,6 +46,7 @@ jobs:
           --health-retries 10
     env:
       TEST_POSTGRES_DSN: postgres://assetloop:assetloop@localhost:5432/assetloop_test?sslmode=disable
+      REQUIRE_POSTGRES_TEST: "true"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -56,4 +57,6 @@ jobs:
       - run: sqlc generate
       - run: git diff --exit-code
       - run: go test ./...
+      - name: Run cumulative full-element scenario
+        run: go test ./internal/integration -run '^TestFullElementScenario$' -count=1
       - run: go vet ./...

@@ -41,10 +41,43 @@ type ProductVariant struct {
 	CreatedAt time.Time
 }
 
+type SecurityAuditEvent struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	ActorUserID  uuid.NullUUID
+	Action       string
+	TargetUserID uuid.NullUUID
+	Detail       string
+	OccurredAt   time.Time
+}
+
+type Session struct {
+	TokenHash string
+	TenantID  uuid.UUID
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
 type Tenant struct {
 	ID                 uuid.UUID
 	Name               string
 	BaseCurrency       string
 	BaseCurrencyLocked bool
+	CreatedAt          time.Time
+}
+
+type TenantMembership struct {
+	TenantID  uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+	CreatedAt time.Time
+}
+
+type User struct {
+	ID                 uuid.UUID
+	Username           string
+	UsernameNormalized string
+	PasswordHash       string
 	CreatedAt          time.Time
 }

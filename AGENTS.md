@@ -117,6 +117,15 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 - `uat` and `prod` MUST use the same packaging workflow with separate GitHub environments. Production publication MUST consume artifacts produced and smoke-tested by that workflow.
 - A production defect follows `fix/<scope> -> uat -> prod`; it MUST NOT bypass UAT validation.
 
+### 14. Grow regression coverage with every feature
+
+- Every new observable behavior MUST include an automated regression test in the same change.
+- Every bug fix MUST first add or identify a test that fails for the defect and passes after the fix.
+- Use the narrowest sufficient layer: pure domain tests, application policy tests, shared Store conformance tests, or HTTP handler tests.
+- The repository MUST maintain one named full-element scenario that grows with each accepted vertical slice and exercises the supported flow through real application services and Store adapters.
+- UAT validation MUST run the full-element scenario against both SQLite and PostgreSQL before packaging; a missing, skipped, or partially selected database run is a failure.
+- Existing regression coverage MUST NOT be removed while the behavior remains supported. Replacing a test requires equal or stronger evidence.
+
 ## Change discipline
 
 - Update `CODEMAP.md` in the same change when paths, entry points, or ownership move.

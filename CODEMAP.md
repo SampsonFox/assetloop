@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and full Web paths remain planned.
+Status: v0.1 foundation plus local authentication/RBAC Web shell implemented. Catalog, lifecycle, attachment, market, MCP, and scheduler paths continue as vertical slices.
 
 ## Authority map
 
@@ -19,7 +19,7 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport, templates, static assets |
+| `internal/web/` | HTTP transport, local login/setup, CSRF, member management, templates, static assets |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Asset use case, validation, and Store port |
@@ -51,6 +51,17 @@ Status: v0.1 foundation implemented. Attachment, market, MCP, scheduler, and ful
 | `ObjectKeyMapper` | `internal/blob/key_mapper.go` | one shared mapper |
 | `MarketDataProvider` | `internal/application/ports.go` | OneBound, Manual |
 | `FXProvider` | `internal/application/ports.go` | selected FX source |
+| `AuthStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
+
+## Regression spine
+
+| Path | Coverage |
+|---|---|
+| `internal/application/*_test.go` | validation, password/session behavior, and role capability policy |
+| `internal/store/storetest/` | shared SQLite/PostgreSQL Store behavior and tenant isolation |
+| `internal/store/migration_upgrade_test.go` | previous-schema upgrade without data loss |
+| `internal/web/*_test.go` | setup, login, CSRF, rate limiting, routing, and role denial |
+| `internal/integration/full_element_test.go` | cumulative `TestFullElementScenario` run on SQLite and PostgreSQL |
 
 ## Read paths by task
 

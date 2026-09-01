@@ -56,6 +56,10 @@ Infrastructure adapters implement application ports:
 
 Dependencies point inward. Domain code has no knowledge of transports or infrastructure.
 
+Authentication is a transport concern, while authorization is an application concern. A
+transport resolves an authenticated principal; application services decide whether that
+principal may perform the requested capability for the resolved tenant.
+
 ## 4. Runtime modules
 
 ### 4.1 Domain
@@ -80,6 +84,7 @@ Owns use cases and ports:
 - attach evidence;
 - refresh and normalize market observations;
 - calculate valuation and lifecycle statistics;
+- authorize tenant-scoped capabilities for owners, editors, and viewers;
 - enforce tenant and transaction boundaries.
 
 Application services are the only supported write path.
@@ -158,6 +163,34 @@ SQLite and PostgreSQL have independent SQL and sqlc output, with a shared confor
 
 Every business row is tenant-owned. Local mode creates one default tenant; SaaS resolves tenant identity through authentication. No query or uniqueness rule may rely on an implicit single tenant.
 
+### 7.4 Identity and authorization boundary
+
+Users are global identities. `tenant_memberships` binds a user to a tenant with exactly one
+of three roles:
+
+- `owner`: manages members and tenant settings and has all tenant business capabilities;
+- `editor`: maintains catalog, assets, attachments, and lifecycle records;
+- `viewer`: reads tenant data without mutating it.
+
+Platform operations are not a tenant role. The first version has no cross-tenant super-admin
+screen and no platform identity implicitly gains access to tenant business data.
+
+The Web transport uses random opaque sessions whose token hashes are stored in the database;
+it does not use bearer JWTs. First-run setup creates the initial tenant and owner. Authentication
+may be disabled only when the HTTP listener is loopback-only, in which case the application
+uses the default local owner identity.
+
+```text
+HTTP request
+  -> authenticate session and resolve user + tenant
+  -> application capability check
+  -> tenant-scoped Store operation
+```
+
+Every Store query remains tenant-scoped even after authorization. Hiding a Web control is never
+treated as authorization. State-changing Web requests require CSRF validation, and membership or
+authentication changes produce security audit events.
+
 ## 8. Attachment architecture
 
 ```text
@@ -203,7 +236,7 @@ The initial provider is OneBound. Manual import is the second implementation use
 
 Deployment configuration comes from defaults, optional `.env`, and real environment variables, with real environment variables taking precedence.
 
-Deployment configuration includes database DSN, HTTP address, local blob root, OSS endpoint/bucket, and secret credentials.
+Deployment configuration includes database DSN, HTTP address, authentication mode, local blob root, OSS endpoint/bucket, and secret credentials.
 
 Auditable tenant business settings stay in the database: base currency, market region, provider priority, refresh cadence, condition schemes, and valuation policy.
 
@@ -217,6 +250,7 @@ Secrets never become ordinary tenant-setting rows. SaaS deployments may replace 
 single binary
   + SQLite file
   + local attachment directory (default)
+  + local account/session authentication
   + optional Aliyun OSS
   + OS scheduler
 ```
@@ -242,6 +276,17 @@ Both shapes invoke the same application services and domain model.
 - External provider failures are classified as authentication, rate limit, temporary, unsupported, or invalid response.
 - Market refresh failure never corrupts the last valid price point.
 - Economic records remain reconstructable from append-only events and FX evidence.
+
+### 12.1 Regression and full-element verification
+
+Each accepted behavior leaves an automated regression test at the narrowest useful layer. A
+single `TestFullElementScenario` is the executable product spine: it starts with authentication
+and tenant isolation, then grows to cover catalog, concrete assets, lifecycle events, original
+currency evidence, corrections, and Web access as those slices are delivered.
+
+The scenario runs through application services and the real SQLite and PostgreSQL Store adapters.
+UAT runs it before packaging, and packaged-binary smoke tests remain a separate gate so an
+in-process test cannot substitute for verifying the shipped artifact.
 
 ## 13. Architecture change protocol
 
