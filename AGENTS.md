@@ -78,9 +78,13 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 
 ### 9. Keep secrets out of persisted project data
 
+- The GitHub repository is public. Treat every tracked file, commit, branch, pull request, Action log, artifact name, and review comment as public information.
 - Secrets MUST NOT enter Git, logs, fixtures, migration files, or ordinary database configuration rows.
 - Local secrets may come from `.env`; production secrets MUST be injectable as environment variables or secret references.
 - `.env` MUST remain ignored; `.env.example` contains names only.
+- Real secret values MUST NOT be pasted into prompts, issues, pull requests, test output, screenshots, or CI command lines.
+- Every pushed checkpoint and promotion pull request MUST pass the repository `secret-scan` check. GitHub Secret Protection and Push Protection MUST remain enabled.
+- A suspected leak requires stopping publication, revoking or rotating the credential first, then removing it from current files and Git history before work resumes.
 
 ### 10. Keep the AI outside the application core
 
@@ -105,6 +109,7 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 ### 13. Preserve the delivery chain
 
 - `dev`, `uat`, and `prod` are permanent branches; `dev` is the default development baseline.
+- The GitHub repository default branch MUST be `prod`, so public visitors land on published production history; this does not make `prod` a development baseline.
 - Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`.
 - Commit and push each independently verified checkpoint. Do not accumulate unrelated work in one commit.
 - Promote tested work to `uat` through a squash-merged pull request, then delete the short-lived branch and fast-forward permanent `dev` to the accepted `uat` baseline.

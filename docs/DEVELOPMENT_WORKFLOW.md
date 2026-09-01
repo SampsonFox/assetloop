@@ -10,7 +10,25 @@ This is the required delivery workflow for AssetLoop. It is part of the project 
 | `uat` | Accepted release candidate under user testing | Never | Never |
 | `prod` | Published production history | Never | Never |
 
+The GitHub repository default branch is `prod`, so visitors and ordinary repository links resolve to published production history. `dev` remains the default baseline for creating development branches; changing the GitHub default branch does not authorize development or direct pushes on `prod`.
+
 `uat` and `prod` are protected on GitHub. Both require a pull request and passing CI; force pushes and deletion are disabled.
+
+## Public repository and secret safety
+
+The GitHub repository is intentionally public. Assume that every commit, branch, pull request, Action log, artifact name, issue, and review comment is immediately visible outside the project.
+
+Before every checkpoint push:
+
+1. keep real local values only in ignored `.env` files;
+2. keep `.env.example`, fixtures, migrations, screenshots, and logs free of real credentials;
+3. inspect the staged diff for credentials and private infrastructure details;
+4. let GitHub Push Protection reject supported secret patterns;
+5. require the `secret-scan` CI job, which scans the complete fetched Git history with a checksum-pinned Gitleaks release.
+
+GitHub Secret Protection and Push Protection must remain enabled. `secret-scan` is a required status check for both `uat` and `prod` alongside `test`.
+
+If a secret may have been exposed, stop promotion. Revoke or rotate it first; then remove it from the working tree and Git history, re-run a full-history scan, and only then resume development. Deleting the current file alone is not remediation because prior commits remain public.
 
 ## Work branches
 
@@ -30,7 +48,7 @@ fix/sqlite-upgrade-lock
 
 ## Promotion
 
-1. Run formatting, sqlc generation, tests, vet, and the relevant local smoke test.
+1. Run formatting, sqlc generation, tests, vet, secret scanning, and the relevant local smoke test.
 2. Push the work branch and open a pull request to `uat`.
 3. Squash merge after CI passes so UAT receives one coherent change.
 4. Delete the short-lived branch.
