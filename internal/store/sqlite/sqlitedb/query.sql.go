@@ -7,7 +7,39 @@ package sqlitedb
 
 import (
 	"context"
+	"database/sql"
 )
+
+const confirmImportDraft = `-- name: ConfirmImportDraft :execrows
+UPDATE import_drafts
+SET status = 'confirmed', confirmed_transaction_id = ?
+WHERE tenant_id = ? AND id = ? AND status = 'pending'
+`
+
+type ConfirmImportDraftParams struct {
+	ConfirmedTransactionID sql.NullString
+	TenantID               string
+	ID                     string
+}
+
+func (q *Queries) ConfirmImportDraft(ctx context.Context, arg ConfirmImportDraftParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, confirmImportDraft, arg.ConfirmedTransactionID, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const countUsers = `-- name: CountUsers :one
+SELECT COUNT(*) FROM users
+`
+
+func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createAsset = `-- name: CreateAsset :exec
 INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)
@@ -29,6 +61,367 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) error 
 		arg.DisplayName,
 		arg.CreatedAt,
 	)
+	return err
+}
+
+const createAssetEvent = `-- name: CreateAssetEvent :exec
+INSERT INTO asset_events
+    (id, tenant_id, asset_id, transaction_id, event_type, base_amount_minor,
+     base_currency, original_amount_minor, original_currency, fx_rate_scaled,
+     fx_rate_date, fx_rate_source, notes, voids_event_id, replaces_event_id,
+     occurred_at, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateAssetEventParams struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+}
+
+func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventParams) error {
+	_, err := q.db.ExecContext(ctx, createAssetEvent,
+		arg.ID,
+		arg.TenantID,
+		arg.AssetID,
+		arg.TransactionID,
+		arg.EventType,
+		arg.BaseAmountMinor,
+		arg.BaseCurrency,
+		arg.OriginalAmountMinor,
+		arg.OriginalCurrency,
+		arg.FxRateScaled,
+		arg.FxRateDate,
+		arg.FxRateSource,
+		arg.Notes,
+		arg.VoidsEventID,
+		arg.ReplacesEventID,
+		arg.OccurredAt,
+		arg.CreatedByUserID,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createAssetTransaction = `-- name: CreateAssetTransaction :exec
+INSERT INTO asset_transactions
+    (id, tenant_id, occurred_at, source, external_reference, notes, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateAssetTransactionParams struct {
+	ID                string
+	TenantID          string
+	OccurredAt        string
+	Source            string
+	ExternalReference string
+	Notes             string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+func (q *Queries) CreateAssetTransaction(ctx context.Context, arg CreateAssetTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, createAssetTransaction,
+		arg.ID,
+		arg.TenantID,
+		arg.OccurredAt,
+		arg.Source,
+		arg.ExternalReference,
+		arg.Notes,
+		arg.CreatedByUserID,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createCatalogAsset = `-- name: CreateCatalogAsset :exec
+INSERT INTO assets
+    (id, tenant_id, variant_id, display_name, serial_number, color, purchase_channel, notes, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateCatalogAssetParams struct {
+	ID              string
+	TenantID        string
+	VariantID       string
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	CreatedAt       string
+}
+
+func (q *Queries) CreateCatalogAsset(ctx context.Context, arg CreateCatalogAssetParams) error {
+	_, err := q.db.ExecContext(ctx, createCatalogAsset,
+		arg.ID,
+		arg.TenantID,
+		arg.VariantID,
+		arg.DisplayName,
+		arg.SerialNumber,
+		arg.Color,
+		arg.PurchaseChannel,
+		arg.Notes,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createCategory = `-- name: CreateCategory :exec
+INSERT INTO item_categories (id, tenant_id, name, created_at)
+VALUES (?, ?, ?, ?)
+`
+
+type CreateCategoryParams struct {
+	ID        string
+	TenantID  string
+	Name      string
+	CreatedAt string
+}
+
+func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, createCategory,
+		arg.ID,
+		arg.TenantID,
+		arg.Name,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createImportDraft = `-- name: CreateImportDraft :exec
+INSERT INTO import_drafts
+    (id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+     source, external_reference, notes, raw_text, status, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateImportDraftParams struct {
+	ID                string
+	TenantID          string
+	AssetID           string
+	EventType         string
+	AmountMinor       int64
+	Currency          string
+	OccurredAt        string
+	Source            string
+	ExternalReference string
+	Notes             string
+	RawText           string
+	Status            string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+func (q *Queries) CreateImportDraft(ctx context.Context, arg CreateImportDraftParams) error {
+	_, err := q.db.ExecContext(ctx, createImportDraft,
+		arg.ID,
+		arg.TenantID,
+		arg.AssetID,
+		arg.EventType,
+		arg.AmountMinor,
+		arg.Currency,
+		arg.OccurredAt,
+		arg.Source,
+		arg.ExternalReference,
+		arg.Notes,
+		arg.RawText,
+		arg.Status,
+		arg.CreatedByUserID,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createMembership = `-- name: CreateMembership :exec
+INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
+VALUES (?, ?, ?, ?)
+`
+
+type CreateMembershipParams struct {
+	TenantID  string
+	UserID    string
+	Role      string
+	CreatedAt string
+}
+
+func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) error {
+	_, err := q.db.ExecContext(ctx, createMembership,
+		arg.TenantID,
+		arg.UserID,
+		arg.Role,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createModel = `-- name: CreateModel :exec
+INSERT INTO product_models (id, tenant_id, category_id, name, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateModelParams struct {
+	ID         string
+	TenantID   string
+	CategoryID string
+	Name       string
+	CreatedAt  string
+}
+
+func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) error {
+	_, err := q.db.ExecContext(ctx, createModel,
+		arg.ID,
+		arg.TenantID,
+		arg.CategoryID,
+		arg.Name,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createSecurityAuditEvent = `-- name: CreateSecurityAuditEvent :exec
+INSERT INTO security_audit_events
+    (id, tenant_id, actor_user_id, action, target_user_id, detail, occurred_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateSecurityAuditEventParams struct {
+	ID           string
+	TenantID     string
+	ActorUserID  sql.NullString
+	Action       string
+	TargetUserID sql.NullString
+	Detail       string
+	OccurredAt   string
+}
+
+func (q *Queries) CreateSecurityAuditEvent(ctx context.Context, arg CreateSecurityAuditEventParams) error {
+	_, err := q.db.ExecContext(ctx, createSecurityAuditEvent,
+		arg.ID,
+		arg.TenantID,
+		arg.ActorUserID,
+		arg.Action,
+		arg.TargetUserID,
+		arg.Detail,
+		arg.OccurredAt,
+	)
+	return err
+}
+
+const createSession = `-- name: CreateSession :exec
+INSERT INTO sessions (token_hash, tenant_id, user_id, expires_at, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateSessionParams struct {
+	TokenHash string
+	TenantID  string
+	UserID    string
+	ExpiresAt string
+	CreatedAt string
+}
+
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, createSession,
+		arg.TokenHash,
+		arg.TenantID,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createTenant = `-- name: CreateTenant :exec
+INSERT INTO tenants (id, name, base_currency, created_at) VALUES (?, ?, ?, ?)
+`
+
+type CreateTenantParams struct {
+	ID           string
+	Name         string
+	BaseCurrency string
+	CreatedAt    string
+}
+
+func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) error {
+	_, err := q.db.ExecContext(ctx, createTenant,
+		arg.ID,
+		arg.Name,
+		arg.BaseCurrency,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createUser = `-- name: CreateUser :exec
+INSERT INTO users (id, username, username_normalized, password_hash, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateUserParams struct {
+	ID                 string
+	Username           string
+	UsernameNormalized string
+	PasswordHash       string
+	CreatedAt          string
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
+	_, err := q.db.ExecContext(ctx, createUser,
+		arg.ID,
+		arg.Username,
+		arg.UsernameNormalized,
+		arg.PasswordHash,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createVariant = `-- name: CreateVariant :exec
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateVariantParams struct {
+	ID        string
+	TenantID  string
+	ModelID   string
+	Name      string
+	CreatedAt string
+}
+
+func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) error {
+	_, err := q.db.ExecContext(ctx, createVariant,
+		arg.ID,
+		arg.TenantID,
+		arg.ModelID,
+		arg.Name,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions WHERE token_hash = ?
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, tokenHash string) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, tokenHash)
 	return err
 }
 
@@ -133,10 +526,75 @@ func (q *Queries) EnsureVariant(ctx context.Context, arg EnsureVariantParams) (s
 	return id, err
 }
 
+const findAccountByUsername = `-- name: FindAccountByUsername :one
+SELECT u.id AS user_id, u.username, u.password_hash,
+       tm.tenant_id, tm.role, t.name AS tenant_name
+FROM users u
+JOIN tenant_memberships tm ON tm.user_id = u.id
+JOIN tenants t ON t.id = tm.tenant_id
+WHERE u.username_normalized = ?
+ORDER BY tm.created_at
+LIMIT 1
+`
+
+type FindAccountByUsernameRow struct {
+	UserID       string
+	Username     string
+	PasswordHash string
+	TenantID     string
+	Role         string
+	TenantName   string
+}
+
+func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized string) (FindAccountByUsernameRow, error) {
+	row := q.db.QueryRowContext(ctx, findAccountByUsername, usernameNormalized)
+	var i FindAccountByUsernameRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.TenantID,
+		&i.Role,
+		&i.TenantName,
+	)
+	return i, err
+}
+
+const firstPrincipal = `-- name: FirstPrincipal :one
+SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name
+FROM users u
+JOIN tenant_memberships tm ON tm.user_id = u.id
+JOIN tenants t ON t.id = tm.tenant_id
+ORDER BY u.created_at, tm.created_at
+LIMIT 1
+`
+
+type FirstPrincipalRow struct {
+	TenantID   string
+	UserID     string
+	Username   string
+	Role       string
+	TenantName string
+}
+
+func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error) {
+	row := q.db.QueryRowContext(ctx, firstPrincipal)
+	var i FirstPrincipalRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.UserID,
+		&i.Username,
+		&i.Role,
+		&i.TenantName,
+	)
+	return i, err
+}
+
 const getAsset = `-- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.created_at
+       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
@@ -150,16 +608,20 @@ type GetAssetParams struct {
 }
 
 type GetAssetRow struct {
-	ID           string
-	TenantID     string
-	CategoryID   string
-	CategoryName string
-	ModelID      string
-	ModelName    string
-	VariantID    string
-	VariantName  string
-	DisplayName  string
-	CreatedAt    string
+	ID              string
+	TenantID        string
+	CategoryID      string
+	CategoryName    string
+	ModelID         string
+	ModelName       string
+	VariantID       string
+	VariantName     string
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	CreatedAt       string
 }
 
 func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow, error) {
@@ -175,7 +637,563 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 		&i.VariantID,
 		&i.VariantName,
 		&i.DisplayName,
+		&i.SerialNumber,
+		&i.Color,
+		&i.PurchaseChannel,
+		&i.Notes,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getAssetEvent = `-- name: GetAssetEvent :one
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided
+FROM asset_events e
+WHERE e.tenant_id = ? AND e.id = ?
+`
+
+type GetAssetEventParams struct {
+	TenantID string
+	ID       string
+}
+
+type GetAssetEventRow struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+	IsVoided            bool
+}
+
+func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (GetAssetEventRow, error) {
+	row := q.db.QueryRowContext(ctx, getAssetEvent, arg.TenantID, arg.ID)
+	var i GetAssetEventRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.AssetID,
+		&i.TransactionID,
+		&i.EventType,
+		&i.BaseAmountMinor,
+		&i.BaseCurrency,
+		&i.OriginalAmountMinor,
+		&i.OriginalCurrency,
+		&i.FxRateScaled,
+		&i.FxRateDate,
+		&i.FxRateSource,
+		&i.Notes,
+		&i.VoidsEventID,
+		&i.ReplacesEventID,
+		&i.OccurredAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.IsVoided,
+	)
+	return i, err
+}
+
+const getImportDraft = `-- name: GetImportDraft :one
+SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+       source, external_reference, notes, raw_text, status, created_by_user_id,
+       created_at, confirmed_transaction_id
+FROM import_drafts
+WHERE tenant_id = ? AND id = ?
+`
+
+type GetImportDraftParams struct {
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) GetImportDraft(ctx context.Context, arg GetImportDraftParams) (ImportDraft, error) {
+	row := q.db.QueryRowContext(ctx, getImportDraft, arg.TenantID, arg.ID)
+	var i ImportDraft
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.AssetID,
+		&i.EventType,
+		&i.AmountMinor,
+		&i.Currency,
+		&i.OccurredAt,
+		&i.Source,
+		&i.ExternalReference,
+		&i.Notes,
+		&i.RawText,
+		&i.Status,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.ConfirmedTransactionID,
+	)
+	return i, err
+}
+
+const getSessionPrincipal = `-- name: GetSessionPrincipal :one
+SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
+FROM sessions s
+JOIN users u ON u.id = s.user_id
+JOIN tenant_memberships tm ON tm.tenant_id = s.tenant_id AND tm.user_id = s.user_id
+JOIN tenants t ON t.id = s.tenant_id
+WHERE s.token_hash = ? AND s.expires_at > ?
+`
+
+type GetSessionPrincipalParams struct {
+	TokenHash string
+	ExpiresAt string
+}
+
+type GetSessionPrincipalRow struct {
+	TenantID   string
+	UserID     string
+	Username   string
+	Role       string
+	TenantName string
+}
+
+func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincipalParams) (GetSessionPrincipalRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionPrincipal, arg.TokenHash, arg.ExpiresAt)
+	var i GetSessionPrincipalRow
+	err := row.Scan(
+		&i.TenantID,
+		&i.UserID,
+		&i.Username,
+		&i.Role,
+		&i.TenantName,
+	)
+	return i, err
+}
+
+const getTenantBaseCurrency = `-- name: GetTenantBaseCurrency :one
+SELECT base_currency, base_currency_locked
+FROM tenants
+WHERE id = ?
+`
+
+type GetTenantBaseCurrencyRow struct {
+	BaseCurrency       string
+	BaseCurrencyLocked int64
+}
+
+func (q *Queries) GetTenantBaseCurrency(ctx context.Context, id string) (GetTenantBaseCurrencyRow, error) {
+	row := q.db.QueryRowContext(ctx, getTenantBaseCurrency, id)
+	var i GetTenantBaseCurrencyRow
+	err := row.Scan(&i.BaseCurrency, &i.BaseCurrencyLocked)
+	return i, err
+}
+
+const listAssetEvents = `-- name: ListAssetEvents :many
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided
+FROM asset_events e
+WHERE e.tenant_id = ? AND e.asset_id = ?
+ORDER BY e.occurred_at, e.created_at, e.id
+`
+
+type ListAssetEventsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+type ListAssetEventsRow struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+	IsVoided            bool
+}
+
+func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams) ([]ListAssetEventsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetEvents, arg.TenantID, arg.AssetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetEventsRow
+	for rows.Next() {
+		var i ListAssetEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AssetID,
+			&i.TransactionID,
+			&i.EventType,
+			&i.BaseAmountMinor,
+			&i.BaseCurrency,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.FxRateScaled,
+			&i.FxRateDate,
+			&i.FxRateSource,
+			&i.Notes,
+			&i.VoidsEventID,
+			&i.ReplacesEventID,
+			&i.OccurredAt,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.IsVoided,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssets = `-- name: ListAssets :many
+SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
+       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       a.purchase_channel, a.notes, a.created_at
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE a.tenant_id = ?
+ORDER BY a.created_at DESC, a.id
+`
+
+type ListAssetsRow struct {
+	ID              string
+	TenantID        string
+	CategoryID      string
+	CategoryName    string
+	ModelID         string
+	ModelName       string
+	VariantID       string
+	VariantName     string
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	CreatedAt       string
+}
+
+func (q *Queries) ListAssets(ctx context.Context, tenantID string) ([]ListAssetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssets, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetsRow
+	for rows.Next() {
+		var i ListAssetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.ModelID,
+			&i.ModelName,
+			&i.VariantID,
+			&i.VariantName,
+			&i.DisplayName,
+			&i.SerialNumber,
+			&i.Color,
+			&i.PurchaseChannel,
+			&i.Notes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCategories = `-- name: ListCategories :many
+SELECT id, tenant_id, name, created_at
+FROM item_categories
+WHERE tenant_id = ?
+ORDER BY name, id
+`
+
+func (q *Queries) ListCategories(ctx context.Context, tenantID string) ([]ItemCategory, error) {
+	rows, err := q.db.QueryContext(ctx, listCategories, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemCategory
+	for rows.Next() {
+		var i ItemCategory
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT u.id AS user_id, u.username, tm.role, tm.created_at
+FROM tenant_memberships tm
+JOIN users u ON u.id = tm.user_id
+WHERE tm.tenant_id = ?
+ORDER BY u.username_normalized
+`
+
+type ListMembersRow struct {
+	UserID    string
+	Username  string
+	Role      string
+	CreatedAt string
+}
+
+func (q *Queries) ListMembers(ctx context.Context, tenantID string) ([]ListMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMembers, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembersRow
+	for rows.Next() {
+		var i ListMembersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModels = `-- name: ListModels :many
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, m.name, m.created_at
+FROM product_models m
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = ?
+ORDER BY c.name, m.name, m.id
+`
+
+type ListModelsRow struct {
+	ID           string
+	TenantID     string
+	CategoryID   string
+	CategoryName string
+	Name         string
+	CreatedAt    string
+}
+
+func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModelsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listModels, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModelsRow
+	for rows.Next() {
+		var i ListModelsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingImportDrafts = `-- name: ListPendingImportDrafts :many
+SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
+       source, external_reference, notes, raw_text, status, created_by_user_id,
+       created_at, confirmed_transaction_id
+FROM import_drafts
+WHERE tenant_id = ? AND status = 'pending'
+ORDER BY created_at, id
+`
+
+func (q *Queries) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]ImportDraft, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingImportDrafts, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ImportDraft
+	for rows.Next() {
+		var i ImportDraft
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AssetID,
+			&i.EventType,
+			&i.AmountMinor,
+			&i.Currency,
+			&i.OccurredAt,
+			&i.Source,
+			&i.ExternalReference,
+			&i.Notes,
+			&i.RawText,
+			&i.Status,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.ConfirmedTransactionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVariants = `-- name: ListVariants :many
+SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
+       v.model_id, m.name AS model_name, v.name, v.created_at
+FROM product_variants v
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE v.tenant_id = ?
+ORDER BY c.name, m.name, v.name, v.id
+`
+
+type ListVariantsRow struct {
+	ID           string
+	TenantID     string
+	CategoryID   string
+	CategoryName string
+	ModelID      string
+	ModelName    string
+	Name         string
+	CreatedAt    string
+}
+
+func (q *Queries) ListVariants(ctx context.Context, tenantID string) ([]ListVariantsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listVariants, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVariantsRow
+	for rows.Next() {
+		var i ListVariantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.ModelID,
+			&i.ModelName,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockTenantBaseCurrency = `-- name: LockTenantBaseCurrency :exec
+UPDATE tenants
+SET base_currency_locked = 1
+WHERE id = ? AND base_currency = ?
+`
+
+type LockTenantBaseCurrencyParams struct {
+	ID           string
+	BaseCurrency string
+}
+
+func (q *Queries) LockTenantBaseCurrency(ctx context.Context, arg LockTenantBaseCurrencyParams) error {
+	_, err := q.db.ExecContext(ctx, lockTenantBaseCurrency, arg.ID, arg.BaseCurrency)
+	return err
 }

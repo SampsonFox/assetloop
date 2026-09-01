@@ -1,0 +1,61 @@
+{{define "content"}}
+<div class="page-heading">
+  <div><p class="eyebrow">具体物品</p><h1>{{.Asset.DisplayName}}</h1></div>
+  <a href="/catalog">返回目录</a>
+</div>
+<section class="two-column">
+  <article class="card">
+    <h2>归属规格</h2>
+    <dl class="details">
+      <dt>类别</dt><dd>{{.Asset.Category}}</dd>
+      <dt>型号</dt><dd>{{.Asset.Model}}</dd>
+      <dt>价格规格</dt><dd>{{.Asset.Variant}}</dd>
+      <dt>序列号</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd>
+      <dt>颜色</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd>
+      <dt>购买渠道</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd>
+    </dl>
+  </article>
+  <article class="card"><h2>备注</h2><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">暂无备注</span>{{end}}</p></article>
+</section>
+<section class="grid section-gap">
+  <article class="card"><span class="metric">{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</span><h2>累计支出</h2><p>有效买入与维修记录。</p></article>
+  <article class="card"><span class="metric">{{money .Summary.IncomeMinor .Summary.BaseCurrency}}</span><h2>累计收入</h2><p>有效卖出记录。</p></article>
+  <article class="card"><span class="metric">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</span><h2>净现金流 · {{.Summary.Status}}</h2><p>{{if .BaseCurrencyLocked}}本位币已锁定{{else}}首笔金额后锁定本位币{{end}}</p></article>
+</section>
+
+<section class="card table-card section-gap">
+  <h2>生命周期时间线</h2>
+  {{if .Events}}<table>
+    <thead><tr><th>时间</th><th>事件</th><th>本位币金额</th><th>原币与汇率证据</th><th>备注</th><th></th></tr></thead>
+    <tbody>{{range .Events}}<tr class="event-{{eventClass .Type}} {{if .IsVoided}}is-voided{{end}}">
+      <td>{{dateTime .OccurredAt}}</td><td><span class="badge">{{eventLabel .Type}}</span>{{if .IsVoided}} 已作废{{end}}</td>
+      <td>{{money .BaseAmountMinor .BaseCurrency}}</td>
+      <td>{{if .FX}}{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<br><span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span>{{else}}—{{end}}</td>
+      <td>{{.Notes}}</td>
+      <td>{{if $.CanManageLifecycle}}{{if canCorrect .}}<a href="/events/{{.ID}}/correct">更正</a>{{end}}{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table>{{else}}<p class="muted">尚无生命周期记录。</p>{{end}}
+</section>
+
+{{if .CanManageLifecycle}}
+<section class="card section-gap">
+  <h2>新增生命周期记录</h2>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <form class="form-grid" action="/assets/{{.Asset.ID}}/events" method="post">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <label>事件类型<select name="event_type" required><option value="purchase">买入</option><option value="repair">维修</option><option value="sale">卖出</option></select></label>
+    <label>发生时间<input type="datetime-local" name="occurred_at" value="{{.NowValue}}" required></label>
+    <label>金额（正数）<input name="amount" inputmode="decimal" required placeholder="6999.00"></label>
+    <label>原始货币<select name="currency" required><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
+    <label>交易来源<input name="source" value="manual" maxlength="120"></label>
+    <label>订单/凭证号<input name="external_reference" maxlength="200"></label>
+    <label>汇率（1 原币 = 本位币）<input name="fx_rate" inputmode="decimal" placeholder="仅非本位币必填"></label>
+    <label>汇率日期<input type="date" name="fx_rate_date" value="{{.NowValue | printf "%.10s"}}"></label>
+    <label>汇率来源<input name="fx_rate_source" placeholder="仅非本位币必填"></label>
+    <label class="check"><input type="checkbox" name="fx_confirmed">我确认使用上述汇率换算为 {{.BaseCurrency}}</label>
+    <label class="wide">备注<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
+    <button type="submit">追加记录</button>
+  </form>
+</section>
+{{end}}
+{{end}}

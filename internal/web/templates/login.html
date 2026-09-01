@@ -1,0 +1,13 @@
+{{define "content"}}
+<section class="auth-card">
+  <p class="eyebrow">欢迎回来</p>
+  <h1>登录 AssetLoop</h1>
+  {{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
+  <form method="post" action="/login" class="stack">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <label>用户名<input name="username" required autofocus autocomplete="username"></label>
+    <label>密码<input name="password" type="password" required autocomplete="current-password"></label>
+    <button type="submit">登录</button>
+  </form>
+</section>
+{{end}}
