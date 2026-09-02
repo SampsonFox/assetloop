@@ -186,14 +186,15 @@ func (q *Queries) CreateCatalogAsset(ctx context.Context, arg CreateCatalogAsset
 }
 
 const createCategory = `-- name: CreateCategory :exec
-INSERT INTO item_categories (id, tenant_id, name, created_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO item_categories (id, tenant_id, name, icon_key, created_at)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateCategoryParams struct {
 	ID        uuid.UUID
 	TenantID  uuid.UUID
 	Name      string
+	IconKey   string
 	CreatedAt time.Time
 }
 
@@ -202,6 +203,7 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.ID,
 		arg.TenantID,
 		arg.Name,
+		arg.IconKey,
 		arg.CreatedAt,
 	)
 	return err
@@ -595,6 +597,7 @@ func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error)
 
 const getAsset = `-- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
        v.name AS variant_name, a.display_name, a.serial_number, a.color,
        a.purchase_channel, a.notes, a.created_at
@@ -615,6 +618,7 @@ type GetAssetRow struct {
 	TenantID        uuid.UUID
 	CategoryID      uuid.UUID
 	CategoryName    string
+	CategoryIcon    string
 	ModelID         uuid.UUID
 	ModelName       string
 	VariantID       uuid.UUID
@@ -635,6 +639,7 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 		&i.TenantID,
 		&i.CategoryID,
 		&i.CategoryName,
+		&i.CategoryIcon,
 		&i.ModelID,
 		&i.ModelName,
 		&i.VariantID,
@@ -893,6 +898,7 @@ func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams
 
 const listAssets = `-- name: ListAssets :many
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
        v.name AS variant_name, a.display_name, a.serial_number, a.color,
        a.purchase_channel, a.notes, a.created_at
@@ -909,6 +915,7 @@ type ListAssetsRow struct {
 	TenantID        uuid.UUID
 	CategoryID      uuid.UUID
 	CategoryName    string
+	CategoryIcon    string
 	ModelID         uuid.UUID
 	ModelName       string
 	VariantID       uuid.UUID
@@ -935,6 +942,7 @@ func (q *Queries) ListAssets(ctx context.Context, tenantID uuid.UUID) ([]ListAss
 			&i.TenantID,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.CategoryIcon,
 			&i.ModelID,
 			&i.ModelName,
 			&i.VariantID,
@@ -960,25 +968,34 @@ func (q *Queries) ListAssets(ctx context.Context, tenantID uuid.UUID) ([]ListAss
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, tenant_id, name, created_at
+SELECT id, tenant_id, name, icon_key, created_at
 FROM item_categories
 WHERE tenant_id = $1
 ORDER BY name, id
 `
 
-func (q *Queries) ListCategories(ctx context.Context, tenantID uuid.UUID) ([]ItemCategory, error) {
+type ListCategoriesRow struct {
+	ID        uuid.UUID
+	TenantID  uuid.UUID
+	Name      string
+	IconKey   string
+	CreatedAt time.Time
+}
+
+func (q *Queries) ListCategories(ctx context.Context, tenantID uuid.UUID) ([]ListCategoriesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCategories, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ItemCategory
+	var items []ListCategoriesRow
 	for rows.Next() {
-		var i ItemCategory
+		var i ListCategoriesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
 			&i.Name,
+			&i.IconKey,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -1038,7 +1055,7 @@ func (q *Queries) ListMembers(ctx context.Context, tenantID uuid.UUID) ([]ListMe
 }
 
 const listModels = `-- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
 FROM product_models m
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1
@@ -1050,6 +1067,7 @@ type ListModelsRow struct {
 	TenantID     uuid.UUID
 	CategoryID   uuid.UUID
 	CategoryName string
+	CategoryIcon string
 	Name         string
 	CreatedAt    time.Time
 }
@@ -1068,6 +1086,7 @@ func (q *Queries) ListModels(ctx context.Context, tenantID uuid.UUID) ([]ListMod
 			&i.TenantID,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
 		); err != nil {
@@ -1134,7 +1153,7 @@ func (q *Queries) ListPendingImportDrafts(ctx context.Context, tenantID uuid.UUI
 
 const listVariants = `-- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
-       v.model_id, m.name AS model_name, v.name, v.created_at
+       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.created_at
 FROM product_variants v
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
@@ -1147,6 +1166,7 @@ type ListVariantsRow struct {
 	TenantID     uuid.UUID
 	CategoryID   uuid.UUID
 	CategoryName string
+	CategoryIcon string
 	ModelID      uuid.UUID
 	ModelName    string
 	Name         string
@@ -1167,6 +1187,7 @@ func (q *Queries) ListVariants(ctx context.Context, tenantID uuid.UUID) ([]ListV
 			&i.TenantID,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.CategoryIcon,
 			&i.ModelID,
 			&i.ModelName,
 			&i.Name,
@@ -1199,4 +1220,116 @@ type LockTenantBaseCurrencyParams struct {
 func (q *Queries) LockTenantBaseCurrency(ctx context.Context, arg LockTenantBaseCurrencyParams) error {
 	_, err := q.db.ExecContext(ctx, lockTenantBaseCurrency, arg.ID, arg.BaseCurrency)
 	return err
+}
+
+const updateCatalogAsset = `-- name: UpdateCatalogAsset :execrows
+UPDATE assets
+SET variant_id = $1, display_name = $2, serial_number = $3, color = $4, purchase_channel = $5, notes = $6
+WHERE tenant_id = $7 AND id = $8
+`
+
+type UpdateCatalogAssetParams struct {
+	VariantID       uuid.UUID
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	TenantID        uuid.UUID
+	ID              uuid.UUID
+}
+
+func (q *Queries) UpdateCatalogAsset(ctx context.Context, arg UpdateCatalogAssetParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateCatalogAsset,
+		arg.VariantID,
+		arg.DisplayName,
+		arg.SerialNumber,
+		arg.Color,
+		arg.PurchaseChannel,
+		arg.Notes,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateCategory = `-- name: UpdateCategory :execrows
+UPDATE item_categories
+SET name = $1, icon_key = $2
+WHERE tenant_id = $3 AND id = $4
+`
+
+type UpdateCategoryParams struct {
+	Name     string
+	IconKey  string
+	TenantID uuid.UUID
+	ID       uuid.UUID
+}
+
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateCategory,
+		arg.Name,
+		arg.IconKey,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateModel = `-- name: UpdateModel :execrows
+UPDATE product_models
+SET category_id = $1, name = $2
+WHERE tenant_id = $3 AND id = $4
+`
+
+type UpdateModelParams struct {
+	CategoryID uuid.UUID
+	Name       string
+	TenantID   uuid.UUID
+	ID         uuid.UUID
+}
+
+func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateModel,
+		arg.CategoryID,
+		arg.Name,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateVariant = `-- name: UpdateVariant :execrows
+UPDATE product_variants
+SET model_id = $1, name = $2
+WHERE tenant_id = $3 AND id = $4
+`
+
+type UpdateVariantParams struct {
+	ModelID  uuid.UUID
+	Name     string
+	TenantID uuid.UUID
+	ID       uuid.UUID
+}
+
+func (q *Queries) UpdateVariant(ctx context.Context, arg UpdateVariantParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateVariant,
+		arg.ModelID,
+		arg.Name,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

@@ -81,6 +81,41 @@ func TestUnauthenticatedDashboardRedirectsToLogin(t *testing.T) {
 	}
 }
 
+func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
+	handler := newTestHandler(t)
+	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
+	csrf := responseCookie(t, setupPage, csrfCookie)
+	setup := request(t, handler, http.MethodPost, "/setup", url.Values{
+		"csrf_token": {csrf.Value}, "tenant_name": {"List Tenant"}, "base_currency": {"CNY"},
+		"username": {"owner"}, "password": {"owner secure password"},
+	}, []*http.Cookie{csrf})
+	session := responseCookie(t, setup, sessionCookie)
+
+	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
+	for _, want := range []string{"我的物品", "还没有物品", "前往物品配置", `id="asset-form"`} {
+		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
+			t.Fatalf("asset-first empty state missing %q: status=%d body=%s", want, home.Code, home.Body.String())
+		}
+	}
+	if strings.Count(home.Body.String(), `id="asset-form"`) != 1 {
+		t.Fatalf("create/edit must share one asset form: %s", home.Body.String())
+	}
+
+	grid := request(t, handler, http.MethodGet, "/?view=grid", nil, []*http.Cookie{session, csrf})
+	viewCookie := responseCookie(t, grid, assetViewCookie)
+	if viewCookie.Value != "grid" || !strings.Contains(grid.Body.String(), `class="is-active">卡片`) {
+		t.Fatalf("grid preference was not selected: cookie=%q body=%s", viewCookie.Value, grid.Body.String())
+	}
+	persisted := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, viewCookie})
+	if !strings.Contains(persisted.Body.String(), `class="is-active">卡片`) {
+		t.Fatalf("grid preference was not persisted: %s", persisted.Body.String())
+	}
+	legacy := request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{session, csrf})
+	if legacy.Code != http.StatusPermanentRedirect || legacy.Header().Get("Location") != "/" {
+		t.Fatalf("legacy catalog route: status=%d location=%q", legacy.Code, legacy.Header().Get("Location"))
+	}
+}
+
 func TestParseFormDatePreservesCalendarDateAcrossTimezone(t *testing.T) {
 	previousLocal := time.Local
 	time.Local = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -105,34 +140,34 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}, []*http.Cookie{csrf})
 	ownerSession := responseCookie(t, setup, sessionCookie)
 
-	created := request(t, handler, http.MethodPost, "/catalog/categories", url.Values{
-		"csrf_token": {csrf.Value}, "name": {"手机"},
+	created := request(t, handler, http.MethodPost, "/admin/catalog/categories", url.Values{
+		"csrf_token": {csrf.Value}, "name": {"手机"}, "icon_key": {"smartphone"},
 	}, []*http.Cookie{ownerSession, csrf})
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create category: status=%d body=%s", created.Code, created.Body.String())
 	}
-	catalog := request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	catalog := request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
 	categoryID := optionID(t, catalog.Body.String(), "手机")
 
-	created = request(t, handler, http.MethodPost, "/catalog/models", url.Values{
+	created = request(t, handler, http.MethodPost, "/admin/catalog/models", url.Values{
 		"csrf_token": {csrf.Value}, "category_id": {categoryID}, "name": {"iPhone 17 Pro"},
 	}, []*http.Cookie{ownerSession, csrf})
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create model: status=%d body=%s", created.Code, created.Body.String())
 	}
-	catalog = request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
 	modelID := optionID(t, catalog.Body.String(), "手机 / iPhone 17 Pro")
 
-	created = request(t, handler, http.MethodPost, "/catalog/variants", url.Values{
+	created = request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{
 		"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"256GB"},
 	}, []*http.Cookie{ownerSession, csrf})
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create variant: status=%d body=%s", created.Code, created.Body.String())
 	}
-	catalog = request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
 	variantID := optionID(t, catalog.Body.String(), "手机 / iPhone 17 Pro / 256GB")
 
-	created = request(t, handler, http.MethodPost, "/catalog/assets", url.Values{
+	created = request(t, handler, http.MethodPost, "/assets", url.Values{
 		"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"我的主力手机"},
 		"serial_number": {"WEB-SERIAL-001"}, "color": {"黑色"}, "purchase_channel": {"官方商城"},
 		"notes": {"Web 全要素目录记录"},
@@ -140,13 +175,49 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create asset: status=%d body=%s", created.Code, created.Body.String())
 	}
-	catalog = request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
 	if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), "我的主力手机") || !strings.Contains(catalog.Body.String(), "WEB-SERIAL-001") {
 		t.Fatalf("catalog asset list: status=%d body=%s", catalog.Code, catalog.Body.String())
 	}
 	match := regexp.MustCompile(`/assets/([0-9a-f-]{36})`).FindStringSubmatch(catalog.Body.String())
 	if len(match) != 2 {
 		t.Fatalf("asset detail link not found: %s", catalog.Body.String())
+	}
+	updates := []struct {
+		path string
+		form url.Values
+		want string
+	}{
+		{"/admin/catalog/categories/" + categoryID, url.Values{"csrf_token": {csrf.Value}, "name": {"移动设备"}, "icon_key": {"tablet"}}, "移动设备"},
+		{"/admin/catalog/models/" + modelID, url.Values{"csrf_token": {csrf.Value}, "category_id": {categoryID}, "name": {"iPhone 17 Pro Max"}}, "iPhone 17 Pro Max"},
+		{"/admin/catalog/variants/" + variantID, url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"512GB"}}, "512GB"},
+		{"/assets/" + match[1], url.Values{"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"备用手机"}, "serial_number": {"WEB-SERIAL-EDITED"}, "color": {"白色"}}, "备用手机"},
+	}
+	for _, update := range updates {
+		response := request(t, handler, http.MethodPost, update.path, update.form, []*http.Cookie{ownerSession, csrf})
+		if response.Code != http.StatusSeeOther {
+			t.Fatalf("update %s: status=%d body=%s", update.path, response.Code, response.Body.String())
+		}
+	}
+	updatedList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{"备用手机", "移动设备", "iPhone 17 Pro Max", "512GB", "WEB-SERIAL-EDITED", `category-icons.svg#tablet`} {
+		if !strings.Contains(updatedList.Body.String(), want) {
+			t.Fatalf("updated asset list missing %q: %s", want, updatedList.Body.String())
+		}
+	}
+	for _, restore := range []struct {
+		path string
+		form url.Values
+	}{
+		{"/admin/catalog/categories/" + categoryID, url.Values{"csrf_token": {csrf.Value}, "name": {"手机"}, "icon_key": {"smartphone"}}},
+		{"/admin/catalog/models/" + modelID, url.Values{"csrf_token": {csrf.Value}, "category_id": {categoryID}, "name": {"iPhone 17 Pro"}}},
+		{"/admin/catalog/variants/" + variantID, url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"256GB"}}},
+		{"/assets/" + match[1], url.Values{"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"我的主力手机"}, "serial_number": {"WEB-SERIAL-001"}, "color": {"黑色"}, "purchase_channel": {"官方商城"}, "notes": {"Web 全要素目录记录"}}},
+	} {
+		response := request(t, handler, http.MethodPost, restore.path, restore.form, []*http.Cookie{ownerSession, csrf})
+		if response.Code != http.StatusSeeOther {
+			t.Fatalf("restore %s: status=%d body=%s", restore.path, response.Code, response.Body.String())
+		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
 	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录"} {
@@ -218,7 +289,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if strings.Contains(detail.Body.String(), "2026-07-31") {
 		t.Fatalf("FX rate date shifted to the prior day: %s", detail.Body.String())
 	}
-	dashboard := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
+	dashboard := request(t, handler, http.MethodGet, "/overview", nil, []*http.Cookie{ownerSession, csrf})
 	for _, want := range []string{"具体物品", "7270.00 CNY", "730.00 CNY", "收入 8000.00 CNY"} {
 		if dashboard.Code != http.StatusOK || !strings.Contains(dashboard.Body.String(), want) {
 			t.Fatalf("dashboard totals missing %q: status=%d body=%s", want, dashboard.Code, dashboard.Body.String())
@@ -235,12 +306,19 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		"csrf_token": {csrf.Value}, "username": {"viewer"}, "password": {"viewer secure password"},
 	}, []*http.Cookie{csrf})
 	viewerSession := responseCookie(t, login, sessionCookie)
-	visible := request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{viewerSession, csrf})
+	visible := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{viewerSession, csrf})
 	if visible.Code != http.StatusOK || !strings.Contains(visible.Body.String(), "我的主力手机") {
 		t.Fatalf("viewer should read catalog: status=%d body=%s", visible.Code, visible.Body.String())
 	}
-	forbidden := request(t, handler, http.MethodPost, "/catalog/categories", url.Values{
-		"csrf_token": {csrf.Value}, "name": {"不应创建"},
+	if strings.Contains(visible.Body.String(), `id="asset-form"`) || strings.Contains(visible.Body.String(), `href="/admin/catalog"`) {
+		t.Fatalf("viewer should not receive catalog management controls: %s", visible.Body.String())
+	}
+	adminDenied := request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{viewerSession, csrf})
+	if adminDenied.Code != http.StatusForbidden {
+		t.Fatalf("viewer catalog management page: got %d, want %d", adminDenied.Code, http.StatusForbidden)
+	}
+	forbidden := request(t, handler, http.MethodPost, "/admin/catalog/categories", url.Values{
+		"csrf_token": {csrf.Value}, "name": {"不应创建"}, "icon_key": {"package"},
 	}, []*http.Cookie{viewerSession, csrf})
 	if forbidden.Code != http.StatusForbidden {
 		t.Fatalf("viewer catalog write: got %d, want %d", forbidden.Code, http.StatusForbidden)
