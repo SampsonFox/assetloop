@@ -55,7 +55,7 @@ func (s *Store) FindAccount(ctx context.Context, usernameNormalized string) (app
 	if err != nil {
 		return application.Account{}, err
 	}
-	return application.Account{Principal: application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role)}, PasswordHash: row.PasswordHash}, nil
+	return application.Account{Principal: application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), Locale: application.Locale(row.Locale), Theme: application.Theme(row.Theme)}, PasswordHash: row.PasswordHash}, nil
 }
 
 func (s *Store) FirstPrincipal(ctx context.Context) (application.Principal, error) {
@@ -63,7 +63,7 @@ func (s *Store) FirstPrincipal(ctx context.Context) (application.Principal, erro
 	if err != nil {
 		return application.Principal{}, err
 	}
-	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role)}, nil
+	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), Locale: application.Locale(row.Locale), Theme: application.Theme(row.Theme)}, nil
 }
 
 func (s *Store) CreateSession(ctx context.Context, session application.Session) error {
@@ -79,11 +79,19 @@ func (s *Store) GetSessionPrincipal(ctx context.Context, tokenHash string, now t
 	if err != nil {
 		return application.Principal{}, err
 	}
-	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role)}, nil
+	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), Locale: application.Locale(row.Locale), Theme: application.Theme(row.Theme)}, nil
 }
 
 func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
 	return postgresdb.New(s.db).DeleteSession(ctx, tokenHash)
+}
+
+func (s *Store) UpdateUserPreferences(ctx context.Context, userID string, locale application.Locale, theme application.Theme) error {
+	id, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("parse user ID: %w", err)
+	}
+	return postgresdb.New(s.db).UpdateUserPreferences(ctx, postgresdb.UpdateUserPreferencesParams{ID: id, Locale: string(locale), Theme: string(theme)})
 }
 
 func (s *Store) CreateMember(ctx context.Context, user application.User, membership application.Membership, event application.SecurityEvent) error {
@@ -135,7 +143,7 @@ func createUserAndMembershipPostgres(ctx context.Context, q *postgresdb.Queries,
 	if err != nil {
 		return err
 	}
-	if err := q.CreateUser(ctx, postgresdb.CreateUserParams{ID: userID, Username: user.Username, UsernameNormalized: user.UsernameNormalized, PasswordHash: user.PasswordHash, CreatedAt: user.CreatedAt}); err != nil {
+	if err := q.CreateUser(ctx, postgresdb.CreateUserParams{ID: userID, Username: user.Username, UsernameNormalized: user.UsernameNormalized, PasswordHash: user.PasswordHash, Locale: string(user.Locale), Theme: string(user.Theme), CreatedAt: user.CreatedAt}); err != nil {
 		return err
 	}
 	return q.CreateMembership(ctx, postgresdb.CreateMembershipParams{TenantID: tenantID, UserID: userID, Role: string(membership.Role), CreatedAt: membership.CreatedAt})

@@ -111,15 +111,15 @@ SELECT COUNT(*) FROM users;
 INSERT INTO tenants (id, name, base_currency, created_at) VALUES (?, ?, ?, ?);
 
 -- name: CreateUser :exec
-INSERT INTO users (id, username, username_normalized, password_hash, created_at)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO users (id, username, username_normalized, password_hash, locale, theme, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: CreateMembership :exec
 INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
 VALUES (?, ?, ?, ?);
 
 -- name: FindAccountByUsername :one
-SELECT u.id AS user_id, u.username, u.password_hash,
+SELECT u.id AS user_id, u.username, u.password_hash, u.locale, u.theme,
        tm.tenant_id, tm.role, t.name AS tenant_name
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
@@ -129,7 +129,8 @@ ORDER BY tm.created_at
 LIMIT 1;
 
 -- name: FirstPrincipal :one
-SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name
+SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
 JOIN tenants t ON t.id = tm.tenant_id
@@ -141,7 +142,8 @@ INSERT INTO sessions (token_hash, tenant_id, user_id, expires_at, created_at)
 VALUES (?, ?, ?, ?, ?);
 
 -- name: GetSessionPrincipal :one
-SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
+SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 JOIN tenant_memberships tm ON tm.tenant_id = s.tenant_id AND tm.user_id = s.user_id
@@ -150,6 +152,9 @@ WHERE s.token_hash = ? AND s.expires_at > ?;
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = ?;
+
+-- name: UpdateUserPreferences :exec
+UPDATE users SET locale = ?, theme = ? WHERE id = ?;
 
 -- name: ListMembers :many
 SELECT u.id AS user_id, u.username, tm.role, tm.created_at

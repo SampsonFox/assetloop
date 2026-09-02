@@ -133,4 +133,6 @@ type User struct {
 	UsernameNormalized string
 	PasswordHash       string
 	CreatedAt          string
+	Locale             string
+	Theme              string
 }

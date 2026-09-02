@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -41,6 +43,86 @@ func TestUpgradeFromPreviousSchemaPreservesData(t *testing.T) {
 		defer cleanup()
 		runUpgradeTest(t, cfg)
 	})
+}
+
+func TestUpgradeExistingUserGetsSafePreferences(t *testing.T) {
+	t.Run("sqlite", func(t *testing.T) {
+		cfg := config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "preferences-upgrade.db")}
+		runUserPreferencesUpgradeTest(t, cfg)
+	})
+
+	t.Run("postgres", func(t *testing.T) {
+		dsn := os.Getenv("TEST_POSTGRES_DSN")
+		if dsn == "" {
+			if os.Getenv("REQUIRE_POSTGRES_TEST") == "true" {
+				t.Fatal("TEST_POSTGRES_DSN is required for PostgreSQL migration upgrade coverage")
+			}
+			t.Skip("TEST_POSTGRES_DSN is not set")
+		}
+		cfg, cleanup := postgresUpgradeSchema(t, dsn)
+		defer cleanup()
+		runUserPreferencesUpgradeTest(t, cfg)
+	})
+}
+
+func runUserPreferencesUpgradeTest(t *testing.T, cfg config.Database) {
+	t.Helper()
+	db, err := basestore.Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	applyMigrationsThrough(t, db, cfg.Driver, 5)
+	createdAt := any("2026-09-01T00:00:00Z")
+	if cfg.Driver == "postgres" {
+		createdAt = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	}
+	if _, err := db.Exec("INSERT INTO users (id, username, username_normalized, password_hash, created_at) VALUES ("+values(cfg.Driver, 5)+")",
+		"77777777-7777-4777-8777-777777777777", "Existing User", "existing-user", "preserved-hash", createdAt); err != nil {
+		t.Fatalf("seed existing user: %v", err)
+	}
+	if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
+		t.Fatalf("upgrade user preferences: %v", err)
+	}
+	var username, passwordHash, locale, theme string
+	if err := db.QueryRow("SELECT username, password_hash, locale, theme FROM users WHERE id = "+upgradePlaceholder(cfg.Driver), "77777777-7777-4777-8777-777777777777").Scan(&username, &passwordHash, &locale, &theme); err != nil {
+		t.Fatalf("read upgraded user: %v", err)
+	}
+	if username != "Existing User" || passwordHash != "preserved-hash" || locale != "zh-CN" || theme != "system" {
+		t.Fatalf("unexpected upgraded user: username=%q hash=%q locale=%q theme=%q", username, passwordHash, locale, theme)
+	}
+}
+
+func applyMigrationsThrough(t *testing.T, db *sql.DB, driver string, version int) {
+	t.Helper()
+	files := fstest.MapFS{}
+	for current := 1; current <= version; current++ {
+		name := fmt.Sprintf("%05d_", current)
+		entries, err := fs.ReadDir(migrations.FS, driver)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), name) {
+				data, err := migrations.FS.ReadFile(driver + "/" + entry.Name())
+				if err != nil {
+					t.Fatal(err)
+				}
+				files[entry.Name()] = &fstest.MapFile{Data: data}
+			}
+		}
+	}
+	dialect := goose.DialectPostgres
+	if driver == "sqlite" {
+		dialect = goose.DialectSQLite3
+	}
+	provider, err := goose.NewProvider(dialect, db, files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.Up(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func runUpgradeTest(t *testing.T, cfg config.Database) {

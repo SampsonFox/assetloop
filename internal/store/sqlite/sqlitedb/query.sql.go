@@ -371,8 +371,8 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) erro
 }
 
 const createUser = `-- name: CreateUser :exec
-INSERT INTO users (id, username, username_normalized, password_hash, created_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO users (id, username, username_normalized, password_hash, locale, theme, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateUserParams struct {
@@ -380,6 +380,8 @@ type CreateUserParams struct {
 	Username           string
 	UsernameNormalized string
 	PasswordHash       string
+	Locale             string
+	Theme              string
 	CreatedAt          string
 }
 
@@ -389,6 +391,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Username,
 		arg.UsernameNormalized,
 		arg.PasswordHash,
+		arg.Locale,
+		arg.Theme,
 		arg.CreatedAt,
 	)
 	return err
@@ -529,7 +533,7 @@ func (q *Queries) EnsureVariant(ctx context.Context, arg EnsureVariantParams) (s
 }
 
 const findAccountByUsername = `-- name: FindAccountByUsername :one
-SELECT u.id AS user_id, u.username, u.password_hash,
+SELECT u.id AS user_id, u.username, u.password_hash, u.locale, u.theme,
        tm.tenant_id, tm.role, t.name AS tenant_name
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
@@ -543,6 +547,8 @@ type FindAccountByUsernameRow struct {
 	UserID       string
 	Username     string
 	PasswordHash string
+	Locale       string
+	Theme        string
 	TenantID     string
 	Role         string
 	TenantName   string
@@ -555,6 +561,8 @@ func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized 
 		&i.UserID,
 		&i.Username,
 		&i.PasswordHash,
+		&i.Locale,
+		&i.Theme,
 		&i.TenantID,
 		&i.Role,
 		&i.TenantName,
@@ -563,7 +571,8 @@ func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized 
 }
 
 const firstPrincipal = `-- name: FirstPrincipal :one
-SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name
+SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
 JOIN tenants t ON t.id = tm.tenant_id
@@ -577,6 +586,8 @@ type FirstPrincipalRow struct {
 	Username   string
 	Role       string
 	TenantName string
+	Locale     string
+	Theme      string
 }
 
 func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error) {
@@ -588,6 +599,8 @@ func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error)
 		&i.Username,
 		&i.Role,
 		&i.TenantName,
+		&i.Locale,
+		&i.Theme,
 	)
 	return i, err
 }
@@ -756,7 +769,8 @@ func (q *Queries) GetImportDraft(ctx context.Context, arg GetImportDraftParams) 
 }
 
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
-SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
+SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 JOIN tenant_memberships tm ON tm.tenant_id = s.tenant_id AND tm.user_id = s.user_id
@@ -775,6 +789,8 @@ type GetSessionPrincipalRow struct {
 	Username   string
 	Role       string
 	TenantName string
+	Locale     string
+	Theme      string
 }
 
 func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincipalParams) (GetSessionPrincipalRow, error) {
@@ -786,6 +802,8 @@ func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincip
 		&i.Username,
 		&i.Role,
 		&i.TenantName,
+		&i.Locale,
+		&i.Theme,
 	)
 	return i, err
 }
@@ -1303,6 +1321,21 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (int64
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateUserPreferences = `-- name: UpdateUserPreferences :exec
+UPDATE users SET locale = ?, theme = ? WHERE id = ?
+`
+
+type UpdateUserPreferencesParams struct {
+	Locale string
+	Theme  string
+	ID     string
+}
+
+func (q *Queries) UpdateUserPreferences(ctx context.Context, arg UpdateUserPreferencesParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserPreferences, arg.Locale, arg.Theme, arg.ID)
+	return err
 }
 
 const updateVariant = `-- name: UpdateVariant :execrows

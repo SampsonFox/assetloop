@@ -136,4 +136,6 @@ type User struct {
 	UsernameNormalized string
 	PasswordHash       string
 	CreatedAt          time.Time
+	Locale             string
+	Theme              string
 }

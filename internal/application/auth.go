@@ -26,6 +26,21 @@ const (
 	RoleViewer Role = "viewer"
 )
 
+type Locale string
+
+const (
+	LocaleZhCN Locale = "zh-CN"
+	LocaleEn   Locale = "en"
+)
+
+type Theme string
+
+const (
+	ThemeSystem Theme = "system"
+	ThemeLight  Theme = "light"
+	ThemeDark   Theme = "dark"
+)
+
 type Capability string
 
 const (
@@ -49,6 +64,8 @@ type Principal struct {
 	UserID     string
 	Username   string
 	Role       Role
+	Locale     Locale
+	Theme      Theme
 }
 
 func (p Principal) Can(capability Capability) bool {
@@ -86,6 +103,8 @@ type User struct {
 	Username           string
 	UsernameNormalized string
 	PasswordHash       string
+	Locale             Locale
+	Theme              Theme
 	CreatedAt          time.Time
 }
 
@@ -150,6 +169,11 @@ type AddMember struct {
 	Role     Role
 }
 
+type UpdatePreferences struct {
+	Locale Locale
+	Theme  Theme
+}
+
 type AuthService struct {
 	store      AuthStore
 	now        func() time.Time
@@ -190,7 +214,7 @@ func (s *AuthService) Setup(ctx context.Context, cmd SetupAuth) (SessionCredenti
 	if err := s.store.BootstrapAuth(ctx, tenant, user, membership, event); err != nil {
 		return SessionCredential{}, fmt.Errorf("bootstrap authentication: %w", err)
 	}
-	return s.issueSession(ctx, Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: RoleOwner})
+	return s.issueSession(ctx, Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: RoleOwner, Locale: user.Locale, Theme: user.Theme})
 }
 
 func (s *AuthService) EnsureDisabledPrincipal(ctx context.Context) (Principal, error) {
@@ -201,13 +225,17 @@ func (s *AuthService) EnsureDisabledPrincipal(ctx context.Context) (Principal, e
 	if needsSetup {
 		now := s.now().UTC()
 		tenant := Tenant{ID: "00000000-0000-4000-8000-000000000001", Name: "Local", BaseCurrency: "CNY", CreatedAt: now}
-		user := User{ID: "00000000-0000-4000-8000-000000000002", Username: "local", UsernameNormalized: "local", PasswordHash: "disabled", CreatedAt: now}
+		user := User{ID: "00000000-0000-4000-8000-000000000002", Username: "local", UsernameNormalized: "local", PasswordHash: "disabled", Locale: LocaleZhCN, Theme: ThemeSystem, CreatedAt: now}
 		membership := Membership{TenantID: tenant.ID, UserID: user.ID, Role: RoleOwner, CreatedAt: now}
 		event := SecurityEvent{ID: newID(), TenantID: tenant.ID, ActorUserID: user.ID, Action: "auth.disabled_bootstrap", TargetUserID: user.ID, OccurredAt: now}
 		if err := s.store.BootstrapAuth(ctx, tenant, user, membership, event); err != nil {
 			return Principal{}, err
 		}
 	}
+	return s.store.FirstPrincipal(ctx)
+}
+
+func (s *AuthService) LocalPrincipal(ctx context.Context) (Principal, error) {
 	return s.store.FirstPrincipal(ctx)
 }
 
@@ -255,6 +283,23 @@ func (s *AuthService) Logout(ctx context.Context, token string) error {
 		return nil
 	}
 	return s.store.DeleteSession(ctx, tokenHash(token))
+}
+
+func (s *AuthService) UpdatePreferences(ctx context.Context, actor Principal, cmd UpdatePreferences) (Principal, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return Principal{}, err
+	}
+	if !validLocale(cmd.Locale) {
+		return Principal{}, errors.New("unsupported locale")
+	}
+	if !validTheme(cmd.Theme) {
+		return Principal{}, errors.New("unsupported theme")
+	}
+	if err := s.store.UpdateUserPreferences(ctx, actor.UserID, cmd.Locale, cmd.Theme); err != nil {
+		return Principal{}, fmt.Errorf("update user preferences: %w", err)
+	}
+	actor.Locale, actor.Theme = cmd.Locale, cmd.Theme
+	return actor, nil
 }
 
 func (s *AuthService) AddMember(ctx context.Context, actor Principal, cmd AddMember) (Member, error) {
@@ -312,7 +357,15 @@ func newUser(username, password string, now time.Time) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
-	return User{ID: newID(), Username: strings.TrimSpace(username), UsernameNormalized: normalized, PasswordHash: hash, CreatedAt: now}, nil
+	return User{ID: newID(), Username: strings.TrimSpace(username), UsernameNormalized: normalized, PasswordHash: hash, Locale: LocaleZhCN, Theme: ThemeSystem, CreatedAt: now}, nil
+}
+
+func validLocale(locale Locale) bool {
+	return locale == LocaleZhCN || locale == LocaleEn
+}
+
+func validTheme(theme Theme) bool {
+	return theme == ThemeSystem || theme == ThemeLight || theme == ThemeDark
 }
 
 func normalizeUsername(value string) (string, error) {

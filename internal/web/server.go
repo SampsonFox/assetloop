@@ -35,9 +35,8 @@ type Pinger interface {
 }
 
 type Options struct {
-	AuthMode          string
-	SecureCookies     bool
-	DisabledPrincipal application.Principal
+	AuthMode      string
+	SecureCookies bool
 }
 
 type Server struct {
@@ -801,7 +800,7 @@ func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) principal(r *http.Request) (application.Principal, error) {
 	if s.options.AuthMode == "disabled" {
-		return s.options.DisabledPrincipal, nil
+		return s.auth.LocalPrincipal(r.Context())
 	}
 	cookie, err := r.Cookie(sessionCookie)
 	if err != nil {

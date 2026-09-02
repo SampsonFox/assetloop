@@ -67,11 +67,10 @@ func run(args []string) error {
 		lifecycle := application.NewLifecycleService(appStore)
 		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local"}
 		if cfg.AuthMode == "disabled" {
-			principal, err := auth.EnsureDisabledPrincipal(context.Background())
+			_, err := auth.EnsureDisabledPrincipal(context.Background())
 			if err != nil {
 				return fmt.Errorf("initialize disabled authentication: %w", err)
 			}
-			options.DisabledPrincipal = principal
 		}
 		webServer, err := webtransport.New(auth, catalog, lifecycle, db, options)
 		if err != nil {

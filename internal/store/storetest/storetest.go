@@ -230,7 +230,7 @@ func runAsset(t *testing.T, store application.Store) {
 		ID: "11111111-1111-4111-8111-111111111111", TenantID: "22222222-2222-4222-8222-222222222222",
 		CategoryID: "33333333-3333-4333-8333-333333333333", Category: "Phone",
 		CategoryIcon: "package",
-		ModelID: "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
+		ModelID:      "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
 		VariantID: "55555555-5555-4555-8555-555555555555", Variant: "256GB",
 		DisplayName: "My Example Phone", CreatedAt: time.Date(2026, 9, 1, 1, 2, 3, 0, time.UTC),
 	}
@@ -285,6 +285,14 @@ func runAuth(t *testing.T, store Store) {
 	got, err := service.Authenticate(ctx, credential.Token)
 	if err != nil || got != credential.Principal {
 		t.Fatalf("session principal mismatch: got=%+v want=%+v err=%v", got, credential.Principal, err)
+	}
+	got, err = service.UpdatePreferences(ctx, got, application.UpdatePreferences{Locale: application.LocaleEn, Theme: application.ThemeDark})
+	if err != nil {
+		t.Fatalf("update preferences: %v", err)
+	}
+	got, err = service.Authenticate(ctx, credential.Token)
+	if err != nil || got.Locale != application.LocaleEn || got.Theme != application.ThemeDark {
+		t.Fatalf("stored preferences mismatch: principal=%+v err=%v", got, err)
 	}
 	if _, err := service.AddMember(ctx, got, application.AddMember{Username: "store-viewer", Password: "store viewer password", Role: application.RoleViewer}); err != nil {
 		t.Fatalf("create member: %v", err)
