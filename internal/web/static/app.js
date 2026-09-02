@@ -18,6 +18,8 @@
       const dialog = document.getElementById(opener.dataset.dialogOpen);
       const form = dialog && dialog.querySelector("form");
       if (!dialog || !form) return;
+      const currentDialog = opener.closest("dialog");
+      if (currentDialog && currentDialog !== dialog) currentDialog.close();
       form.reset();
       form.action = opener.dataset.action;
       const title = dialog.querySelector("[data-dialog-title]");

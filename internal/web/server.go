@@ -137,7 +137,7 @@ func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !principal.Can(application.CapabilityManageCatalog) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能维护物品配置"})
+		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能维护物品类型配置"})
 		return
 	}
 	s.renderCatalog(w, r, http.StatusOK, principal, "")
@@ -616,7 +616,7 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 	s.render(w, status, "catalog", pageData{
-		Title: "物品配置", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Title: "物品类型配置", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
 		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
 		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CategoryIcons: application.CategoryIconOptions,

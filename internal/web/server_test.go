@@ -92,7 +92,7 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	session := responseCookie(t, setup, sessionCookie)
 
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一件物品"`, "当前还没有价格规格", `id="asset-form"`} {
+	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一件物品"`, "当前还没有规格", `id="asset-form"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset-first empty state missing %q: status=%d body=%s", want, home.Code, home.Body.String())
 		}
@@ -166,6 +166,19 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}, []*http.Cookie{ownerSession, csrf})
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create variant: status=%d body=%s", created.Code, created.Body.String())
+	}
+	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{"物品类型配置", `class="model-list"`, `class="model-card"`, `class="model-category"`, `class="variant-list"`, "新增型号", "新增类别", "新增规格", "256GB"} {
+		if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), want) {
+			t.Fatalf("model-first type configuration missing %q: status=%d body=%s", want, catalog.Code, catalog.Body.String())
+		}
+	}
+	if strings.Contains(catalog.Body.String(), "价格规格") {
+		t.Fatalf("type configuration must use the simpler specification label: %s", catalog.Body.String())
+	}
+	modelCard := regexp.MustCompile(`(?s)<article class="model-card"[^>]*>.*?手机.*?iPhone 17 Pro.*?<div class="variant-list">.*?256GB.*?</article>`)
+	if !modelCard.MatchString(catalog.Body.String()) {
+		t.Fatalf("specification must be nested under its model card: %s", catalog.Body.String())
 	}
 	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
 	variantID := optionID(t, catalog.Body.String(), "手机 / iPhone 17 Pro / 256GB")
