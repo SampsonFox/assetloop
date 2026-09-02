@@ -176,6 +176,14 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if strings.Contains(catalog.Body.String(), "价格规格") {
 		t.Fatalf("type configuration must use the simpler specification label: %s", catalog.Body.String())
 	}
+	headingActions := regexp.MustCompile(`(?s)<div class="heading-actions">(.*?)</div>`).FindStringSubmatch(catalog.Body.String())
+	if len(headingActions) != 2 || strings.Contains(headingActions[1], "新增类别") {
+		t.Fatalf("category creation must not be a top-level action: %s", catalog.Body.String())
+	}
+	modelForm := regexp.MustCompile(`(?s)<form id="model-form".*?>(.*?)</form>`).FindStringSubmatch(catalog.Body.String())
+	if len(modelForm) != 2 || !strings.Contains(modelForm[1], "新增类别") {
+		t.Fatalf("category creation must remain available inside the model form: %s", catalog.Body.String())
+	}
 	modelCard := regexp.MustCompile(`(?s)<article class="model-card"[^>]*>.*?手机.*?iPhone 17 Pro.*?<div class="variant-list">.*?256GB.*?</article>`)
 	if !modelCard.MatchString(catalog.Body.String()) {
 		t.Fatalf("specification must be nested under its model card: %s", catalog.Body.String())

@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="page-heading">
   <div><p class="eyebrow">管理</p><h1>物品类型配置</h1><p class="muted">以型号为主记录；类别标识型号归属，规格直接挂在型号下面。</p></div>
-  <div class="heading-actions"><a href="/">返回物品列表</a><button class="secondary auto" type="button" data-dialog-open="category-drawer" data-title="新增类别" data-action="/admin/catalog/categories">新增类别</button><button class="button auto" type="button" data-dialog-open="model-drawer" data-title="新增型号" data-action="/admin/catalog/models">新增型号</button></div>
+  <div class="heading-actions"><a href="/">返回物品列表</a><button class="button auto" type="button" data-dialog-open="model-drawer" data-title="新增型号" data-action="/admin/catalog/models">新增型号</button></div>
 </div>
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
 
