@@ -1,21 +1,21 @@
-{{define "content"}}
+{{define "content"}}{{$s := .Strings}}
 {{$event := index .Events 0}}
-<div class="page-heading"><div><p class="eyebrow">追加式更正</p><h1>更正{{eventLabel $event.Type}}记录</h1></div><a href="/assets/{{$event.AssetID}}">返回物品</a></div>
+<div class="page-heading"><div><p class="eyebrow">{{t $s "correct.eyebrow"}}</p><h1>{{t $s "correct.heading"}} · {{eventLabel $s $event.Type}}</h1></div><a href="/assets/{{$event.AssetID}}">{{t $s "correct.back"}}</a></div>
 <section class="card">
-  <p>原记录不会被覆盖。确认后系统会原子地追加一条作废记录和一条替代记录。</p>
-  <p class="muted">原金额：{{money $event.BaseAmountMinor $event.BaseCurrency}} · {{$event.Notes}}</p>
+  <p>{{t $s "correct.help"}}</p>
+  <p class="muted">{{t $s "correct.original_amount"}}：{{money $event.BaseAmountMinor $event.BaseCurrency}} · {{$event.Notes}}</p>
   <form class="form-grid section-gap" action="/events/{{$event.ID}}/correct" method="post">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label>正确金额（正数）<input name="amount" inputmode="decimal" required></label>
-    <label>原始货币<select name="currency" required><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
-    <label>发生时间<input type="datetime-local" name="occurred_at" value="{{dateTimeInput $event.OccurredAt}}" required></label>
-    <label>汇率<input name="fx_rate" inputmode="decimal" placeholder="仅非本位币必填"></label>
-    <label>汇率日期<input type="date" name="fx_rate_date"></label>
-    <label>汇率来源<input name="fx_rate_source"></label>
-    <label class="check"><input type="checkbox" name="fx_confirmed">我确认使用上述汇率</label>
-    <label>来源<input name="source" value="manual-correction"></label>
-    <label class="wide">更正说明<textarea name="notes" required maxlength="2000" rows="3"></textarea></label>
-    <button type="submit">作废并替代</button>
+    <label>{{t $s "correct.amount"}}<input name="amount" inputmode="decimal" required></label>
+    <label>{{t $s "asset.original_currency"}}<select name="currency" required><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
+    <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{dateTimeInput $event.OccurredAt}}" required></label>
+    <label>{{t $s "correct.fx_rate"}}<input name="fx_rate" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}"></label>
+    <label>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date"></label>
+    <label>{{t $s "asset.fx_source"}}<input name="fx_rate_source"></label>
+    <label class="check"><input type="checkbox" name="fx_confirmed">{{t $s "correct.fx_confirm"}}</label>
+    <label>{{t $s "correct.source"}}<input name="source" value="manual-correction"></label>
+    <label class="wide">{{t $s "correct.notes"}}<textarea name="notes" required maxlength="2000" rows="3"></textarea></label>
+    <button type="submit">{{t $s "correct.submit"}}</button>
   </form>
 </section>
 {{end}}

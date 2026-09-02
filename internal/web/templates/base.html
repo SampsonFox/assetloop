@@ -1,31 +1,39 @@
 {{define "base"}}<!doctype html>
-<html lang="zh-CN">
+{{$s := .Strings}}
+<html lang="{{.Locale}}" data-theme="{{.Theme}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{.Title}} · AssetLoop 物迹</title>
+  <title>{{.Title}} · {{t $s "app.name"}}</title>
   <link rel="stylesheet" href="/static/app.css">
-	<script src="/static/app.js" defer></script>
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="/overview">AssetLoop <span>物迹</span></a>
     {{if .Principal}}
-    <nav aria-label="主导航">
-	  <a href="/">物品</a>
-      <a href="/imports">待确认导入</a>
-	  {{if ne .Principal.Role "viewer"}}<a href="/admin/catalog">管理</a>{{end}}
-      {{if eq .Principal.Role "owner"}}<a href="/admin/members">成员</a>{{end}}
-    </nav>
-    <div class="account">
-      <span>{{.Principal.Username}} · {{.Principal.Role}}</span>
-      <form action="/logout" method="post">
-        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-        <button class="link-button" type="submit">退出</button>
-      </form>
-    </div>
+    <nav aria-label="{{t $s "nav.main"}}"><a href="/">{{t $s "nav.assets"}}</a></nav>
+    <details class="account-menu">
+      <summary aria-label="{{t $s "menu.label"}}"><span>{{.Principal.Username}}</span><small>{{roleLabel $s .Principal.Role}}</small></summary>
+      <div class="account-menu-panel">
+        <nav aria-label="{{t $s "menu.label"}}"><a href="/imports">{{t $s "menu.pending_imports"}}</a>{{if ne .Principal.Role "viewer"}}<a href="/admin/catalog">{{t $s "menu.catalog"}}</a>{{end}}{{if eq .Principal.Role "owner"}}<a href="/admin/members">{{t $s "menu.members"}}</a>{{end}}</nav>
+        <form action="/preferences" method="post" class="preference-form">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="return_to" value="{{.ReturnTo}}">
+          <label>{{t $s "menu.language"}}<select name="locale"><option value="zh-CN" {{if eq .Locale "zh-CN"}}selected{{end}}>{{t $s "locale.zh-CN"}}</option><option value="en" {{if eq .Locale "en"}}selected{{end}}>{{t $s "locale.en"}}</option></select></label>
+          <label>{{t $s "menu.theme"}}<select name="theme"><option value="system" {{if eq .Theme "system"}}selected{{end}}>{{t $s "theme.system"}}</option><option value="light" {{if eq .Theme "light"}}selected{{end}}>{{t $s "theme.light"}}</option><option value="dark" {{if eq .Theme "dark"}}selected{{end}}>{{t $s "theme.dark"}}</option></select></label>
+          <button class="secondary" type="submit">{{t $s "menu.save"}}</button>
+        </form>
+        <form action="/logout" method="post"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="link-button" type="submit">{{t $s "menu.logout"}}</button></form>
+      </div>
+    </details>
     {{end}}
   </header>
   <main class="shell">{{template "content" .}}</main>
 </body>
 </html>{{end}}
+
+{{define "locale-picker"}}{{$s := .Strings}}<form action="/locale" method="post" class="locale-picker">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="return_to" value="{{.ReturnTo}}">
+  <label>{{t $s "menu.language"}}<select name="locale"><option value="zh-CN" {{if eq .Locale "zh-CN"}}selected{{end}}>{{t $s "locale.zh-CN"}}</option><option value="en" {{if eq .Locale "en"}}selected{{end}}>{{t $s "locale.en"}}</option></select></label>
+  <button class="secondary auto" type="submit">{{t $s "common.save"}}</button>
+</form>{{end}}

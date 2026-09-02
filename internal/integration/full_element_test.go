@@ -158,7 +158,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil {
 		t.Fatalf("viewer lifecycle timeline: %v", err)
 	}
-	if len(events) != 5 || summary.ExpenseMinor != 727_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 73_000 || summary.Status != "已卖出" {
+	if len(events) != 5 || summary.ExpenseMinor != 727_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 73_000 || summary.Status != "sold" {
 		t.Fatalf("full lifecycle mismatch: events=%d summary=%+v", len(events), summary)
 	}
 	if _, err := lifecycle.Record(ctx, viewerSession.Principal, application.RecordEvent{}); !errors.Is(err, application.ErrForbidden) {

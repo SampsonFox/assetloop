@@ -156,6 +156,7 @@ type SetupAuth struct {
 	BaseCurrency string
 	Username     string
 	Password     string
+	Locale       Locale
 }
 
 type Login struct {
@@ -198,7 +199,7 @@ func (s *AuthService) Setup(ctx context.Context, cmd SetupAuth) (SessionCredenti
 	}
 	tenantName := strings.TrimSpace(cmd.TenantName)
 	if tenantName == "" {
-		return SessionCredential{}, errors.New("tenant name is required")
+		return SessionCredential{}, NewInputError("validation.tenant_name_required")
 	}
 	baseCurrency, err := normalizeCurrency(cmd.BaseCurrency)
 	if err != nil {
@@ -207,6 +208,9 @@ func (s *AuthService) Setup(ctx context.Context, cmd SetupAuth) (SessionCredenti
 	user, err := newUser(cmd.Username, cmd.Password, s.now().UTC())
 	if err != nil {
 		return SessionCredential{}, err
+	}
+	if validLocale(cmd.Locale) {
+		user.Locale = cmd.Locale
 	}
 	tenant := Tenant{ID: newID(), Name: tenantName, BaseCurrency: baseCurrency, CreatedAt: user.CreatedAt}
 	membership := Membership{TenantID: tenant.ID, UserID: user.ID, Role: RoleOwner, CreatedAt: user.CreatedAt}
@@ -290,10 +294,10 @@ func (s *AuthService) UpdatePreferences(ctx context.Context, actor Principal, cm
 		return Principal{}, err
 	}
 	if !validLocale(cmd.Locale) {
-		return Principal{}, errors.New("unsupported locale")
+		return Principal{}, NewInputError("validation.locale_invalid")
 	}
 	if !validTheme(cmd.Theme) {
-		return Principal{}, errors.New("unsupported theme")
+		return Principal{}, NewInputError("validation.theme_invalid")
 	}
 	if err := s.store.UpdateUserPreferences(ctx, actor.UserID, cmd.Locale, cmd.Theme); err != nil {
 		return Principal{}, fmt.Errorf("update user preferences: %w", err)
@@ -307,7 +311,7 @@ func (s *AuthService) AddMember(ctx context.Context, actor Principal, cmd AddMem
 		return Member{}, err
 	}
 	if !validRole(cmd.Role) {
-		return Member{}, errors.New("role must be owner, editor, or viewer")
+		return Member{}, NewInputError("validation.role_invalid")
 	}
 	now := s.now().UTC()
 	user, err := newUser(cmd.Username, cmd.Password, now)
@@ -351,7 +355,7 @@ func newUser(username, password string, now time.Time) (User, error) {
 		return User{}, err
 	}
 	if utf8.RuneCountInString(password) < 12 {
-		return User{}, errors.New("password must contain at least 12 characters")
+		return User{}, NewInputError("validation.password_length", 12)
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
@@ -372,11 +376,11 @@ func normalizeUsername(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	count := utf8.RuneCountInString(value)
 	if count < 3 || count > 64 {
-		return "", errors.New("username must contain 3 to 64 characters")
+		return "", NewInputError("validation.username_length", 3, 64)
 	}
 	for _, r := range value {
 		if unicode.IsSpace(r) || unicode.IsControl(r) {
-			return "", errors.New("username must not contain whitespace or control characters")
+			return "", NewInputError("validation.username_characters")
 		}
 	}
 	return strings.ToLower(value), nil
@@ -385,11 +389,11 @@ func normalizeUsername(value string) (string, error) {
 func normalizeCurrency(value string) (string, error) {
 	value = strings.ToUpper(strings.TrimSpace(value))
 	if len(value) != 3 {
-		return "", errors.New("base currency must be a three-letter ISO code")
+		return "", NewInputError("validation.currency_iso")
 	}
 	for _, r := range value {
 		if r < 'A' || r > 'Z' {
-			return "", errors.New("base currency must be a three-letter ISO code")
+			return "", NewInputError("validation.currency_iso")
 		}
 	}
 	return value, nil

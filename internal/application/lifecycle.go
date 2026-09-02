@@ -169,7 +169,7 @@ func (s *LifecycleService) CreateDraft(ctx context.Context, actor Principal, cmd
 		return domain.ImportDraft{}, err
 	}
 	if cmd.AmountMinor <= 0 {
-		return domain.ImportDraft{}, errors.New("amount must be positive")
+		return domain.ImportDraft{}, NewInputError("validation.amount_positive")
 	}
 	currency, err := domain.NormalizeCurrency(cmd.Currency)
 	if err != nil {
@@ -263,7 +263,7 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 		return domain.AssetTransaction{}, domain.AssetEvent{}, err
 	}
 	if cmd.AmountMinor <= 0 {
-		return domain.AssetTransaction{}, domain.AssetEvent{}, errors.New("amount must be positive")
+		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_positive")
 	}
 	currency, err := domain.NormalizeCurrency(cmd.Currency)
 	if err != nil {
@@ -281,10 +281,10 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	var fx *domain.FXEvidence
 	if currency != baseCurrency {
 		if !cmd.FXConfirmed {
-			return domain.AssetTransaction{}, domain.AssetEvent{}, errors.New("FX conversion must be confirmed")
+			return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.fx_confirm")
 		}
 		if cmd.FXRateDate.IsZero() || strings.TrimSpace(cmd.FXRateSource) == "" {
-			return domain.AssetTransaction{}, domain.AssetEvent{}, errors.New("FX rate date and source are required")
+			return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.fx_evidence")
 		}
 		baseAmount, err = domain.ConvertMinor(cmd.AmountMinor, currency, baseCurrency, cmd.FXRateScaled)
 		if err != nil {
@@ -350,14 +350,14 @@ func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principa
 	switch eventType {
 	case domain.AssetEventPurchase:
 		if hasPurchase {
-			return errors.New("asset already has an active purchase event")
+			return NewInputError("validation.event_purchase_exists")
 		}
 	case domain.AssetEventRepair, domain.AssetEventSale:
 		if !hasPurchase {
-			return errors.New("asset must be purchased before repair or sale")
+			return NewInputError("validation.event_purchase_first")
 		}
 		if sold {
-			return errors.New("sold asset cannot receive another repair or sale event")
+			return NewInputError("validation.event_after_sale")
 		}
 	}
 	return nil
@@ -365,11 +365,11 @@ func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principa
 
 func (s *LifecycleService) validOccurredAt(value time.Time) (time.Time, error) {
 	if value.IsZero() {
-		return time.Time{}, errors.New("occurred time is required")
+		return time.Time{}, NewInputError("validation.occurred_required")
 	}
 	value = value.UTC()
 	if value.After(s.now().UTC().Add(5 * time.Minute)) {
-		return time.Time{}, errors.New("occurred time cannot be in the future")
+		return time.Time{}, NewInputError("validation.occurred_future")
 	}
 	return value, nil
 }
@@ -379,12 +379,12 @@ func validEconomicEventType(value domain.AssetEventType) error {
 	case domain.AssetEventPurchase, domain.AssetEventRepair, domain.AssetEventSale:
 		return nil
 	default:
-		return errors.New("event type must be purchase, repair, or sale")
+		return NewInputError("validation.event_type")
 	}
 }
 
 func summarizeEvents(baseCurrency string, events []domain.AssetEvent) domain.AssetSummary {
-	summary := domain.AssetSummary{BaseCurrency: baseCurrency, Status: "未入账"}
+	summary := domain.AssetSummary{BaseCurrency: baseCurrency, Status: "unacquired"}
 	activePurchase, sold := false, false
 	for _, event := range events {
 		if event.IsVoided || event.Type == domain.AssetEventVoid {
@@ -404,10 +404,10 @@ func summarizeEvents(baseCurrency string, events []domain.AssetEvent) domain.Ass
 		}
 	}
 	if activePurchase {
-		summary.Status = "持有中"
+		summary.Status = "active"
 	}
 	if sold {
-		summary.Status = "已卖出"
+		summary.Status = "sold"
 	}
 	return summary
 }

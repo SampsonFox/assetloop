@@ -1,16 +1,17 @@
-{{define "content"}}
+{{define "content"}}{{$s := .Strings}}
 <section class="auth-card">
-  <p class="eyebrow">首次启动</p>
-  <h1>创建你的物迹空间</h1>
-  <p class="muted">第一个账号会成为 Owner。本位币在第一条金额记录后锁定。</p>
+  <p class="eyebrow">{{t $s "setup.eyebrow"}}</p>
+  <h1>{{t $s "setup.heading"}}</h1>
+  <p class="muted">{{t $s "setup.help"}}</p>
   {{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
   <form method="post" action="/setup" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label>空间名称<input name="tenant_name" required autocomplete="organization" value="我的物迹"></label>
-    <label>本位币<input name="base_currency" required maxlength="3" value="CNY"></label>
-    <label>Owner 用户名<input name="username" required autocomplete="username"></label>
-    <label>密码<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
-    <button type="submit">完成初始化</button>
+    <label>{{t $s "setup.tenant_name"}}<input name="tenant_name" required autocomplete="organization" value="{{t $s "setup.tenant_default"}}"></label>
+    <label>{{t $s "setup.base_currency"}}<input name="base_currency" required maxlength="3" value="CNY"></label>
+    <label>{{t $s "setup.owner_username"}}<input name="username" required autocomplete="username"></label>
+    <label>{{t $s "setup.password"}}<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+    <button type="submit">{{t $s "setup.submit"}}</button>
   </form>
+  {{template "locale-picker" .}}
 </section>
 {{end}}

@@ -93,7 +93,7 @@ func runLifecycle(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("timeline: %v", err)
 	}
-	if len(events) != 5 || summary.ExpenseMinor != 86_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 714_000 || summary.Status != "已卖出" {
+	if len(events) != 5 || summary.ExpenseMinor != 86_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 714_000 || summary.Status != "sold" {
 		t.Fatalf("unexpected lifecycle result: events=%d summary=%+v", len(events), summary)
 	}
 	if events[len(events)-1].FX != nil {

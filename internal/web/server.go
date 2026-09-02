@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -51,6 +52,10 @@ type Server struct {
 
 type pageData struct {
 	Title              string
+	Locale             application.Locale
+	Theme              application.Theme
+	Strings            map[string]string
+	ReturnTo           string
 	CSRFToken          string
 	Error              string
 	Principal          *application.Principal
@@ -81,7 +86,19 @@ type pageData struct {
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
 	templates := map[string]*template.Template{}
 	funcs := template.FuncMap{
-		"money": domain.FormatMinor, "eventLabel": eventLabel, "eventClass": eventClass,
+		"money": domain.FormatMinor, "eventClass": eventClass,
+		"t": func(values map[string]string, key string) string {
+			if value := values[key]; value != "" {
+				return value
+			}
+			return messages[application.LocaleZhCN][key]
+		},
+		"roleLabel": func(values map[string]string, role application.Role) string { return values["role."+string(role)] },
+		"eventLabel": func(values map[string]string, value domain.AssetEventType) string {
+			return values["event."+string(value)]
+		},
+		"statusLabel":   func(values map[string]string, value string) string { return values["status."+value] },
+		"iconLabel":     func(values map[string]string, key string) string { return values["icon."+key] },
 		"dateTime":      func(value time.Time) string { return value.Local().Format("2006-01-02 15:04") },
 		"dateTimeInput": func(value time.Time) string { return value.Local().Format("2006-01-02T15:04") },
 		"date":          func(value time.Time) string { return value.Format("2006-01-02") },
@@ -107,6 +124,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.loginForm)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
+	mux.HandleFunc("POST /preferences", s.updatePreferences)
+	mux.HandleFunc("POST /locale", s.updateLocale)
 	mux.HandleFunc("GET /admin/members", s.members)
 	mux.HandleFunc("POST /admin/members", s.addMember)
 	mux.HandleFunc("GET /catalog", s.legacyCatalog)
@@ -138,7 +157,7 @@ func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !principal.Can(application.CapabilityManageCatalog) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能维护物品类型配置"})
+		s.renderForbidden(w, principal, "error.forbidden_catalog")
 		return
 	}
 	s.renderCatalog(w, r, http.StatusOK, principal, "")
@@ -310,10 +329,10 @@ func (s *Server) createAssetEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, application.ErrForbidden) {
-			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能修改生命周期记录"})
+			s.renderForbidden(w, principal, "error.forbidden_lifecycle")
 			return
 		}
-		s.renderAsset(w, r, http.StatusUnprocessableEntity, principal, r.PathValue("id"), err.Error())
+		s.renderAsset(w, r, http.StatusUnprocessableEntity, principal, r.PathValue("id"), s.userError(principal.Locale, err))
 		return
 	}
 	http.Redirect(w, r, "/assets/"+r.PathValue("id"), http.StatusSeeOther)
@@ -325,21 +344,21 @@ func (s *Server) correctEventForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !principal.Can(application.CapabilityManageLifecycle) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能更正生命周期记录"})
+		s.renderForbidden(w, principal, "error.forbidden_correct")
 		return
 	}
 	event, err := s.lifecycle.GetEvent(r.Context(), principal, r.PathValue("id"))
 	if err != nil || event.Type == domain.AssetEventVoid || event.IsVoided {
-		s.renderError(w, http.StatusNotFound, errors.New("可更正记录不存在"))
+		s.renderNotFound(w, principal, "error.not_found_event")
 		return
 	}
 	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.render(w, http.StatusOK, "event_correct", pageData{
-		Title: "更正生命周期记录", CSRFToken: s.ensureCSRF(w, r), Principal: &principal,
+		Title: textFor(principal.Locale, "correct.heading"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, ReturnTo: r.URL.RequestURI(),
 		Events: []domain.AssetEvent{event}, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
 	})
@@ -363,10 +382,10 @@ func (s *Server) correctEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, application.ErrForbidden) {
-			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能更正生命周期记录"})
+			s.renderForbidden(w, principal, "error.forbidden_correct")
 			return
 		}
-		s.renderError(w, http.StatusUnprocessableEntity, err)
+		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, Error: s.userError(principal.Locale, err)})
 		return
 	}
 	http.Redirect(w, r, "/assets/"+original.AssetID, http.StatusSeeOther)
@@ -403,10 +422,10 @@ func (s *Server) createImportDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, application.ErrForbidden) {
-			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能创建导入记录"})
+			s.renderForbidden(w, principal, "error.forbidden_import_create")
 			return
 		}
-		s.renderImports(w, r, http.StatusUnprocessableEntity, principal, err.Error())
+		s.renderImports(w, r, http.StatusUnprocessableEntity, principal, s.userError(principal.Locale, err))
 		return
 	}
 	http.Redirect(w, r, "/imports", http.StatusSeeOther)
@@ -418,21 +437,21 @@ func (s *Server) confirmImportForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !principal.Can(application.CapabilityManageLifecycle) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能确认导入记录"})
+		s.renderForbidden(w, principal, "error.forbidden_import_confirm")
 		return
 	}
 	draft, err := s.lifecycle.GetDraft(r.Context(), principal, r.PathValue("id"))
 	if err != nil || draft.Status != "pending" {
-		s.renderError(w, http.StatusNotFound, errors.New("待确认记录不存在"))
+		s.renderNotFound(w, principal, "error.not_found_import")
 		return
 	}
 	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.render(w, http.StatusOK, "import_confirm", pageData{
-		Title: "确认导入", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Draft: &draft,
+		Title: textFor(principal.Locale, "confirm.heading"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Draft: &draft, ReturnTo: r.URL.RequestURI(),
 		BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
@@ -467,10 +486,10 @@ func (s *Server) confirmImport(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if errors.Is(err, application.ErrForbidden) {
-			s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能确认导入记录"})
+			s.renderForbidden(w, principal, "error.forbidden_import_confirm")
 			return
 		}
-		s.renderError(w, http.StatusUnprocessableEntity, err)
+		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, Error: s.userError(principal.Locale, err)})
 		return
 	}
 	http.Redirect(w, r, "/assets/"+draft.AssetID, http.StatusSeeOther)
@@ -479,21 +498,21 @@ func (s *Server) confirmImport(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, assetID, message string) {
 	asset, err := s.catalog.GetAsset(r.Context(), principal, assetID)
 	if err != nil {
-		s.renderError(w, http.StatusNotFound, errors.New("物品不存在"))
+		s.renderNotFound(w, principal, "error.not_found_asset")
 		return
 	}
 	events, summary, err := s.lifecycle.Timeline(r.Context(), principal, assetID)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	_, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.render(w, status, "asset", pageData{
-		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: events,
 		Summary: summary, BaseCurrency: summary.BaseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
@@ -504,21 +523,21 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 func (s *Server) renderImports(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
 	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	drafts, err := s.lifecycle.PendingDrafts(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.render(w, status, "imports", pageData{
-		Title: "待确认导入", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Title: textFor(principal.Locale, "title.imports"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Assets: snapshot.Assets, Drafts: drafts, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
@@ -564,10 +583,10 @@ func (s *Server) recordEventFromForm(r *http.Request, principal application.Prin
 
 func (s *Server) renderCatalogError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
 	if errors.Is(err, application.ErrForbidden) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能修改物品目录"})
+		s.renderForbidden(w, principal, "error.forbidden_catalog")
 		return
 	}
-	s.renderCatalog(w, r, http.StatusUnprocessableEntity, principal, err.Error())
+	s.renderCatalog(w, r, http.StatusUnprocessableEntity, principal, s.userError(principal.Locale, err))
 }
 
 func (s *Server) renderCatalogMutationError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
@@ -589,10 +608,10 @@ func (s *Server) redirectAfterCatalogCreate(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) renderAssetsError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
 	if errors.Is(err, application.ErrForbidden) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能修改具体物品"})
+		s.renderForbidden(w, principal, "error.forbidden_asset")
 		return
 	}
-	s.renderAssets(w, r, http.StatusUnprocessableEntity, principal, err.Error())
+	s.renderAssets(w, r, http.StatusUnprocessableEntity, principal, s.userError(principal.Locale, err))
 }
 
 func (s *Server) assetsPage(w http.ResponseWriter, r *http.Request) {
@@ -606,7 +625,7 @@ func (s *Server) assetsPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
 	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	view := assetView(r)
@@ -615,7 +634,7 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 		http.SetCookie(w, &http.Cookie{Name: assetViewCookie, Value: view, Path: "/", MaxAge: 365 * 24 * 60 * 60, HttpOnly: true, Secure: s.options.SecureCookies, SameSite: http.SameSiteLaxMode})
 	}
 	s.render(w, status, "assets", pageData{
-		Title: "我的物品", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Title: textFor(principal.Locale, "title.assets"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
 		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), AssetView: view,
 		CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
@@ -632,11 +651,11 @@ func assetView(r *http.Request) string {
 func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
 	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.render(w, status, "catalog", pageData{
-		Title: "物品类型配置", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Title: textFor(principal.Locale, "title.catalog"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
 		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CategoryIcons: application.CategoryIconOptions,
@@ -659,22 +678,22 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	baseCurrency, _, err := s.lifecycle.BaseCurrency(r.Context(), principal)
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	data := pageData{
-		Title: "概览", CSRFToken: s.ensureCSRF(w, r), Principal: &principal,
+		Title: textFor(principal.Locale, "title.overview"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, ReturnTo: r.URL.RequestURI(),
 		AssetCount: len(snapshot.Assets), BaseCurrency: baseCurrency,
 	}
 	for _, asset := range snapshot.Assets {
 		_, summary, err := s.lifecycle.Timeline(r.Context(), principal, asset.ID)
 		if err != nil {
-			s.renderError(w, http.StatusInternalServerError, err)
+			s.renderError(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		data.TotalExpenseMinor += summary.ExpenseMinor
@@ -687,36 +706,39 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 func (s *Server) setupForm(w http.ResponseWriter, r *http.Request) {
 	needsSetup, err := s.auth.NeedsSetup(r.Context())
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !needsSetup {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	s.render(w, http.StatusOK, "setup", pageData{Title: "初始化", CSRFToken: s.ensureCSRF(w, r)})
+	locale := s.localeForRequest(r, nil)
+	s.render(w, http.StatusOK, "setup", pageData{Title: textFor(locale, "title.setup"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: r.URL.RequestURI()})
 }
 
 func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 	if !s.verifyCSRF(w, r) {
 		return
 	}
+	locale := s.localeForRequest(r, nil)
 	credential, err := s.auth.Setup(r.Context(), application.SetupAuth{
 		TenantName: r.FormValue("tenant_name"), BaseCurrency: r.FormValue("base_currency"),
-		Username: r.FormValue("username"), Password: r.FormValue("password"),
+		Username: r.FormValue("username"), Password: r.FormValue("password"), Locale: locale,
 	})
 	if err != nil {
-		s.render(w, http.StatusUnprocessableEntity, "setup", pageData{Title: "初始化", CSRFToken: s.ensureCSRF(w, r), Error: err.Error()})
+		s.render(w, http.StatusUnprocessableEntity, "setup", pageData{Title: textFor(locale, "title.setup"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: "/setup", Error: s.userError(locale, err)})
 		return
 	}
 	s.setSessionCookie(w, credential)
+	s.setLocaleCookie(w, credential.Principal.Locale)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 	needsSetup, err := s.auth.NeedsSetup(r.Context())
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if needsSetup {
@@ -727,7 +749,8 @@ func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.render(w, http.StatusOK, "login", pageData{Title: "登录", CSRFToken: s.ensureCSRF(w, r)})
+	locale := s.localeForRequest(r, nil)
+	s.render(w, http.StatusOK, "login", pageData{Title: textFor(locale, "title.login"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: r.URL.RequestURI()})
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -736,16 +759,18 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	key := clientIP(r)
 	if !s.limiter.Allow(key, time.Now()) {
-		http.Error(w, "登录尝试过多，请稍后再试", http.StatusTooManyRequests)
+		http.Error(w, textFor(s.localeForRequest(r, nil), "error.login_rate"), http.StatusTooManyRequests)
 		return
 	}
 	credential, err := s.auth.Login(r.Context(), application.Login{Username: r.FormValue("username"), Password: r.FormValue("password")})
 	if err != nil {
-		s.render(w, http.StatusUnauthorized, "login", pageData{Title: "登录", CSRFToken: s.ensureCSRF(w, r), Error: "用户名或密码错误"})
+		locale := s.localeForRequest(r, nil)
+		s.render(w, http.StatusUnauthorized, "login", pageData{Title: textFor(locale, "title.login"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: "/login", Error: textFor(locale, "error.login")})
 		return
 	}
 	s.limiter.Reset(key)
 	s.setSessionCookie(w, credential)
+	s.setLocaleCookie(w, credential.Principal.Locale)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -760,6 +785,56 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
+func (s *Server) updatePreferences(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	locale, localeOK := supportedLocale(r.FormValue("locale"))
+	theme := application.Theme(r.FormValue("theme"))
+	if !localeOK || (theme != application.ThemeSystem && theme != application.ThemeLight && theme != application.ThemeDark) {
+		key := "validation.locale_invalid"
+		if localeOK {
+			key = "validation.theme_invalid"
+		}
+		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, CSRFToken: s.ensureCSRF(w, r), Error: textFor(principal.Locale, key), ReturnTo: "/"})
+		return
+	}
+	returnTo, ok := safeReturnTo(r.FormValue("return_to"), "/")
+	if !ok {
+		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, CSRFToken: s.ensureCSRF(w, r), Error: textFor(principal.Locale, "error.return_to"), ReturnTo: "/"})
+		return
+	}
+	if _, err := s.auth.UpdatePreferences(r.Context(), principal, application.UpdatePreferences{Locale: locale, Theme: theme}); err != nil {
+		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, CSRFToken: s.ensureCSRF(w, r), Error: s.userError(principal.Locale, err), ReturnTo: "/"})
+		return
+	}
+	s.setLocaleCookie(w, locale)
+	http.Redirect(w, r, returnTo, http.StatusSeeOther)
+}
+
+func (s *Server) updateLocale(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	current := s.localeForRequest(r, nil)
+	locale, ok := supportedLocale(r.FormValue("locale"))
+	if !ok {
+		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(current, "title.error"), Locale: current, Error: textFor(current, "validation.locale_invalid"), CSRFToken: s.ensureCSRF(w, r), ReturnTo: "/login"})
+		return
+	}
+	returnTo, ok := safeReturnTo(r.FormValue("return_to"), "/login")
+	if !ok {
+		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(locale, "title.error"), Locale: locale, Error: textFor(locale, "error.return_to"), CSRFToken: s.ensureCSRF(w, r), ReturnTo: "/login"})
+		return
+	}
+	s.setLocaleCookie(w, locale)
+	http.Redirect(w, r, returnTo, http.StatusSeeOther)
+}
+
 func (s *Server) members(w http.ResponseWriter, r *http.Request) {
 	principal, ok := s.requirePrincipal(w, r)
 	if !ok {
@@ -767,14 +842,14 @@ func (s *Server) members(w http.ResponseWriter, r *http.Request) {
 	}
 	members, err := s.auth.ListMembers(r.Context(), principal)
 	if errors.Is(err, application.ErrForbidden) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: "只有 Owner 可以管理成员"})
+		s.renderForbidden(w, principal, "error.forbidden_members")
 		return
 	}
 	if err != nil {
-		s.renderError(w, http.StatusInternalServerError, err)
+		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	s.render(w, http.StatusOK, "members", pageData{Title: "成员", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Members: members})
+	s.render(w, http.StatusOK, "members", pageData{Title: textFor(principal.Locale, "title.members"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Members: members, ReturnTo: r.URL.RequestURI()})
 }
 
 func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
@@ -787,12 +862,12 @@ func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.auth.AddMember(r.Context(), principal, application.AddMember{Username: r.FormValue("username"), Password: r.FormValue("password"), Role: application.Role(r.FormValue("role"))})
 	if errors.Is(err, application.ErrForbidden) {
-		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: "只有 Owner 可以管理成员"})
+		s.renderForbidden(w, principal, "error.forbidden_members")
 		return
 	}
 	if err != nil {
 		members, _ := s.auth.ListMembers(r.Context(), principal)
-		s.render(w, http.StatusUnprocessableEntity, "members", pageData{Title: "成员", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Members: members, Error: err.Error()})
+		s.render(w, http.StatusUnprocessableEntity, "members", pageData{Title: textFor(principal.Locale, "title.members"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Members: members, Error: s.userError(principal.Locale, err), ReturnTo: r.URL.RequestURI()})
 		return
 	}
 	http.Redirect(w, r, "/admin/members", http.StatusSeeOther)
@@ -830,16 +905,16 @@ func (s *Server) ensureCSRF(w http.ResponseWriter, r *http.Request) string {
 func (s *Server) verifyCSRF(w http.ResponseWriter, r *http.Request) bool {
 	cookie, err := r.Cookie(csrfCookie)
 	if err != nil || cookie.Value == "" {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, textFor(s.localeForRequest(r, nil), "error.csrf"), http.StatusForbidden)
 		return false
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+		http.Error(w, textFor(s.localeForRequest(r, nil), "error.csrf"), http.StatusBadRequest)
 		return false
 	}
 	want, got := []byte(cookie.Value), []byte(r.FormValue("csrf_token"))
 	if len(want) != len(got) || subtle.ConstantTimeCompare(want, got) != 1 {
-		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		http.Error(w, textFor(s.localeForRequest(r, nil), "error.csrf"), http.StatusForbidden)
 		return false
 	}
 	return true
@@ -849,7 +924,39 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, credential application.
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: credential.Token, Path: "/", Expires: credential.ExpiresAt, HttpOnly: true, Secure: s.options.SecureCookies, SameSite: http.SameSiteLaxMode})
 }
 
+func (s *Server) setLocaleCookie(w http.ResponseWriter, locale application.Locale) {
+	http.SetCookie(w, &http.Cookie{Name: localeCookie, Value: string(locale), Path: "/", MaxAge: 365 * 24 * 60 * 60, HttpOnly: true, Secure: s.options.SecureCookies, SameSite: http.SameSiteLaxMode})
+}
+
+func (s *Server) localeForRequest(r *http.Request, principal *application.Principal) application.Locale {
+	if principal != nil {
+		if locale, ok := supportedLocale(string(principal.Locale)); ok {
+			return locale
+		}
+	}
+	if cookie, err := r.Cookie(localeCookie); err == nil {
+		if locale, ok := supportedLocale(cookie.Value); ok {
+			return locale
+		}
+	}
+	return matchLocale(r.Header.Get("Accept-Language"))
+}
+
 func (s *Server) render(w http.ResponseWriter, status int, name string, data pageData) {
+	if data.Principal != nil {
+		data.Locale = data.Principal.Locale
+		data.Theme = data.Principal.Theme
+	}
+	if _, ok := supportedLocale(string(data.Locale)); !ok {
+		data.Locale = application.LocaleZhCN
+	}
+	if data.Theme != application.ThemeLight && data.Theme != application.ThemeDark {
+		data.Theme = application.ThemeSystem
+	}
+	data.Strings = stringsFor(data.Locale)
+	if data.ReturnTo == "" {
+		data.ReturnTo = "/"
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	if err := s.templates[name].ExecuteTemplate(w, "base", data); err != nil {
@@ -857,8 +964,63 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 	}
 }
 
-func (s *Server) renderError(w http.ResponseWriter, status int, err error) {
-	s.render(w, status, "error", pageData{Title: "错误", Error: err.Error()})
+func (s *Server) renderError(w http.ResponseWriter, r *http.Request, status int, err error) {
+	slog.Error("web request failed", "status", status, "error", err)
+	locale := s.localeForRequest(r, nil)
+	data := pageData{Title: textFor(locale, "title.error"), Locale: locale, Error: textFor(locale, "error.internal"), ReturnTo: "/"}
+	if principal, principalErr := s.principal(r); principalErr == nil {
+		data.Principal = &principal
+		data.Title = textFor(principal.Locale, "title.error")
+		data.Error = textFor(principal.Locale, "error.internal")
+	}
+	s.render(w, status, "error", data)
+}
+
+func (s *Server) renderForbidden(w http.ResponseWriter, principal application.Principal, key string) {
+	s.render(w, http.StatusForbidden, "error", pageData{Title: textFor(principal.Locale, "title.forbidden"), Principal: &principal, Error: textFor(principal.Locale, key)})
+}
+
+func (s *Server) renderNotFound(w http.ResponseWriter, principal application.Principal, key string) {
+	s.render(w, http.StatusNotFound, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, Error: textFor(principal.Locale, key)})
+}
+
+func (s *Server) userError(locale application.Locale, err error) string {
+	if value, ok := inputErrorText(locale, err); ok {
+		return value
+	}
+	message := err.Error()
+	key := map[string]string{
+		"amount is required": "validation.amount_required", "amount must be positive": "validation.amount_positive",
+		"amount must not be negative": "validation.amount_positive", "invalid decimal amount": "validation.amount_invalid",
+		"currency must be a three-letter ISO code": "validation.currency_invalid", "FX rate must be positive": "validation.fx_positive",
+		"FX conversion must be confirmed": "validation.fx_confirm", "FX rate date and source are required": "validation.fx_evidence",
+		"asset already has an active purchase event": "validation.event_purchase_exists", "asset must be purchased before repair or sale": "validation.event_purchase_first",
+		"sold asset cannot receive another repair or sale event": "validation.event_after_sale", "occurred time is required": "validation.occurred_required",
+		"occurred time cannot be in the future": "validation.occurred_future", "event type must be purchase, repair, or sale": "validation.event_type",
+	}[message]
+	if key != "" {
+		return textFor(locale, key)
+	}
+	if strings.HasPrefix(message, "invalid FX rate") {
+		return textFor(locale, "validation.fx_invalid")
+	}
+	if strings.Contains(message, " is required") || strings.Contains(message, " is too long") || strings.Contains(message, " must be a UUID") || strings.HasPrefix(message, "unsupported currency") || strings.HasPrefix(message, "amount supports at most") {
+		return textFor(locale, "validation.input_invalid")
+	}
+	slog.Error("unexpected user-facing error", "error", err)
+	return textFor(locale, "error.internal")
+}
+
+func safeReturnTo(value, fallback string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback, true
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.IsAbs() || u.Host != "" || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(value, "//") {
+		return fallback, false
+	}
+	return u.RequestURI(), true
 }
 
 func randomToken() string {
@@ -931,30 +1093,15 @@ func parseFormTime(value string) (time.Time, error) {
 			return parsed.UTC(), nil
 		}
 	}
-	return time.Time{}, errors.New("日期时间格式无效")
+	return time.Time{}, application.NewInputError("validation.datetime")
 }
 
 func parseFormDate(value string) (time.Time, error) {
 	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(value))
 	if err != nil {
-		return time.Time{}, errors.New("汇率日期格式无效")
+		return time.Time{}, application.NewInputError("validation.fx_date")
 	}
 	return parsed, nil
-}
-
-func eventLabel(value domain.AssetEventType) string {
-	switch value {
-	case domain.AssetEventPurchase:
-		return "买入"
-	case domain.AssetEventRepair:
-		return "维修"
-	case domain.AssetEventSale:
-		return "卖出"
-	case domain.AssetEventVoid:
-		return "作废"
-	default:
-		return string(value)
-	}
 }
 
 func eventClass(value domain.AssetEventType) string {

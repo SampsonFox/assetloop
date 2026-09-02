@@ -84,6 +84,73 @@ func TestUnauthenticatedDashboardRedirectsToLogin(t *testing.T) {
 	}
 }
 
+func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
+	handler := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/setup", nil)
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	setupPage := httptest.NewRecorder()
+	handler.ServeHTTP(setupPage, req)
+	if setupPage.Code != http.StatusOK || !strings.Contains(setupPage.Body.String(), `<html lang="en" data-theme="system">`) || !strings.Contains(setupPage.Body.String(), "Create your AssetLoop workspace") {
+		t.Fatalf("anonymous browser locale was not applied: status=%d body=%s", setupPage.Code, setupPage.Body.String())
+	}
+	csrf := responseCookie(t, setupPage, csrfCookie)
+	localeChange := request(t, handler, http.MethodPost, "/locale", url.Values{"csrf_token": {csrf.Value}, "locale": {"zh-CN"}, "return_to": {"/setup"}}, []*http.Cookie{csrf})
+	if localeChange.Code != http.StatusSeeOther || responseCookie(t, localeChange, localeCookie).Value != "zh-CN" {
+		t.Fatalf("anonymous locale update: status=%d body=%s", localeChange.Code, localeChange.Body.String())
+	}
+	localeCookieValue := responseCookie(t, localeChange, localeCookie)
+	req = httptest.NewRequest(http.MethodGet, "/setup", nil)
+	req.Header.Set("Accept-Language", "en-US")
+	req.AddCookie(localeCookieValue)
+	cookieOverride := httptest.NewRecorder()
+	handler.ServeHTTP(cookieOverride, req)
+	if !strings.Contains(cookieOverride.Body.String(), `<html lang="zh-CN"`) {
+		t.Fatalf("locale cookie did not override browser language: %s", cookieOverride.Body.String())
+	}
+
+	setup := request(t, handler, http.MethodPost, "/setup", url.Values{
+		"csrf_token": {csrf.Value}, "tenant_name": {"Preference Tenant"}, "base_currency": {"CNY"},
+		"username": {"owner"}, "password": {"owner secure password"},
+	}, []*http.Cookie{csrf})
+	session := responseCookie(t, setup, sessionCookie)
+	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
+	for _, want := range []string{`class="account-menu"`, `href="/imports"`, `href="/admin/catalog"`, `href="/admin/members"`, `action="/preferences"`} {
+		if !strings.Contains(home.Body.String(), want) {
+			t.Fatalf("owner account menu missing %q: %s", want, home.Body.String())
+		}
+	}
+
+	updated := request(t, handler, http.MethodPost, "/preferences", url.Values{
+		"csrf_token": {csrf.Value}, "locale": {"en"}, "theme": {"dark"}, "return_to": {"/?view=grid"},
+	}, []*http.Cookie{session, csrf})
+	if updated.Code != http.StatusSeeOther || updated.Header().Get("Location") != "/?view=grid" {
+		t.Fatalf("preference update: status=%d location=%q body=%s", updated.Code, updated.Header().Get("Location"), updated.Body.String())
+	}
+	zhCookie := &http.Cookie{Name: localeCookie, Value: "zh-CN"}
+	english := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, zhCookie})
+	for _, want := range []string{`<html lang="en" data-theme="dark">`, "My assets", "Pending imports", "Asset type settings", "Log out"} {
+		if !strings.Contains(english.Body.String(), want) {
+			t.Fatalf("stored preference missing %q: %s", want, english.Body.String())
+		}
+	}
+
+	invalidReturn := request(t, handler, http.MethodPost, "/preferences", url.Values{
+		"csrf_token": {csrf.Value}, "locale": {"zh-CN"}, "theme": {"light"}, "return_to": {"https://example.com"},
+	}, []*http.Cookie{session, csrf})
+	if invalidReturn.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidReturn.Body.String(), "Invalid return address") {
+		t.Fatalf("external return target: status=%d body=%s", invalidReturn.Code, invalidReturn.Body.String())
+	}
+	unchanged := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
+	if !strings.Contains(unchanged.Body.String(), `lang="en" data-theme="dark"`) {
+		t.Fatalf("invalid return target mutated preferences: %s", unchanged.Body.String())
+	}
+
+	withoutCSRF := request(t, handler, http.MethodPost, "/preferences", url.Values{"locale": {"zh-CN"}, "theme": {"light"}}, []*http.Cookie{session})
+	if withoutCSRF.Code != http.StatusForbidden {
+		t.Fatalf("preferences without CSRF: got %d", withoutCSRF.Code)
+	}
+}
+
 func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	handler := newTestHandler(t)
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
@@ -95,7 +162,7 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	session := responseCookie(t, setup, sessionCookie)
 
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一件物品"`, "当前还没有物品类型", `id="asset-form"`} {
+	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一个物品"`, "当前还没有物品类型", `id="asset-form"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset-first empty state missing %q: status=%d body=%s", want, home.Code, home.Body.String())
 		}
@@ -314,7 +381,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		"fx_rate": {"7.12"}, "fx_rate_date": {"2026-08-01"}, "fx_rate_source": {"web-fixture"},
 		"occurred_at": {"2026-08-01T10:00"}, "source": {"manual"},
 	}, []*http.Cookie{ownerSession, csrf})
-	if unconfirmedFX.Code != http.StatusUnprocessableEntity || !strings.Contains(unconfirmedFX.Body.String(), "FX conversion must be confirmed") {
+	if unconfirmedFX.Code != http.StatusUnprocessableEntity || !strings.Contains(unconfirmedFX.Body.String(), "必须确认汇率换算") {
 		t.Fatalf("unconfirmed FX should be rejected: status=%d body=%s", unconfirmedFX.Code, unconfirmedFX.Body.String())
 	}
 	purchase := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
@@ -395,6 +462,9 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}
 	if strings.Contains(visible.Body.String(), `id="asset-form"`) || strings.Contains(visible.Body.String(), `href="/admin/catalog"`) {
 		t.Fatalf("viewer should not receive catalog management controls: %s", visible.Body.String())
+	}
+	if !strings.Contains(visible.Body.String(), `href="/imports"`) || strings.Contains(visible.Body.String(), `href="/admin/members"`) {
+		t.Fatalf("viewer account menu has incorrect entries: %s", visible.Body.String())
 	}
 	adminDenied := request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{viewerSession, csrf})
 	if adminDenied.Code != http.StatusForbidden {

@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -249,7 +248,7 @@ func categoryIcon(value string) (string, error) {
 			return value, nil
 		}
 	}
-	return "", errors.New("category icon is invalid")
+	return "", NewInputError("validation.category_icon")
 }
 
 func validateAssetFields(variantID, displayName, serialNumber, color, purchaseChannel, notes string) (domain.Asset, error) {
@@ -337,7 +336,7 @@ func (s *CatalogService) GetAsset(ctx context.Context, actor Principal, assetID 
 
 func validID(label, value string) error {
 	if _, err := uuid.Parse(strings.TrimSpace(value)); err != nil {
-		return fmt.Errorf("%s must be a UUID", label)
+		return NewInputError("validation.id_invalid", label)
 	}
 	return nil
 }
@@ -345,10 +344,10 @@ func validID(label, value string) error {
 func catalogText(label, value string, maxRunes int, required bool) (string, error) {
 	value = strings.TrimSpace(value)
 	if required && value == "" {
-		return "", errors.New(label + " is required")
+		return "", NewInputError("validation.field_required", label)
 	}
 	if len([]rune(value)) > maxRunes {
-		return "", fmt.Errorf("%s is too long", label)
+		return "", NewInputError("validation.field_too_long", label, maxRunes)
 	}
 	return value, nil
 }
