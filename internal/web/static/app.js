@@ -44,6 +44,13 @@
 	for (const menu of document.querySelectorAll(".account-menu[open]")) menu.removeAttribute("open");
   });
 
+  document.addEventListener("change", (event) => {
+    const form = event.target.closest("[data-auto-submit]");
+    if (!form) return;
+    if (event.target.name === "theme") document.documentElement.dataset.theme = event.target.value;
+    form.requestSubmit();
+  });
+
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");
   const opener = [...document.querySelectorAll("[data-dialog-open]")].find(

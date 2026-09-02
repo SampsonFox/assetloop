@@ -123,6 +123,14 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 			t.Fatalf("owner account menu missing %q: %s", want, home.Body.String())
 		}
 	}
+	for _, want := range []string{`class="account-avatar"`, `class="menu-icon"`, `data-auto-submit`, `class="segmented language-segmented"`, `role="radiogroup"`, `type="radio" name="locale"`, `type="radio" name="theme"`} {
+		if !strings.Contains(home.Body.String(), want) {
+			t.Fatalf("compact account control missing %q: %s", want, home.Body.String())
+		}
+	}
+	if strings.Contains(home.Body.String(), `<select name="theme"`) || strings.Contains(home.Body.String(), `>保存偏好</button>`) {
+		t.Fatalf("account preferences should switch directly without select boxes or a save button: %s", home.Body.String())
+	}
 
 	updated := request(t, handler, http.MethodPost, "/preferences", url.Values{
 		"csrf_token": {csrf.Value}, "locale": {"en"}, "theme": {"dark"}, "return_to": {"/?view=grid"},
@@ -171,6 +179,12 @@ func TestThemeStylesUseSemanticSurfaces(t *testing.T) {
 	for _, want := range []string{`:root[data-theme="dark"]`, `:root[data-theme="system"]`, `prefers-color-scheme:dark`, `background:var(--card)`, `background:var(--field)`, `.account-menu-panel`} {
 		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
 			t.Fatalf("theme stylesheet missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
+		}
+	}
+	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
+	for _, want := range []string{`[data-auto-submit]`, `document.documentElement.dataset.theme`, `form.requestSubmit()`} {
+		if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
+			t.Fatalf("preference interaction missing %q: status=%d body=%s", want, script.Code, script.Body.String())
 		}
 	}
 }

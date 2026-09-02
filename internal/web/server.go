@@ -94,6 +94,13 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 			return messages[application.LocaleZhCN][key]
 		},
 		"roleLabel": func(values map[string]string, role application.Role) string { return values["role."+string(role)] },
+		"userInitial": func(value string) string {
+			runes := []rune(strings.TrimSpace(value))
+			if len(runes) == 0 {
+				return "?"
+			}
+			return strings.ToUpper(string(runes[0]))
+		},
 		"eventLabel": func(values map[string]string, value domain.AssetEventType) string {
 			return values["event."+string(value)]
 		},
