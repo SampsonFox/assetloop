@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	sessionCookie = "assetloop_session"
-	csrfCookie    = "assetloop_csrf"
+	sessionCookie   = "assetloop_session"
+	csrfCookie      = "assetloop_csrf"
+	assetViewCookie = "assetloop_asset_view"
 )
 
 //go:embed templates/*.html static/*
@@ -72,6 +73,8 @@ type pageData struct {
 	TotalExpenseMinor  int64
 	TotalIncomeMinor   int64
 	TotalNetMinor      int64
+	AssetView          string
+	CategoryIcons      []application.CategoryIconOption
 }
 
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
@@ -83,7 +86,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"date":          func(value time.Time) string { return value.Format("2006-01-02") },
 		"rate":          formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "catalog", "asset", "event_correct", "imports", "import_confirm", "error"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "event_correct", "imports", "import_confirm", "error"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -96,7 +99,8 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
-	mux.HandleFunc("GET /", s.dashboard)
+	mux.HandleFunc("GET /", s.assetsPage)
+	mux.HandleFunc("GET /overview", s.dashboard)
 	mux.HandleFunc("GET /setup", s.setupForm)
 	mux.HandleFunc("POST /setup", s.setup)
 	mux.HandleFunc("GET /login", s.loginForm)
@@ -104,11 +108,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /admin/members", s.members)
 	mux.HandleFunc("POST /admin/members", s.addMember)
-	mux.HandleFunc("GET /catalog", s.catalogPage)
-	mux.HandleFunc("POST /catalog/categories", s.createCategory)
-	mux.HandleFunc("POST /catalog/models", s.createModel)
-	mux.HandleFunc("POST /catalog/variants", s.createVariant)
-	mux.HandleFunc("POST /catalog/assets", s.createAsset)
+	mux.HandleFunc("GET /catalog", s.legacyCatalog)
+	mux.HandleFunc("GET /admin/catalog", s.catalogPage)
+	mux.HandleFunc("POST /admin/catalog/categories", s.createCategory)
+	mux.HandleFunc("POST /admin/catalog/categories/{id}", s.updateCategory)
+	mux.HandleFunc("POST /admin/catalog/models", s.createModel)
+	mux.HandleFunc("POST /admin/catalog/models/{id}", s.updateModel)
+	mux.HandleFunc("POST /admin/catalog/variants", s.createVariant)
+	mux.HandleFunc("POST /admin/catalog/variants/{id}", s.updateVariant)
+	mux.HandleFunc("POST /assets", s.createAsset)
+	mux.HandleFunc("POST /assets/{id}", s.updateAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
 	mux.HandleFunc("GET /events/{id}/correct", s.correctEventForm)
@@ -127,7 +136,15 @@ func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !principal.Can(application.CapabilityManageCatalog) {
+		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能维护物品配置"})
+		return
+	}
 	s.renderCatalog(w, r, http.StatusOK, principal, "")
+}
+
+func (s *Server) legacyCatalog(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/", http.StatusPermanentRedirect)
 }
 
 func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
@@ -138,11 +155,27 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := s.catalog.CreateCategory(r.Context(), principal, r.FormValue("name")); err != nil {
+	if _, err := s.catalog.CreateCategory(r.Context(), principal, application.CreateCategory{Name: r.FormValue("name"), IconKey: r.FormValue("icon_key")}); err != nil {
 		s.renderCatalogError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	_, err := s.catalog.UpdateCategory(r.Context(), principal, application.UpdateCategory{ID: r.PathValue("id"), Name: r.FormValue("name"), IconKey: r.FormValue("icon_key")})
+	if err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
 }
 
 func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +193,23 @@ func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalogError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	_, err := s.catalog.UpdateModel(r.Context(), principal, application.UpdateModel{ID: r.PathValue("id"), CategoryID: r.FormValue("category_id"), Name: r.FormValue("name")})
+	if err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
 }
 
 func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +227,23 @@ func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalogError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	_, err := s.catalog.UpdateVariant(r.Context(), principal, application.UpdateVariant{ID: r.PathValue("id"), ModelID: r.FormValue("model_id"), Name: r.FormValue("name")})
+	if err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
 }
 
 func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
@@ -195,10 +260,30 @@ func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
 		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	})
 	if err != nil {
-		s.renderCatalogError(w, r, principal, err)
+		s.renderAssetsError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/catalog", http.StatusSeeOther)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	_, err := s.catalog.UpdateAsset(r.Context(), principal, application.UpdateCatalogAsset{
+		ID: r.PathValue("id"), VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
+		SerialNumber: r.FormValue("serial_number"), Color: r.FormValue("color"),
+		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
+	})
+	if err != nil {
+		s.renderAssetsError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s *Server) assetDetail(w http.ResponseWriter, r *http.Request) {
@@ -483,6 +568,47 @@ func (s *Server) renderCatalogError(w http.ResponseWriter, r *http.Request, prin
 	s.renderCatalog(w, r, http.StatusUnprocessableEntity, principal, err.Error())
 }
 
+func (s *Server) renderAssetsError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
+	if errors.Is(err, application.ErrForbidden) {
+		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能修改具体物品"})
+		return
+	}
+	s.renderAssets(w, r, http.StatusUnprocessableEntity, principal, err.Error())
+}
+
+func (s *Server) assetsPage(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	s.renderAssets(w, r, http.StatusOK, principal, "")
+}
+
+func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
+	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, http.StatusInternalServerError, err)
+		return
+	}
+	view := assetView(r)
+	if requested := strings.TrimSpace(r.URL.Query().Get("view")); requested == "list" || requested == "grid" {
+		view = requested
+		http.SetCookie(w, &http.Cookie{Name: assetViewCookie, Value: view, Path: "/", MaxAge: 365 * 24 * 60 * 60, HttpOnly: true, Secure: s.options.SecureCookies, SameSite: http.SameSiteLaxMode})
+	}
+	s.render(w, status, "assets", pageData{
+		Title: "我的物品", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
+		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), AssetView: view,
+	})
+}
+
+func assetView(r *http.Request) string {
+	if cookie, err := r.Cookie(assetViewCookie); err == nil && cookie.Value == "grid" {
+		return "grid"
+	}
+	return "list"
+}
+
 func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
 	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
 	if err != nil {
@@ -490,9 +616,10 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 	s.render(w, status, "catalog", pageData{
-		Title: "物品目录", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
+		Title: "物品配置", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
 		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
 		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+		CategoryIcons: application.CategoryIconOptions,
 	})
 }
 

@@ -78,7 +78,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	}
 
 	catalog := application.NewCatalogService(store)
-	category, err := catalog.CreateCategory(ctx, owner, "手机")
+	category, err := catalog.CreateCategory(ctx, owner, application.CreateCategory{Name: "手机", IconKey: "smartphone"})
 	if err != nil {
 		t.Fatalf("create category: %v", err)
 	}
@@ -108,7 +108,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 2 || len(snapshot.Assets) != 1 {
 		t.Fatalf("viewer catalog snapshot: %+v err=%v", snapshot, err)
 	}
-	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, "禁止写入"); !errors.Is(err, application.ErrForbidden) {
+	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, application.CreateCategory{Name: "禁止写入"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer should not mutate catalog, got %v", err)
 	}
 

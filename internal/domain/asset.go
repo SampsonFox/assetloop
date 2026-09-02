@@ -6,6 +6,7 @@ type ItemCategory struct {
 	ID        string
 	TenantID  string
 	Name      string
+	IconKey   string
 	CreatedAt time.Time
 }
 
@@ -14,6 +15,7 @@ type ProductModel struct {
 	TenantID     string
 	CategoryID   string
 	CategoryName string
+	CategoryIcon string
 	Name         string
 	CreatedAt    time.Time
 }
@@ -23,6 +25,7 @@ type ProductVariant struct {
 	TenantID     string
 	CategoryID   string
 	CategoryName string
+	CategoryIcon string
 	ModelID      string
 	ModelName    string
 	Name         string
@@ -34,6 +37,7 @@ type Asset struct {
 	TenantID        string
 	CategoryID      string
 	Category        string
+	CategoryIcon    string
 	ModelID         string
 	Model           string
 	VariantID       string

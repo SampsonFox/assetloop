@@ -27,9 +27,13 @@ type AuthStore interface {
 
 type CatalogStore interface {
 	CreateCategory(context.Context, domain.ItemCategory) error
+	UpdateCategory(context.Context, domain.ItemCategory) error
 	CreateModel(context.Context, domain.ProductModel) error
+	UpdateModel(context.Context, domain.ProductModel) error
 	CreateVariant(context.Context, domain.ProductVariant) error
+	UpdateVariant(context.Context, domain.ProductVariant) error
 	CreateCatalogAsset(context.Context, domain.Asset) error
+	UpdateCatalogAsset(context.Context, domain.Asset) error
 	ListCategories(context.Context, string) ([]domain.ItemCategory, error)
 	ListModels(context.Context, string) ([]domain.ProductModel, error)
 	ListVariants(context.Context, string) ([]domain.ProductVariant, error)

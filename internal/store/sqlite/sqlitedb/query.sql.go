@@ -183,14 +183,15 @@ func (q *Queries) CreateCatalogAsset(ctx context.Context, arg CreateCatalogAsset
 }
 
 const createCategory = `-- name: CreateCategory :exec
-INSERT INTO item_categories (id, tenant_id, name, created_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO item_categories (id, tenant_id, name, icon_key, created_at)
+VALUES (?, ?, ?, ?, ?)
 `
 
 type CreateCategoryParams struct {
 	ID        string
 	TenantID  string
 	Name      string
+	IconKey   string
 	CreatedAt string
 }
 
@@ -199,6 +200,7 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.ID,
 		arg.TenantID,
 		arg.Name,
+		arg.IconKey,
 		arg.CreatedAt,
 	)
 	return err
@@ -592,6 +594,7 @@ func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error)
 
 const getAsset = `-- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
        v.name AS variant_name, a.display_name, a.serial_number, a.color,
        a.purchase_channel, a.notes, a.created_at
@@ -612,6 +615,7 @@ type GetAssetRow struct {
 	TenantID        string
 	CategoryID      string
 	CategoryName    string
+	CategoryIcon    string
 	ModelID         string
 	ModelName       string
 	VariantID       string
@@ -632,6 +636,7 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 		&i.TenantID,
 		&i.CategoryID,
 		&i.CategoryName,
+		&i.CategoryIcon,
 		&i.ModelID,
 		&i.ModelName,
 		&i.VariantID,
@@ -890,6 +895,7 @@ func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams
 
 const listAssets = `-- name: ListAssets :many
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
        v.name AS variant_name, a.display_name, a.serial_number, a.color,
        a.purchase_channel, a.notes, a.created_at
@@ -906,6 +912,7 @@ type ListAssetsRow struct {
 	TenantID        string
 	CategoryID      string
 	CategoryName    string
+	CategoryIcon    string
 	ModelID         string
 	ModelName       string
 	VariantID       string
@@ -932,6 +939,7 @@ func (q *Queries) ListAssets(ctx context.Context, tenantID string) ([]ListAssets
 			&i.TenantID,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.CategoryIcon,
 			&i.ModelID,
 			&i.ModelName,
 			&i.VariantID,
@@ -957,25 +965,34 @@ func (q *Queries) ListAssets(ctx context.Context, tenantID string) ([]ListAssets
 }
 
 const listCategories = `-- name: ListCategories :many
-SELECT id, tenant_id, name, created_at
+SELECT id, tenant_id, name, icon_key, created_at
 FROM item_categories
 WHERE tenant_id = ?
 ORDER BY name, id
 `
 
-func (q *Queries) ListCategories(ctx context.Context, tenantID string) ([]ItemCategory, error) {
+type ListCategoriesRow struct {
+	ID        string
+	TenantID  string
+	Name      string
+	IconKey   string
+	CreatedAt string
+}
+
+func (q *Queries) ListCategories(ctx context.Context, tenantID string) ([]ListCategoriesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listCategories, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ItemCategory
+	var items []ListCategoriesRow
 	for rows.Next() {
-		var i ItemCategory
+		var i ListCategoriesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
 			&i.Name,
+			&i.IconKey,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -1035,7 +1052,7 @@ func (q *Queries) ListMembers(ctx context.Context, tenantID string) ([]ListMembe
 }
 
 const listModels = `-- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
 FROM product_models m
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = ?
@@ -1047,6 +1064,7 @@ type ListModelsRow struct {
 	TenantID     string
 	CategoryID   string
 	CategoryName string
+	CategoryIcon string
 	Name         string
 	CreatedAt    string
 }
@@ -1065,6 +1083,7 @@ func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModels
 			&i.TenantID,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
 		); err != nil {
@@ -1131,7 +1150,7 @@ func (q *Queries) ListPendingImportDrafts(ctx context.Context, tenantID string) 
 
 const listVariants = `-- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
-       v.model_id, m.name AS model_name, v.name, v.created_at
+       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.created_at
 FROM product_variants v
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
@@ -1144,6 +1163,7 @@ type ListVariantsRow struct {
 	TenantID     string
 	CategoryID   string
 	CategoryName string
+	CategoryIcon string
 	ModelID      string
 	ModelName    string
 	Name         string
@@ -1164,6 +1184,7 @@ func (q *Queries) ListVariants(ctx context.Context, tenantID string) ([]ListVari
 			&i.TenantID,
 			&i.CategoryID,
 			&i.CategoryName,
+			&i.CategoryIcon,
 			&i.ModelID,
 			&i.ModelName,
 			&i.Name,
@@ -1196,4 +1217,116 @@ type LockTenantBaseCurrencyParams struct {
 func (q *Queries) LockTenantBaseCurrency(ctx context.Context, arg LockTenantBaseCurrencyParams) error {
 	_, err := q.db.ExecContext(ctx, lockTenantBaseCurrency, arg.ID, arg.BaseCurrency)
 	return err
+}
+
+const updateCatalogAsset = `-- name: UpdateCatalogAsset :execrows
+UPDATE assets
+SET variant_id = ?, display_name = ?, serial_number = ?, color = ?, purchase_channel = ?, notes = ?
+WHERE tenant_id = ? AND id = ?
+`
+
+type UpdateCatalogAssetParams struct {
+	VariantID       string
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	TenantID        string
+	ID              string
+}
+
+func (q *Queries) UpdateCatalogAsset(ctx context.Context, arg UpdateCatalogAssetParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateCatalogAsset,
+		arg.VariantID,
+		arg.DisplayName,
+		arg.SerialNumber,
+		arg.Color,
+		arg.PurchaseChannel,
+		arg.Notes,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateCategory = `-- name: UpdateCategory :execrows
+UPDATE item_categories
+SET name = ?, icon_key = ?
+WHERE tenant_id = ? AND id = ?
+`
+
+type UpdateCategoryParams struct {
+	Name     string
+	IconKey  string
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateCategory,
+		arg.Name,
+		arg.IconKey,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateModel = `-- name: UpdateModel :execrows
+UPDATE product_models
+SET category_id = ?, name = ?
+WHERE tenant_id = ? AND id = ?
+`
+
+type UpdateModelParams struct {
+	CategoryID string
+	Name       string
+	TenantID   string
+	ID         string
+}
+
+func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateModel,
+		arg.CategoryID,
+		arg.Name,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateVariant = `-- name: UpdateVariant :execrows
+UPDATE product_variants
+SET model_id = ?, name = ?
+WHERE tenant_id = ? AND id = ?
+`
+
+type UpdateVariantParams struct {
+	ModelID  string
+	Name     string
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) UpdateVariant(ctx context.Context, arg UpdateVariantParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateVariant,
+		arg.ModelID,
+		arg.Name,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }

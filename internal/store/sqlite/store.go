@@ -59,7 +59,7 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 	}
 	return domain.Asset{
 		ID: row.ID, TenantID: row.TenantID,
-		CategoryID: row.CategoryID, Category: row.CategoryName,
+		CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 		ModelID: row.ModelID, Model: row.ModelName,
 		VariantID: row.VariantID, Variant: row.VariantName,
 		DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
