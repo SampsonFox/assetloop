@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -75,6 +76,7 @@ type pageData struct {
 	TotalNetMinor      int64
 	AssetView          string
 	CategoryIcons      []application.CategoryIconOption
+	CatalogFlow        string
 }
 
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
@@ -87,7 +89,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"rate":          formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
 	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "event_correct", "imports", "import_confirm", "error"} {
-		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/"+page+".html")
+		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
 		}
@@ -155,11 +157,12 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := s.catalog.CreateCategory(r.Context(), principal, application.CreateCategory{Name: r.FormValue("name"), IconKey: r.FormValue("icon_key")}); err != nil {
-		s.renderCatalogError(w, r, principal, err)
+	category, err := s.catalog.CreateCategory(r.Context(), principal, application.CreateCategory{Name: r.FormValue("name"), IconKey: r.FormValue("icon_key")})
+	if err != nil {
+		s.renderCatalogMutationError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+	s.redirectAfterCatalogCreate(w, r, "model-drawer", "category_id", category.ID)
 }
 
 func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request) {
@@ -186,14 +189,14 @@ func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := s.catalog.CreateModel(r.Context(), principal, application.CreateModel{
+	model, err := s.catalog.CreateModel(r.Context(), principal, application.CreateModel{
 		CategoryID: r.FormValue("category_id"), Name: r.FormValue("name"),
 	})
 	if err != nil {
-		s.renderCatalogError(w, r, principal, err)
+		s.renderCatalogMutationError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+	s.redirectAfterCatalogCreate(w, r, "variant-drawer", "model_id", model.ID)
 }
 
 func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
@@ -220,14 +223,14 @@ func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := s.catalog.CreateVariant(r.Context(), principal, application.CreateVariant{
+	variant, err := s.catalog.CreateVariant(r.Context(), principal, application.CreateVariant{
 		ModelID: r.FormValue("model_id"), Name: r.FormValue("name"),
 	})
 	if err != nil {
-		s.renderCatalogError(w, r, principal, err)
+		s.renderCatalogMutationError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+	s.redirectAfterCatalogCreate(w, r, "asset-drawer", "variant_id", variant.ID)
 }
 
 func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
@@ -568,6 +571,23 @@ func (s *Server) renderCatalogError(w http.ResponseWriter, r *http.Request, prin
 	s.renderCatalog(w, r, http.StatusUnprocessableEntity, principal, err.Error())
 }
 
+func (s *Server) renderCatalogMutationError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
+	if r.FormValue("flow") == "asset" {
+		s.renderAssetsError(w, r, principal, err)
+		return
+	}
+	s.renderCatalogError(w, r, principal, err)
+}
+
+func (s *Server) redirectAfterCatalogCreate(w http.ResponseWriter, r *http.Request, dialog, idKey, id string) {
+	if r.FormValue("flow") != "asset" {
+		http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+		return
+	}
+	query := url.Values{"dialog": {dialog}, idKey: {id}}
+	http.Redirect(w, r, "/?"+query.Encode(), http.StatusSeeOther)
+}
+
 func (s *Server) renderAssetsError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
 	if errors.Is(err, application.ErrForbidden) {
 		s.render(w, http.StatusForbidden, "error", pageData{Title: "无权限", Principal: &principal, Error: "当前角色不能修改具体物品"})
@@ -599,6 +619,7 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 		Title: "我的物品", CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
 		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
 		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), AssetView: view,
+		CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
 	})
 }
 

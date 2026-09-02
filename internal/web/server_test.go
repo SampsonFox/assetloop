@@ -95,7 +95,7 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	session := responseCookie(t, setup, sessionCookie)
 
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一件物品"`, "当前还没有规格", `id="asset-form"`} {
+	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一件物品"`, "当前还没有物品类型", `id="asset-form"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset-first empty state missing %q: status=%d body=%s", want, home.Code, home.Body.String())
 		}
@@ -119,6 +119,62 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	legacy := request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{session, csrf})
 	if legacy.Code != http.StatusPermanentRedirect || legacy.Header().Get("Location") != "/" {
 		t.Fatalf("legacy catalog route: status=%d location=%q", legacy.Code, legacy.Header().Get("Location"))
+	}
+}
+
+func TestAssetDrawerCreatesMissingTypeWithoutLeavingAssetList(t *testing.T) {
+	handler := newTestHandler(t)
+	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
+	csrf := responseCookie(t, setupPage, csrfCookie)
+	setup := request(t, handler, http.MethodPost, "/setup", url.Values{
+		"csrf_token": {csrf.Value}, "tenant_name": {"Inline Type Tenant"}, "base_currency": {"CNY"},
+		"username": {"owner"}, "password": {"owner secure password"},
+	}, []*http.Cookie{csrf})
+	session := responseCookie(t, setup, sessionCookie)
+
+	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
+	for _, want := range []string{`data-dialog-open="variant-drawer"`, `data-title="新增物品类型"`, `id="category-form"`, `id="model-form"`, `id="variant-form"`, `name="flow" value="asset"`} {
+		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
+			t.Fatalf("asset drawer shared type component missing %q: status=%d body=%s", want, home.Code, home.Body.String())
+		}
+	}
+	if strings.Contains(home.Body.String(), `href="/admin/catalog">创建规格`) {
+		t.Fatalf("asset drawer must create a type in place instead of navigating to management: %s", home.Body.String())
+	}
+
+	redirect := func(response *httptest.ResponseRecorder, wantDialog, idKey string) string {
+		t.Helper()
+		if response.Code != http.StatusSeeOther {
+			t.Fatalf("inline type step: status=%d body=%s", response.Code, response.Body.String())
+		}
+		location, err := url.Parse(response.Header().Get("Location"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if location.Path != "/" || location.Query().Get("dialog") != wantDialog || location.Query().Get(idKey) == "" {
+			t.Fatalf("inline type redirect: location=%q", location.String())
+		}
+		return location.Query().Get(idKey)
+	}
+
+	category := request(t, handler, http.MethodPost, "/admin/catalog/categories", url.Values{
+		"csrf_token": {csrf.Value}, "flow": {"asset"}, "name": {"手机"}, "icon_key": {"smartphone"},
+	}, []*http.Cookie{session, csrf})
+	categoryID := redirect(category, "model-drawer", "category_id")
+
+	model := request(t, handler, http.MethodPost, "/admin/catalog/models", url.Values{
+		"csrf_token": {csrf.Value}, "flow": {"asset"}, "category_id": {categoryID}, "name": {"iPhone 17 Pro"},
+	}, []*http.Cookie{session, csrf})
+	modelID := redirect(model, "variant-drawer", "model_id")
+
+	variant := request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{
+		"csrf_token": {csrf.Value}, "flow": {"asset"}, "model_id": {modelID}, "name": {"256GB"},
+	}, []*http.Cookie{session, csrf})
+	variantID := redirect(variant, "asset-drawer", "variant_id")
+
+	reopened := request(t, handler, http.MethodGet, variant.Header().Get("Location"), nil, []*http.Cookie{session, csrf})
+	if reopened.Code != http.StatusOK || !strings.Contains(reopened.Body.String(), `<option value="`+variantID+`">手机 / iPhone 17 Pro / 256GB</option>`) {
+		t.Fatalf("new type was not available to the reopened asset form: status=%d body=%s", reopened.Code, reopened.Body.String())
 	}
 }
 

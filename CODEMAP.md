@@ -19,7 +19,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport; asset-list-first SSR UI, management drawers and category-icon sprite; auth/member, lifecycle, FX confirmation, and import review screens |
+| `internal/web/` | HTTP transport; asset-list-first SSR UI, shared in-place catalog drawers and category-icon sprite; auth/member, lifecycle, FX confirmation, and import review screens |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, lifecycle/import use cases, validation, and inward ports |
