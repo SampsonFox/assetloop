@@ -13,6 +13,9 @@
   };
 
   document.addEventListener("click", (event) => {
+	for (const menu of document.querySelectorAll(".account-menu[open]")) {
+	  if (!menu.contains(event.target)) menu.removeAttribute("open");
+	}
     const opener = event.target.closest("[data-dialog-open]");
     if (opener) {
       const dialog = document.getElementById(opener.dataset.dialogOpen);
@@ -34,6 +37,11 @@
 
     const closer = event.target.closest("[data-dialog-close]");
     if (closer) closer.closest("dialog")?.close();
+  });
+
+  document.addEventListener("keydown", (event) => {
+	if (event.key !== "Escape") return;
+	for (const menu of document.querySelectorAll(".account-menu[open]")) menu.removeAttribute("open");
   });
 
   const params = new URLSearchParams(window.location.search);

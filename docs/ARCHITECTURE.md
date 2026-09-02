@@ -206,6 +206,20 @@ Every Store query remains tenant-scoped even after authorization. Hiding a Web c
 treated as authorization. State-changing Web requests require CSRF validation, and membership or
 authentication changes produce security audit events.
 
+User interface preferences belong to the global user identity. `users.locale` selects a registered
+code-defined language pack and `users.theme` selects `system`, `light`, or `dark`; both values are
+resolved again with every authenticated request, including local disabled-auth mode. Anonymous
+setup and login pages resolve locale from a same-site cookie, then `Accept-Language`, and finally
+fall back to `zh-CN`. Locale changes are application validation, not database enums, so adding a
+language does not require a schema migration.
+
+The SSR response owns first paint: `<html lang>` and `<html data-theme>` are emitted by Go before
+the page loads. CSS uses semantic variables, with `system` delegated to
+`prefers-color-scheme`; no client-side theme bootstrap or runtime translation service is required.
+Predictable application validation crosses the transport boundary as language-neutral
+`InputError` codes. Unexpected infrastructure errors are logged server-side and rendered only as
+a localized generic message.
+
 ## 8. Attachment architecture
 
 ```text

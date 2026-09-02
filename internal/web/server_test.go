@@ -70,6 +70,10 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 		t.Fatalf("editor login: status=%d body=%s", response.Code, response.Body.String())
 	}
 	editorSession := responseCookie(t, response, sessionCookie)
+	editorHome := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{editorSession, csrf})
+	if !strings.Contains(editorHome.Body.String(), `href="/imports"`) || !strings.Contains(editorHome.Body.String(), `href="/admin/catalog"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
+		t.Fatalf("editor account menu has incorrect entries: %s", editorHome.Body.String())
+	}
 	forbidden := request(t, handler, http.MethodGet, "/admin/members", nil, []*http.Cookie{editorSession, csrf})
 	if forbidden.Code != http.StatusForbidden || !strings.Contains(forbidden.Body.String(), "只有 Owner") {
 		t.Fatalf("editor member access: status=%d body=%s", forbidden.Code, forbidden.Body.String())
@@ -114,7 +118,7 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	}, []*http.Cookie{csrf})
 	session := responseCookie(t, setup, sessionCookie)
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{`class="account-menu"`, `href="/imports"`, `href="/admin/catalog"`, `href="/admin/members"`, `action="/preferences"`} {
+	for _, want := range []string{`class="account-menu"`, `summary aria-label="用户菜单"`, `href="/imports"`, `href="/admin/catalog"`, `href="/admin/members"`, `action="/preferences"`} {
 		if !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("owner account menu missing %q: %s", want, home.Body.String())
 		}
@@ -144,10 +148,30 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	if !strings.Contains(unchanged.Body.String(), `lang="en" data-theme="dark"`) {
 		t.Fatalf("invalid return target mutated preferences: %s", unchanged.Body.String())
 	}
+	light := request(t, handler, http.MethodPost, "/preferences", url.Values{
+		"csrf_token": {csrf.Value}, "locale": {"zh-CN"}, "theme": {"light"}, "return_to": {"/"},
+	}, []*http.Cookie{session, csrf})
+	if light.Code != http.StatusSeeOther {
+		t.Fatalf("light theme update: status=%d body=%s", light.Code, light.Body.String())
+	}
+	lightPage := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
+	if !strings.Contains(lightPage.Body.String(), `lang="zh-CN" data-theme="light"`) {
+		t.Fatalf("light theme did not render server-side: %s", lightPage.Body.String())
+	}
 
 	withoutCSRF := request(t, handler, http.MethodPost, "/preferences", url.Values{"locale": {"zh-CN"}, "theme": {"light"}}, []*http.Cookie{session})
 	if withoutCSRF.Code != http.StatusForbidden {
 		t.Fatalf("preferences without CSRF: got %d", withoutCSRF.Code)
+	}
+}
+
+func TestThemeStylesUseSemanticSurfaces(t *testing.T) {
+	handler := newTestHandler(t)
+	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
+	for _, want := range []string{`:root[data-theme="dark"]`, `:root[data-theme="system"]`, `prefers-color-scheme:dark`, `background:var(--card)`, `background:var(--field)`, `.account-menu-panel`} {
+		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
+			t.Fatalf("theme stylesheet missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
+		}
 	}
 }
 

@@ -19,7 +19,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport; asset-list-first SSR UI, shared in-place catalog drawers and category-icon sprite; auth/member, lifecycle, FX confirmation, and import review screens |
+| `internal/web/` | HTTP transport; asset-list-first SSR UI, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, lifecycle, FX confirmation, and import review screens |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, lifecycle/import use cases, validation, and inward ports |
@@ -62,8 +62,9 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `internal/application/*_test.go` | validation, exact money/FX conversion, auth, catalog, lifecycle, and role policy |
 | `internal/store/storetest/` | shared dual-database auth/catalog/lifecycle behavior, FX evidence, append-only correction, locks, and tenant isolation |
 | `internal/store/migration_upgrade_test.go` | previous-schema upgrade without data loss |
-| `internal/web/*_test.go` | auth, CSRF, asset-list empty/list/card states, management separation, shared drawers, catalog, non-base FX confirmation, correction, import confirmation, totals, and role denial |
-| `internal/integration/full_element_test.go` | cumulative auth → catalog → foreign purchase → repair correction → sale scenario on both databases |
+| `internal/web/i18n.go` | registered locales, stable message keys, browser/cookie locale matching, and zh-CN fallback |
+| `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, FX confirmation, correction, import confirmation, totals, and role denial |
+| `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → catalog → foreign purchase → repair correction → sale scenario on both databases |
 
 ## Read paths by task
 
@@ -77,6 +78,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Add market provider | market port | provider adapter plus shared normalization pipeline |
 | Change MCP tool | `internal/mcp/` | called application service; never inspect Store unless service contract changes |
 | Change Web screen | `internal/web/server.go` | affected template under `templates/`, then `static/app.css` or local `static/app.js`; called application service only when behavior changes |
+| Change locale or theme | `internal/web/i18n.go` | affected templates, semantic variables in `static/app.css`, then Web locale/theme tests |
 | Change deployment config | `internal/config/` | `.env.example`, README deployment section |
 | Change architecture | `AGENTS.md` | `docs/ARCHITECTURE.md`, then affected code |
 | Change Git/release workflow | `docs/DEVELOPMENT_WORKFLOW.md` | `AGENTS.md`, delivery architecture, GitHub workflows |
