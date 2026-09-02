@@ -323,9 +323,13 @@ dev baseline
     |
     +-- dev-<scope> | feature/<scope> | fix/<scope>
                     |
-                    +-- checkpoint commits + tests + secret scan
+                    +-- rapid edits + narrow tests + live local instance
                     |
-                    +-- squash PR --> uat (protected)
+                    +-- checkpoint commits + work-branch secret scan
+                    |
+                    +-- user marks UAT checkpoint
+                    |
+                    +-- full validation + squash PR --> uat (protected)
                                          |
                                   package + smoke test
                                          |
@@ -334,7 +338,7 @@ dev baseline
                                   package + GitHub release
 ```
 
-`dev`, `uat`, and `prod` are permanent. Work branches are disposable; permanent branches are not. GitHub uses `prod` as the repository default branch so public visitors see published production history, while `dev` remains the baseline for new development work. UAT and production builds share one workflow and differ only by GitHub environment, retention, and the final production-release step. This prevents a separately maintained production build path from drifting away from the artifact tested in UAT.
+`dev`, `uat`, and `prod` are permanent. Work branches are disposable; permanent branches are not. GitHub uses `prod` as the repository default branch so public visitors see published production history, while `dev` remains the baseline for new development work. During dense product iteration, the local development instance follows the active work branch: each accepted edit is smoke-tested at the narrowest useful layer and reflected locally without invoking the full release suite. Work-branch pushes retain secret scanning, but UAT promotion begins only when the user identifies the accumulated batch as a checkpoint. UAT and production builds share one workflow and differ only by GitHub environment, retention, and the final production-release step. This prevents a separately maintained production build path from drifting away from the artifact tested in UAT.
 
 Delivery stops after every UAT build and artifact verification. Production promotion is a separate user-authorized action tied to one identified UAT commit and its evidence; workflow success alone never grants that authorization. Cross-platform packaging uses `.zip` for Windows and `.tar.gz` for Linux and macOS.
 

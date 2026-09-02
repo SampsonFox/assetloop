@@ -25,7 +25,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `internal/application/` | Authentication, catalog, lifecycle/import use cases, validation, and inward ports |
 | `internal/domain/` | Pure catalog/lifecycle types plus exact minor-unit money and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
-| `.github/workflows/ci.yml` | Pull-request and branch validation, including full-history secret scanning |
+| `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation |
 | `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |
 
 ## Infrastructure adapters

@@ -48,9 +48,25 @@ fix/sqlite-upgrade-lock
 release/core-lifecycle
 ```
 
+## Rapid local iteration
+
+When the user declares a dense modification phase, keep the related work on one active work branch instead of creating and promoting a branch for every comment.
+
+For each requested adjustment:
+
+1. implement it directly on the active work branch;
+2. add or update its narrowest regression test;
+3. run only that affected test or package plus a focused smoke check;
+4. rebuild or restart the local development instance so the change is immediately visible;
+5. commit and push coherent restore points without opening a UAT pull request.
+
+A work-branch push runs `secret-scan` only. The full Go suite, PostgreSQL compatibility run, cumulative full-element scenario, sqlc verification, vet, cross-platform packaging, and packaged-artifact smoke test are deferred until the user explicitly says the current batch is a UAT checkpoint.
+
+Passing a narrow test, finishing one bug fix, or pushing a checkpoint does not imply that development is finished. Only the user's explicit UAT-checkpoint instruction starts promotion.
+
 ## Promotion
 
-1. Run formatting, sqlc generation, tests, vet, secret scanning, the full-element scenario, and the relevant local smoke test.
+1. After the user explicitly identifies the accumulated batch as a UAT checkpoint, run formatting, sqlc generation, tests, vet, secret scanning, the full-element scenario, and the relevant local smoke test.
 2. Push the work branch and open a pull request to `uat`.
 3. Squash merge after CI passes so UAT receives one coherent change.
 4. Delete the short-lived branch.

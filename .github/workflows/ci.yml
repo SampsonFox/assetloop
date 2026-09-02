@@ -29,6 +29,7 @@ jobs:
           "${RUNNER_TEMP}/gitleaks" git . --redact --no-banner
 
   test:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/uat' || github.ref == 'refs/heads/prod'
     runs-on: ubuntu-latest
     services:
       postgres:
