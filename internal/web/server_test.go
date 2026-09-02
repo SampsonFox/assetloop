@@ -41,6 +41,9 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 	if dashboard.Code != http.StatusOK || !strings.Contains(dashboard.Body.String(), "owner") {
 		t.Fatalf("authenticated dashboard: status=%d body=%s", dashboard.Code, dashboard.Body.String())
 	}
+	if !strings.Contains(dashboard.Body.String(), `<a class="brand" href="/overview">`) || strings.Contains(dashboard.Body.String(), `>概览</a>`) {
+		t.Fatalf("brand must be the sole overview entry: %s", dashboard.Body.String())
+	}
 	if dashboard.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("security headers were not applied")
 	}

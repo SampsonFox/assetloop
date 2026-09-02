@@ -9,11 +9,10 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/">AssetLoop <span>物迹</span></a>
+    <a class="brand" href="/overview">AssetLoop <span>物迹</span></a>
     {{if .Principal}}
     <nav aria-label="主导航">
 	  <a href="/">物品</a>
-	  <a href="/overview">概览</a>
       <a href="/imports">待确认导入</a>
 	  {{if ne .Principal.Role "viewer"}}<a href="/admin/catalog">管理</a>{{end}}
       {{if eq .Principal.Role "owner"}}<a href="/admin/members">成员</a>{{end}}
