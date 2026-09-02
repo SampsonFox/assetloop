@@ -87,13 +87,25 @@ jobs:
           mkdir -p "dist/${package}"
           go build -trimpath -ldflags="-s -w" -o "dist/${package}/assetloop${{ matrix.extension }}" ./cmd/assetloop
           cp README.md .env.example "dist/${package}/"
-          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
-          (cd dist && sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256")
+          if [ "${GOOS}" = "windows" ]; then
+            (cd dist && zip -qr "${package}.zip" "${package}")
+            unzip -Z1 "dist/${package}.zip" > "${RUNNER_TEMP}/archive-contents.txt"
+            grep -Fxq "${package}/assetloop.exe" "${RUNNER_TEMP}/archive-contents.txt"
+            (cd dist && sha256sum "${package}.zip" > "${package}.zip.sha256")
+            test ! -e "dist/${package}.tar.gz"
+          else
+            tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+            tar -tzf "dist/${package}.tar.gz" > "${RUNNER_TEMP}/archive-contents.txt"
+            grep -Fxq "${package}/assetloop" "${RUNNER_TEMP}/archive-contents.txt"
+            (cd dist && sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256")
+            test ! -e "dist/${package}.zip"
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: assetloop-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
             dist/*.tar.gz
+            dist/*.zip
             dist/*.sha256
           if-no-files-found: error
           retention-days: 30

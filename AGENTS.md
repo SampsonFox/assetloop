@@ -113,8 +113,10 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 - Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`. Production promotion MUST use a short-lived `release/<scope>` branch based on the current `prod`.
 - Commit and push each independently verified checkpoint. Do not accumulate unrelated work in one commit.
 - Promote tested work to `uat` through a squash-merged pull request, then delete the short-lived branch and fast-forward permanent `dev` to the accepted `uat` baseline.
+- A successful UAT build is only an acceptance candidate. The agent MUST stop after UAT verification and MUST NOT create a production release branch or pull request until the user explicitly authorizes that specific UAT result for production.
 - Promote only accepted UAT content to `prod`: reconcile the tested UAT tree into a `release/<scope>` branch based on current `prod`, verify that its application tree matches the accepted UAT commit except explicit release metadata, and squash-merge its pull request to `prod`. `uat` and `prod` MUST reject direct pushes, force pushes, deletion, and non-linear history.
 - `uat` and `prod` MUST use the same packaging workflow with separate GitHub environments. Production publication MUST consume artifacts produced and smoke-tested by that workflow.
+- Windows release archives MUST be `.zip`; Linux and macOS release archives MUST be `.tar.gz`.
 - A production defect follows `fix/<scope> -> uat -> prod`; it MUST NOT bypass UAT validation.
 
 ### 14. Grow regression coverage with every feature

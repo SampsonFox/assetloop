@@ -22,6 +22,7 @@ INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES 
 
 -- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
        v.name AS variant_name, a.display_name, a.serial_number, a.color,
        a.purchase_channel, a.notes, a.created_at
@@ -32,30 +33,50 @@ JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = ? AND a.id = ?;
 
 -- name: CreateCategory :exec
-INSERT INTO item_categories (id, tenant_id, name, created_at)
-VALUES (?, ?, ?, ?);
+INSERT INTO item_categories (id, tenant_id, name, icon_key, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: UpdateCategory :execrows
+UPDATE item_categories
+SET name = ?, icon_key = ?
+WHERE tenant_id = ? AND id = ?;
 
 -- name: CreateModel :exec
 INSERT INTO product_models (id, tenant_id, category_id, name, created_at)
 VALUES (?, ?, ?, ?, ?);
 
+-- name: UpdateModel :execrows
+UPDATE product_models
+SET category_id = ?, name = ?
+WHERE tenant_id = ? AND id = ?;
+
 -- name: CreateVariant :exec
 INSERT INTO product_variants (id, tenant_id, model_id, name, created_at)
 VALUES (?, ?, ?, ?, ?);
+
+-- name: UpdateVariant :execrows
+UPDATE product_variants
+SET model_id = ?, name = ?
+WHERE tenant_id = ? AND id = ?;
 
 -- name: CreateCatalogAsset :exec
 INSERT INTO assets
     (id, tenant_id, variant_id, display_name, serial_number, color, purchase_channel, notes, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+-- name: UpdateCatalogAsset :execrows
+UPDATE assets
+SET variant_id = ?, display_name = ?, serial_number = ?, color = ?, purchase_channel = ?, notes = ?
+WHERE tenant_id = ? AND id = ?;
+
 -- name: ListCategories :many
-SELECT id, tenant_id, name, created_at
+SELECT id, tenant_id, name, icon_key, created_at
 FROM item_categories
 WHERE tenant_id = ?
 ORDER BY name, id;
 
 -- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
 FROM product_models m
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = ?
@@ -63,7 +84,7 @@ ORDER BY c.name, m.name, m.id;
 
 -- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
-       v.model_id, m.name AS model_name, v.name, v.created_at
+       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.created_at
 FROM product_variants v
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
@@ -72,6 +93,7 @@ ORDER BY c.name, m.name, v.name, v.id;
 
 -- name: ListAssets :many
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
        v.name AS variant_name, a.display_name, a.serial_number, a.color,
        a.purchase_channel, a.notes, a.created_at

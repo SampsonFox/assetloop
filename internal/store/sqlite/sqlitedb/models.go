@@ -75,6 +75,7 @@ type ItemCategory struct {
 	TenantID  string
 	Name      string
 	CreatedAt string
+	IconKey   string
 }
 
 type ProductModel struct {

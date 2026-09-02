@@ -1,0 +1,33 @@
+{{define "content"}}
+<div class="page-heading">
+  <div><p class="eyebrow">{{.Principal.TenantName}}</p><h1>我的物品</h1><p class="muted">{{len .Assets}} 件具体物品</p></div>
+  <div class="heading-actions">
+    <div class="view-switcher" aria-label="显示方式"><a href="/?view=list" class="{{if eq .AssetView "list"}}is-active{{end}}">列表</a><a href="/?view=grid" class="{{if eq .AssetView "grid"}}is-active{{end}}">卡片</a></div>
+    {{if .CanManageCatalog}}<button class="button auto" type="button" data-dialog-open="asset-drawer" data-title="录入物品" data-action="/assets">录入物品</button>{{end}}
+  </div>
+</div>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+
+{{if .Assets}}
+  {{if eq .AssetView "grid"}}
+  <section class="asset-grid" aria-label="物品卡片">{{range .Assets}}
+    <article class="asset-card"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><div class="asset-card-body"><p class="eyebrow">{{.Category}} · {{.Model}} · {{.Variant}}</p><h2><a href="/assets/{{.ID}}">{{.DisplayName}}</a></h2><p class="muted">{{if .SerialNumber}}序列号 {{.SerialNumber}}{{else}}尚未记录序列号{{end}}</p></div>{{if $.CanManageCatalog}}<button class="secondary auto" type="button" data-dialog-open="asset-drawer" data-title="编辑物品" data-action="/assets/{{.ID}}" data-variant-id="{{.VariantID}}" data-display-name="{{.DisplayName}}" data-serial-number="{{.SerialNumber}}" data-color="{{.Color}}" data-purchase-channel="{{.PurchaseChannel}}" data-notes="{{.Notes}}">编辑</button>{{end}}</article>
+  {{end}}</section>
+  {{else}}
+  <section class="card table-card"><table class="asset-table"><thead><tr><th>物品</th><th>类别 / 型号 / 规格</th><th>序列号</th><th>颜色</th><th>渠道</th>{{if .CanManageCatalog}}<th></th>{{end}}</tr></thead><tbody>{{range .Assets}}<tr>
+    <td><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td><td>{{.Category}} / {{.Model}} / {{.Variant}}</td><td>{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td><td>{{if .Color}}{{.Color}}{{else}}—{{end}}</td><td>{{if .PurchaseChannel}}{{.PurchaseChannel}}{{else}}—{{end}}</td>
+    {{if $.CanManageCatalog}}<td><button class="secondary auto" type="button" data-dialog-open="asset-drawer" data-title="编辑物品" data-action="/assets/{{.ID}}" data-variant-id="{{.VariantID}}" data-display-name="{{.DisplayName}}" data-serial-number="{{.SerialNumber}}" data-color="{{.Color}}" data-purchase-channel="{{.PurchaseChannel}}" data-notes="{{.Notes}}">编辑</button></td>{{end}}
+  </tr>{{end}}</tbody></table></section>
+  {{end}}
+{{else}}
+<section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>还没有物品</h2>
+  {{if .CanManageCatalog}}{{if .Variants}}<p class="muted">录入第一件具体物品，之后就可以添加买入、维修和卖出记录。</p><button class="button auto" type="button" data-dialog-open="asset-drawer" data-title="录入第一件物品" data-action="/assets">录入第一个物品</button>{{else}}<p class="muted">先在管理页建立类别、型号和价格规格，再录入第一件物品。</p><a class="button" href="/admin/catalog">前往物品配置</a>{{end}}{{else}}<p class="muted">当前还没有可查看的物品。</p>{{end}}
+</section>
+{{end}}
+
+{{if .CanManageCatalog}}<dialog class="drawer" id="asset-drawer" aria-labelledby="asset-drawer-title"><form id="asset-form" class="drawer-panel stack" action="/assets" method="post">
+  <header class="drawer-heading"><div><p class="eyebrow">具体物品</p><h2 id="asset-drawer-title" data-dialog-title>录入物品</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="关闭">×</button></header>
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>所属规格<select name="variant_id" required><option value="">请选择</option>{{range .Variants}}<option value="{{.ID}}">{{.CategoryName}} / {{.ModelName}} / {{.Name}}</option>{{end}}</select></label><label>显示名称<input name="display_name" required maxlength="200" placeholder="我的主力手机"></label><label>序列号<input name="serial_number" maxlength="200"></label><label>颜色<input name="color" maxlength="120"></label><label>购买渠道<input name="purchase_channel" maxlength="160"></label><label>备注<textarea name="notes" maxlength="2000" rows="4"></textarea></label>
+  <div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>取消</button><button class="auto" type="submit">保存</button></div>
+</form></dialog>{{end}}
+{{end}}

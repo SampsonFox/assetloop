@@ -66,6 +66,13 @@ func runUpgradeTest(t *testing.T, cfg config.Database) {
 	if serialNumber != "" || color != "" || purchaseChannel != "" || notes != "" {
 		t.Fatalf("new catalog details should have safe empty defaults: serial=%q color=%q channel=%q notes=%q", serialNumber, color, purchaseChannel, notes)
 	}
+	var iconKey string
+	if err := db.QueryRow("SELECT icon_key FROM item_categories WHERE id = "+upgradePlaceholder(cfg.Driver), "33333333-3333-4333-8333-333333333333").Scan(&iconKey); err != nil {
+		t.Fatalf("read upgraded category icon: %v", err)
+	}
+	if iconKey != "package" {
+		t.Fatalf("existing category should receive safe default icon, got %q", iconKey)
+	}
 	var users int
 	if err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&users); err != nil {
 		t.Fatalf("new auth schema is unavailable after upgrade: %v", err)
