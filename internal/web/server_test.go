@@ -371,6 +371,11 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if len(match) != 2 {
 		t.Fatalf("asset detail link not found: %s", catalog.Body.String())
 	}
+	for _, want := range []string{"累计成本", "尚未录入", "新增事件", `href="/assets/` + match[1] + `#add-event"`} {
+		if !strings.Contains(catalog.Body.String(), want) {
+			t.Fatalf("asset list missing lifecycle summary or entry %q: %s", want, catalog.Body.String())
+		}
+	}
 	updates := []struct {
 		path string
 		form url.Values
@@ -408,7 +413,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录"} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `id="add-event"`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -474,6 +479,10 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
 	}
+	assetList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
+	if assetList.Code != http.StatusOK || !strings.Contains(assetList.Body.String(), "7270.00 CNY") {
+		t.Fatalf("asset list should show base-currency lifecycle cost: status=%d body=%s", assetList.Code, assetList.Body.String())
+	}
 	if strings.Contains(detail.Body.String(), "2026-07-31") {
 		t.Fatalf("FX rate date shifted to the prior day: %s", detail.Body.String())
 	}
@@ -500,6 +509,9 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}
 	if strings.Contains(visible.Body.String(), `id="asset-form"`) || strings.Contains(visible.Body.String(), `href="/admin/catalog"`) {
 		t.Fatalf("viewer should not receive catalog management controls: %s", visible.Body.String())
+	}
+	if strings.Contains(visible.Body.String(), `#add-event`) {
+		t.Fatalf("viewer should not receive lifecycle write controls: %s", visible.Body.String())
 	}
 	if !strings.Contains(visible.Body.String(), `href="/imports"`) || strings.Contains(visible.Body.String(), `href="/admin/members"`) {
 		t.Fatalf("viewer account menu has incorrect entries: %s", visible.Body.String())

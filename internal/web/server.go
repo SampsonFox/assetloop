@@ -64,6 +64,7 @@ type pageData struct {
 	Models             []domain.ProductModel
 	Variants           []domain.ProductVariant
 	Assets             []domain.Asset
+	AssetSummaries     map[string]domain.AssetSummary
 	Asset              *domain.Asset
 	CanManageCatalog   bool
 	Events             []domain.AssetEvent
@@ -635,6 +636,16 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	summaries := make(map[string]domain.AssetSummary, len(snapshot.Assets))
+	for _, asset := range snapshot.Assets {
+		// ponytail: use the existing lifecycle query until list size justifies a batched summary port.
+		_, summary, timelineErr := s.lifecycle.Timeline(r.Context(), principal, asset.ID)
+		if timelineErr != nil {
+			s.renderError(w, r, http.StatusInternalServerError, timelineErr)
+			return
+		}
+		summaries[asset.ID] = summary
+	}
 	view := assetView(r)
 	if requested := strings.TrimSpace(r.URL.Query().Get("view")); requested == "list" || requested == "grid" {
 		view = requested
@@ -643,7 +654,8 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 	s.render(w, status, "assets", pageData{
 		Title: textFor(principal.Locale, "title.assets"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
-		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), AssetView: view,
+		Assets: snapshot.Assets, AssetSummaries: summaries, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle), AssetView: view,
 		CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
 	})
 }

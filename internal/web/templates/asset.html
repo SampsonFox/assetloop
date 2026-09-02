@@ -38,7 +38,7 @@
 </section>
 
 {{if .CanManageLifecycle}}
-<section class="card section-gap">
+<section class="card section-gap" id="add-event">
   <h2>{{t $s "asset.add_event"}}</h2>
   {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
   <form class="form-grid" action="/assets/{{.Asset.ID}}/events" method="post">
