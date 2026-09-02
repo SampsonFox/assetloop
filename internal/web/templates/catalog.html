@@ -1,68 +1,19 @@
 {{define "content"}}
-<div class="page-heading">
-  <div><p class="eyebrow">{{.Principal.TenantName}}</p><h1>物品目录</h1></div>
-  <p class="muted">{{len .Categories}} 类别 · {{len .Models}} 型号 · {{len .Variants}} 规格 · {{len .Assets}} 件物品</p>
-</div>
-{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+<div class="page-heading"><div><p class="eyebrow">管理</p><h1>物品配置</h1><p class="muted">类别 → 型号 → 价格规格；具体物品回到物品列表录入。</p></div><a href="/">返回物品列表</a></div>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
 
-<section class="card table-card section-gap">
-  <h2>具体物品</h2>
-  {{if .Assets}}
-  <table>
-    <thead><tr><th>名称</th><th>类别 / 型号 / 规格</th><th>序列号</th><th>颜色</th><th>渠道</th></tr></thead>
-    <tbody>{{range .Assets}}<tr>
-      <td><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td>
-      <td>{{.Category}} / {{.Model}} / {{.Variant}}</td>
-      <td>{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td>
-      <td>{{if .Color}}{{.Color}}{{else}}—{{end}}</td>
-      <td>{{if .PurchaseChannel}}{{.PurchaseChannel}}{{else}}—{{end}}</td>
-    </tr>{{end}}</tbody>
-  </table>
-  {{else}}<p class="muted">还没有具体物品。先建立类别、型号和价格规格。</p>{{end}}
-</section>
+<section class="config-section"><div class="section-heading"><div><h2>类别</h2><p class="muted">类别图标会显示在该类别下的具体物品上。</p></div><button class="button auto" type="button" data-dialog-open="category-drawer" data-title="新建类别" data-action="/admin/catalog/categories">新建类别</button></div>
+{{if .Categories}}<div class="config-list">{{range .Categories}}<article class="config-row"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.IconKey}}"></use></svg><strong>{{.Name}}</strong><button class="secondary auto" type="button" data-dialog-open="category-drawer" data-title="编辑类别" data-action="/admin/catalog/categories/{{.ID}}" data-name="{{.Name}}" data-icon-key="{{.IconKey}}">编辑</button></article>{{end}}</div>{{else}}<div class="empty-inline">暂无类别。新建一个类别开始配置。</div>{{end}}</section>
 
-<section class="grid section-gap">
-  <article class="card"><h2>类别</h2>{{if .Categories}}<ul class="plain-list">{{range .Categories}}<li>{{.Name}}</li>{{end}}</ul>{{else}}<p class="muted">暂无</p>{{end}}</article>
-  <article class="card"><h2>型号</h2>{{if .Models}}<ul class="plain-list">{{range .Models}}<li><span class="muted">{{.CategoryName}} /</span> {{.Name}}</li>{{end}}</ul>{{else}}<p class="muted">暂无</p>{{end}}</article>
-  <article class="card"><h2>价格规格</h2>{{if .Variants}}<ul class="plain-list">{{range .Variants}}<li><span class="muted">{{.ModelName}} /</span> {{.Name}}</li>{{end}}</ul>{{else}}<p class="muted">暂无</p>{{end}}</article>
-</section>
+<section class="config-section"><div class="section-heading"><div><h2>型号</h2><p class="muted">例如 iPhone 17 Pro。</p></div><button class="button auto" type="button" data-dialog-open="model-drawer" data-title="新建型号" data-action="/admin/catalog/models" {{if not .Categories}}disabled{{end}}>新建型号</button></div>
+{{if .Models}}<div class="config-list">{{range .Models}}<article class="config-row"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><span><span class="muted">{{.CategoryName}} /</span> <strong>{{.Name}}</strong></span><button class="secondary auto" type="button" data-dialog-open="model-drawer" data-title="编辑型号" data-action="/admin/catalog/models/{{.ID}}" data-category-id="{{.CategoryID}}" data-name="{{.Name}}">编辑</button></article>{{end}}</div>{{else}}<div class="empty-inline">暂无型号。</div>{{end}}</section>
 
-{{if .CanManageCatalog}}
-<section class="section-gap">
-  <h2>维护目录</h2>
-  <div class="form-grid">
-    <form class="card stack" action="/catalog/categories" method="post">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <h2>1. 新建类别</h2>
-      <label>类别名称<input name="name" required maxlength="120" placeholder="手机"></label>
-      <button type="submit">创建类别</button>
-    </form>
-    <form class="card stack" action="/catalog/models" method="post">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <h2>2. 新建型号</h2>
-      <label>所属类别<select name="category_id" required><option value="">请选择</option>{{range .Categories}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
-      <label>型号名称<input name="name" required maxlength="160" placeholder="iPhone 17 Pro"></label>
-      <button type="submit" {{if not .Categories}}disabled{{end}}>创建型号</button>
-    </form>
-    <form class="card stack" action="/catalog/variants" method="post">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <h2>3. 新建价格规格</h2>
-      <label>所属型号<select name="model_id" required><option value="">请选择</option>{{range .Models}}<option value="{{.ID}}">{{.CategoryName}} / {{.Name}}</option>{{end}}</select></label>
-      <label>规格名称<input name="name" required maxlength="160" placeholder="256GB"></label>
-      <button type="submit" {{if not .Models}}disabled{{end}}>创建规格</button>
-    </form>
-    <form class="card stack" action="/catalog/assets" method="post">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <h2>4. 新建具体物品</h2>
-      <label>所属规格<select name="variant_id" required><option value="">请选择</option>{{range .Variants}}<option value="{{.ID}}">{{.CategoryName}} / {{.ModelName}} / {{.Name}}</option>{{end}}</select></label>
-      <label>显示名称<input name="display_name" required maxlength="200" placeholder="我的主力手机"></label>
-      <label>序列号<input name="serial_number" maxlength="200"></label>
-      <label>颜色<input name="color" maxlength="120"></label>
-      <label>购买渠道<input name="purchase_channel" maxlength="160"></label>
-      <label>备注<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
-      <button type="submit" {{if not .Variants}}disabled{{end}}>创建物品</button>
-    </form>
-  </div>
-</section>
-{{end}}
+<section class="config-section"><div class="section-heading"><div><h2>价格规格</h2><p class="muted">不同容量等影响二手价格的规格必须分开。</p></div><button class="button auto" type="button" data-dialog-open="variant-drawer" data-title="新建价格规格" data-action="/admin/catalog/variants" {{if not .Models}}disabled{{end}}>新建规格</button></div>
+{{if .Variants}}<div class="config-list">{{range .Variants}}<article class="config-row"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><span><span class="muted">{{.CategoryName}} / {{.ModelName}} /</span> <strong>{{.Name}}</strong></span><button class="secondary auto" type="button" data-dialog-open="variant-drawer" data-title="编辑价格规格" data-action="/admin/catalog/variants/{{.ID}}" data-model-id="{{.ModelID}}" data-name="{{.Name}}">编辑</button></article>{{end}}</div>{{else}}<div class="empty-inline">暂无价格规格。</div>{{end}}</section>
+
+<dialog class="drawer" id="category-drawer" aria-labelledby="category-drawer-title"><form id="category-form" class="drawer-panel stack" action="/admin/catalog/categories" method="post"><header class="drawer-heading"><div><p class="eyebrow">物品配置</p><h2 id="category-drawer-title" data-dialog-title>新建类别</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="关闭">×</button></header><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>类别名称<input name="name" required maxlength="120" placeholder="手机"></label><label>图标<select name="icon_key" required>{{range .CategoryIcons}}<option value="{{.Key}}">{{.Label}}</option>{{end}}</select></label><div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>取消</button><button class="auto" type="submit">保存</button></div></form></dialog>
+
+<dialog class="drawer" id="model-drawer" aria-labelledby="model-drawer-title"><form id="model-form" class="drawer-panel stack" action="/admin/catalog/models" method="post"><header class="drawer-heading"><div><p class="eyebrow">物品配置</p><h2 id="model-drawer-title" data-dialog-title>新建型号</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="关闭">×</button></header><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>所属类别<select name="category_id" required><option value="">请选择</option>{{range .Categories}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label><label>型号名称<input name="name" required maxlength="160" placeholder="iPhone 17 Pro"></label><div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>取消</button><button class="auto" type="submit">保存</button></div></form></dialog>
+
+<dialog class="drawer" id="variant-drawer" aria-labelledby="variant-drawer-title"><form id="variant-form" class="drawer-panel stack" action="/admin/catalog/variants" method="post"><header class="drawer-heading"><div><p class="eyebrow">物品配置</p><h2 id="variant-drawer-title" data-dialog-title>新建价格规格</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="关闭">×</button></header><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>所属型号<select name="model_id" required><option value="">请选择</option>{{range .Models}}<option value="{{.ID}}">{{.CategoryName}} / {{.Name}}</option>{{end}}</select></label><label>规格名称<input name="name" required maxlength="160" placeholder="256GB"></label><div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>取消</button><button class="auto" type="submit">保存</button></div></form></dialog>
 {{end}}

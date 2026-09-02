@@ -160,7 +160,7 @@ func runCatalog(t *testing.T, store Store) {
 		t.Fatalf("get catalog owner: %v", err)
 	}
 	service := application.NewCatalogService(store)
-	category, err := service.CreateCategory(ctx, owner, "Phone")
+	category, err := service.CreateCategory(ctx, owner, application.CreateCategory{Name: "Phone", IconKey: "smartphone"})
 	if err != nil {
 		t.Fatalf("create category: %v", err)
 	}
@@ -185,6 +185,19 @@ func runCatalog(t *testing.T, store Store) {
 	if asset.Category != "Phone" || asset.Model != "Example Pro" || asset.Variant != "256GB" || asset.SerialNumber != "SERIAL-001" {
 		t.Fatalf("catalog asset was not hydrated: %+v", asset)
 	}
+	if _, err := service.UpdateCategory(ctx, owner, application.UpdateCategory{ID: category.ID, Name: "Phones", IconKey: "tablet"}); err != nil {
+		t.Fatalf("update category: %v", err)
+	}
+	if _, err := service.UpdateModel(ctx, owner, application.UpdateModel{ID: model.ID, CategoryID: category.ID, Name: "Example Ultra"}); err != nil {
+		t.Fatalf("update model: %v", err)
+	}
+	if _, err := service.UpdateVariant(ctx, owner, application.UpdateVariant{ID: variant256.ID, ModelID: model.ID, Name: "256 GB"}); err != nil {
+		t.Fatalf("update variant: %v", err)
+	}
+	updatedAsset, err := service.UpdateAsset(ctx, owner, application.UpdateCatalogAsset{ID: asset.ID, VariantID: variant256.ID, DisplayName: "Updated Phone", SerialNumber: "SERIAL-001", Color: "Blue", PurchaseChannel: "Retail", Notes: "Updated"})
+	if err != nil || updatedAsset.DisplayName != "Updated Phone" || updatedAsset.CategoryIcon != "tablet" || updatedAsset.Category != "Phones" || updatedAsset.Model != "Example Ultra" || updatedAsset.Variant != "256 GB" {
+		t.Fatalf("updated catalog hierarchy mismatch: asset=%+v err=%v", updatedAsset, err)
+	}
 	snapshot, err := service.Snapshot(ctx, owner)
 	if err != nil {
 		t.Fatalf("catalog snapshot: %v", err)
@@ -194,7 +207,7 @@ func runCatalog(t *testing.T, store Store) {
 	}
 	viewer := owner
 	viewer.Role = application.RoleViewer
-	if _, err := service.CreateCategory(ctx, viewer, "Forbidden"); !errors.Is(err, application.ErrForbidden) {
+	if _, err := service.CreateCategory(ctx, viewer, application.CreateCategory{Name: "Forbidden"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer catalog write should be forbidden, got %v", err)
 	}
 	if _, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: "99999999-9999-4999-8999-999999999999", Name: "Cross tenant"}); err == nil {
@@ -216,6 +229,7 @@ func runAsset(t *testing.T, store application.Store) {
 	asset := domain.Asset{
 		ID: "11111111-1111-4111-8111-111111111111", TenantID: "22222222-2222-4222-8222-222222222222",
 		CategoryID: "33333333-3333-4333-8333-333333333333", Category: "Phone",
+		CategoryIcon: "package",
 		ModelID: "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
 		VariantID: "55555555-5555-4555-8555-555555555555", Variant: "256GB",
 		DisplayName: "My Example Phone", CreatedAt: time.Date(2026, 9, 1, 1, 2, 3, 0, time.UTC),

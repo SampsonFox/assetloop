@@ -78,6 +78,7 @@ type ItemCategory struct {
 	TenantID  uuid.UUID
 	Name      string
 	CreatedAt time.Time
+	IconKey   string
 }
 
 type ProductModel struct {

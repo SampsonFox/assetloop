@@ -5,7 +5,7 @@
   <p class="muted">从类别、型号和价格规格建立具体物品；下一步会在物品下记录完整生命周期。</p>
 </section>
 <section class="grid">
-  <article class="card"><span class="metric">{{.AssetCount}}</span><h2>具体物品</h2><p><a href="/catalog">维护分类、价格规格与物品</a></p></article>
+	<article class="card"><span class="metric">{{.AssetCount}}</span><h2>具体物品</h2><p><a href="/">查看物品列表</a></p></article>
   <article class="card"><span class="metric">{{money .TotalExpenseMinor .BaseCurrency}}</span><h2>累计支出</h2><p>有效买入与维修记录。</p></article>
   <article class="card"><span class="metric">{{money .TotalNetMinor .BaseCurrency}}</span><h2>净现金流</h2><p>收入 {{money .TotalIncomeMinor .BaseCurrency}}；全部统计统一使用本位币。</p></article>
 </section>
