@@ -92,10 +92,13 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	session := responseCookie(t, setup, sessionCookie)
 
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{"我的物品", "还没有物品", "前往物品配置", `id="asset-form"`} {
+	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一件物品"`, "当前还没有价格规格", `id="asset-form"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset-first empty state missing %q: status=%d body=%s", want, home.Code, home.Body.String())
 		}
+	}
+	if strings.Contains(home.Body.String(), `>前往物品配置</a>`) {
+		t.Fatalf("asset-list empty state must not replace the primary create action with catalog configuration: %s", home.Body.String())
 	}
 	if strings.Count(home.Body.String(), `id="asset-form"`) != 1 {
 		t.Fatalf("create/edit must share one asset form: %s", home.Body.String())
