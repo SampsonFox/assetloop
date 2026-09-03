@@ -203,6 +203,15 @@ func TestCatalogVariantPanelBorderIsContained(t *testing.T) {
 	}
 }
 
+func TestAssetPageMobileActionsStayHorizontalAndLeftAligned(t *testing.T) {
+	handler := newTestHandler(t)
+	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
+	want := `.heading-actions { align-self:stretch; align-items:center; justify-content:flex-start; flex-wrap:wrap; }`
+	if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
+		t.Fatalf("mobile asset heading actions must stay compact and left aligned: status=%d body=%s", stylesheet.Code, stylesheet.Body.String())
+	}
+}
+
 func TestFXFieldsOnlyExpandForForeignCurrency(t *testing.T) {
 	handler := newTestHandler(t)
 	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
