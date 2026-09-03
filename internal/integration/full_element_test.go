@@ -122,27 +122,22 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	}
 
 	lifecycle := application.NewLifecycleService(store)
-	purchaseDraft, err := lifecycle.CreateDraft(ctx, owner, application.CreateImportDraft{
+	purchase, err := lifecycle.Record(ctx, owner, application.RecordEvent{
 		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 100_000, Currency: "USD",
 		OccurredAt: time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC), Source: "ai-harness",
-		ExternalReference: "ORDER-FULL-001", Notes: "foreign purchase", RawText: "USD 1000.00",
-	})
-	if err != nil {
-		t.Fatalf("create purchase draft: %v", err)
-	}
-	purchase, err := lifecycle.ConfirmDraft(ctx, owner, purchaseDraft.ID, application.ConfirmImport{
+		ExternalReference: "ORDER-FULL-001", Notes: "user-confirmed foreign purchase",
 		FXRateScaled: 712_000_000, FXRateDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
 		FXRateSource: "full-element-fixture", FXConfirmed: true,
 	})
 	if err != nil {
-		t.Fatalf("confirm foreign purchase draft: %v", err)
+		t.Fatalf("record Agent-confirmed foreign purchase: %v", err)
 	}
 	if purchase.BaseAmountMinor != -712_000 || purchase.FX == nil || purchase.FX.OriginalAmountMinor != 100_000 || purchase.FX.OriginalCurrency != "USD" {
 		t.Fatalf("purchase money evidence mismatch: %+v", purchase)
 	}
 	_, locked, err := lifecycle.BaseCurrency(ctx, owner)
 	if err != nil || !locked {
-		t.Fatalf("base currency should lock after confirmed purchase: locked=%v err=%v", locked, err)
+		t.Fatalf("base currency should lock after Agent-confirmed purchase: locked=%v err=%v", locked, err)
 	}
 	repair, err := lifecycle.Record(ctx, owner, application.RecordEvent{
 		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: 20_000, Currency: "CNY",

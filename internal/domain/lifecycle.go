@@ -55,21 +55,3 @@ type AssetSummary struct {
 	NetCashflowMinor int64
 	Status           string
 }
-
-type ImportDraft struct {
-	ID                     string
-	TenantID               string
-	AssetID                string
-	EventType              AssetEventType
-	AmountMinor            int64
-	Currency               string
-	OccurredAt             time.Time
-	Source                 string
-	ExternalReference      string
-	Notes                  string
-	RawText                string
-	Status                 string
-	CreatedByUserID        string
-	CreatedAt              time.Time
-	ConfirmedTransactionID string
-}

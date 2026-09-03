@@ -19,10 +19,10 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport; asset-list-first SSR UI, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, lifecycle, FX confirmation, and import review screens |
+| `internal/web/` | HTTP transport; asset-list-first SSR UI, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, lifecycle, and FX confirmation screens |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
-| `internal/application/` | Authentication, catalog, lifecycle/import use cases, validation, and inward ports |
+| `internal/application/` | Authentication, catalog, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
 | `internal/domain/` | Pure catalog/lifecycle types plus exact minor-unit money and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
 | `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation |
@@ -87,7 +87,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 
 ```text
 Screenshot import:
-AI Harness -> MCP -> Import use case -> confirmation -> Store + BlobStore
+User confirmation in AI Harness -> semantic MCP write -> lifecycle use case -> Store + BlobStore
 
 Manual Web edit:
 Browser -> Web handler -> application use case -> Store
@@ -99,6 +99,9 @@ Scheduler/CLI -> refresh use case -> MarketDataProvider
 Attachment read:
 Web/MCP -> attachment use case -> attachment metadata Store
         -> store registry by store_id -> BlobStore.Open(object_key)
+
+Correction after a write:
+Web/MCP -> append-only correction use case -> void event + replacement event -> Store
 ```
 
 ## Maintenance rule

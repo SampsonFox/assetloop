@@ -89,8 +89,9 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 ### 10. Keep the AI outside the application core
 
 - The application MUST NOT require a model API key for its core operation.
-- The AI Harness owns screenshot understanding and conversation.
-- The application owns validation, confirmation, persistence, valuation, and audit history.
+- The AI Harness owns screenshot understanding and MUST confirm extracted fields with the user before invoking a write MCP tool.
+- A semantic MCP mutation is a confirmed user command; the application MUST validate authorization, inputs, invariants, and transaction boundaries, then persist it without a second pending-review step.
+- Later corrections through Web or MCP MUST use the same append-only lifecycle correction use case.
 
 ### 11. Test every compatibility boundary
 

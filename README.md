@@ -33,7 +33,7 @@ The default SQLite database is `./data/assetloop.db`; health is available at `ht
 
 After setup, `/` opens the concrete asset list. It supports list/card views, a deliberate empty state, and one shared drawer for creating or editing an asset. Owner and Editor users maintain categories, models, price-distinguishing variants such as 256GB/512GB, and category icons at `/admin/catalog`; Viewer users receive no management controls. `/overview` contains the base-currency summary.
 
-Each asset detail page accepts purchase, repair, sale, and append-only corrections. Non-base-currency entries require explicit rate/date/source confirmation and preserve the original evidence while all totals use the tenant base currency. `/imports` exercises the same pending-review boundary intended for AI Harness screenshot extraction.
+Each asset detail page accepts purchase, repair, sale, and append-only corrections. Non-base-currency entries require explicit rate/date/source confirmation and preserve the original evidence while all totals use the tenant base currency. The AI Harness confirms recognized fields in conversation before invoking a semantic MCP write; that call records the lifecycle event directly through the same application service, without a second pending-import queue.
 
 `AUTH_MODE=local` is the secure default. `AUTH_MODE=disabled` is accepted only when `HTTP_ADDR` is loopback-only and creates an implicit local Owner.
 

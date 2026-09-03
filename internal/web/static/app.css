@@ -120,7 +120,6 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .view-switcher a.is-active { background:var(--accent-soft); color:var(--accent); font-weight:800; }
 .empty-state { display:grid; justify-items:center; gap:12px; min-height:360px; padding:70px 20px; border:1px dashed var(--line-strong); border-radius:18px; background:var(--card); text-align:center; }
 .empty-state p { max-width:520px; }
-.imports-empty-state { min-height:280px; margin-top:18px; padding:44px 20px; background:var(--paper); }
 .asset-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
 .asset-card { display:grid; grid-template-columns:auto 1fr; gap:16px; align-items:start; padding:22px; border:1px solid var(--line); border-radius:16px; background:var(--card); }
 .asset-card-body { min-width:0; }

@@ -10,10 +10,7 @@ import (
 	"github.com/SampsonFox/assetloop/internal/domain"
 )
 
-var (
-	ErrAlreadyVoided   = errors.New("asset event is already voided")
-	ErrDraftNotPending = errors.New("import draft is not pending")
-)
+var ErrAlreadyVoided = errors.New("asset event is already voided")
 
 type LifecycleService struct {
 	store LifecycleStore
@@ -33,25 +30,6 @@ type RecordEvent struct {
 	Source            string
 	ExternalReference string
 	Notes             string
-}
-
-type CreateImportDraft struct {
-	AssetID           string
-	Type              domain.AssetEventType
-	AmountMinor       int64
-	Currency          string
-	OccurredAt        time.Time
-	Source            string
-	ExternalReference string
-	Notes             string
-	RawText           string
-}
-
-type ConfirmImport struct {
-	FXRateScaled int64
-	FXRateDate   time.Time
-	FXRateSource string
-	FXConfirmed  bool
 }
 
 func NewLifecycleService(store LifecycleStore) *LifecycleService {
@@ -76,7 +54,7 @@ func (s *LifecycleService) Record(ctx context.Context, actor Principal, cmd Reco
 	if err := s.validateLifecycle(ctx, actor, cmd.AssetID, cmd.Type); err != nil {
 		return domain.AssetEvent{}, err
 	}
-	transaction, event, err := s.prepareEvent(ctx, actor, cmd, "", "")
+	transaction, event, err := s.prepareEvent(ctx, actor, cmd, "")
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -102,7 +80,7 @@ func (s *LifecycleService) Correct(ctx context.Context, actor Principal, eventID
 	}
 	cmd.AssetID = original.AssetID
 	cmd.Type = original.Type
-	transaction, replacement, err := s.prepareEvent(ctx, actor, cmd, "", original.ID)
+	transaction, replacement, err := s.prepareEvent(ctx, actor, cmd, original.ID)
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -155,104 +133,7 @@ func (s *LifecycleService) GetEvent(ctx context.Context, actor Principal, eventI
 	return event, nil
 }
 
-func (s *LifecycleService) CreateDraft(ctx context.Context, actor Principal, cmd CreateImportDraft) (domain.ImportDraft, error) {
-	if err := actor.Require(CapabilityManageLifecycle); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if err := validID("asset ID", cmd.AssetID); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if _, err := s.store.GetAsset(ctx, actor.TenantID, cmd.AssetID); err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("get asset: %w", err)
-	}
-	if err := validEconomicEventType(cmd.Type); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if cmd.AmountMinor <= 0 {
-		return domain.ImportDraft{}, NewInputError("validation.amount_positive")
-	}
-	currency, err := domain.NormalizeCurrency(cmd.Currency)
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	occurredAt, err := s.validOccurredAt(cmd.OccurredAt)
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	source, err := catalogText("source", cmd.Source, 120, true)
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	draft := domain.ImportDraft{
-		ID: newID(), TenantID: actor.TenantID, AssetID: cmd.AssetID, EventType: cmd.Type,
-		AmountMinor: cmd.AmountMinor, Currency: currency, OccurredAt: occurredAt,
-		Source: source, ExternalReference: strings.TrimSpace(cmd.ExternalReference),
-		Notes: strings.TrimSpace(cmd.Notes), RawText: strings.TrimSpace(cmd.RawText), Status: "pending",
-		CreatedByUserID: actor.UserID, CreatedAt: s.now().UTC(),
-	}
-	if err := s.store.CreateImportDraft(ctx, draft); err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("create import draft: %w", err)
-	}
-	return draft, nil
-}
-
-func (s *LifecycleService) PendingDrafts(ctx context.Context, actor Principal) ([]domain.ImportDraft, error) {
-	if err := actor.Require(CapabilityView); err != nil {
-		return nil, err
-	}
-	drafts, err := s.store.ListPendingImportDrafts(ctx, actor.TenantID)
-	if err != nil {
-		return nil, fmt.Errorf("list import drafts: %w", err)
-	}
-	return drafts, nil
-}
-
-func (s *LifecycleService) GetDraft(ctx context.Context, actor Principal, draftID string) (domain.ImportDraft, error) {
-	if err := actor.Require(CapabilityView); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if err := validID("draft ID", draftID); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	draft, err := s.store.GetImportDraft(ctx, actor.TenantID, draftID)
-	if err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("get import draft: %w", err)
-	}
-	return draft, nil
-}
-
-func (s *LifecycleService) ConfirmDraft(ctx context.Context, actor Principal, draftID string, confirmation ConfirmImport) (domain.AssetEvent, error) {
-	if err := actor.Require(CapabilityManageLifecycle); err != nil {
-		return domain.AssetEvent{}, err
-	}
-	draft, err := s.GetDraft(ctx, actor, draftID)
-	if err != nil {
-		return domain.AssetEvent{}, err
-	}
-	if draft.Status != "pending" {
-		return domain.AssetEvent{}, ErrDraftNotPending
-	}
-	if err := s.validateLifecycle(ctx, actor, draft.AssetID, draft.EventType); err != nil {
-		return domain.AssetEvent{}, err
-	}
-	cmd := RecordEvent{
-		AssetID: draft.AssetID, Type: draft.EventType, AmountMinor: draft.AmountMinor,
-		Currency: draft.Currency, FXRateScaled: confirmation.FXRateScaled,
-		FXRateDate: confirmation.FXRateDate, FXRateSource: confirmation.FXRateSource,
-		FXConfirmed: confirmation.FXConfirmed, OccurredAt: draft.OccurredAt,
-		Source: draft.Source, ExternalReference: draft.ExternalReference, Notes: draft.Notes,
-	}
-	transaction, event, err := s.prepareEvent(ctx, actor, cmd, draft.ID, "")
-	if err != nil {
-		return domain.AssetEvent{}, err
-	}
-	if err := s.store.ConfirmImportDraft(ctx, draft.ID, transaction, event); err != nil {
-		return domain.AssetEvent{}, fmt.Errorf("confirm import draft: %w", err)
-	}
-	return event, nil
-}
-
-func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cmd RecordEvent, draftID, replacesID string) (domain.AssetTransaction, domain.AssetEvent, error) {
+func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cmd RecordEvent, replacesID string) (domain.AssetTransaction, domain.AssetEvent, error) {
 	if err := validID("asset ID", cmd.AssetID); err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, err
 	}
@@ -311,9 +192,6 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 		ID: newID(), TenantID: actor.TenantID, OccurredAt: occurredAt, Source: source,
 		ExternalReference: strings.TrimSpace(cmd.ExternalReference), Notes: strings.TrimSpace(cmd.Notes),
 		CreatedByUserID: actor.UserID, CreatedAt: createdAt,
-	}
-	if draftID != "" {
-		transaction.ExternalReference = strings.TrimSpace(transaction.ExternalReference + " import:" + draftID)
 	}
 	event := domain.AssetEvent{
 		ID: newID(), TenantID: actor.TenantID, AssetID: cmd.AssetID, TransactionID: transaction.ID,

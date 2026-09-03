@@ -71,7 +71,7 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 	}
 	editorSession := responseCookie(t, response, sessionCookie)
 	editorHome := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{editorSession, csrf})
-	if !strings.Contains(editorHome.Body.String(), `href="/imports"`) || !strings.Contains(editorHome.Body.String(), `href="/admin/catalog"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
+	if !strings.Contains(editorHome.Body.String(), `href="/admin/catalog"`) || strings.Contains(editorHome.Body.String(), `href="/imports"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
 		t.Fatalf("editor account menu has incorrect entries: %s", editorHome.Body.String())
 	}
 	forbidden := request(t, handler, http.MethodGet, "/admin/members", nil, []*http.Cookie{editorSession, csrf})
@@ -118,10 +118,13 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	}, []*http.Cookie{csrf})
 	session := responseCookie(t, setup, sessionCookie)
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{`class="account-menu"`, `summary aria-label="用户菜单"`, `href="/imports"`, `href="/admin/catalog"`, `href="/admin/members"`, `action="/preferences"`} {
+	for _, want := range []string{`class="account-menu"`, `summary aria-label="用户菜单"`, `href="/admin/catalog"`, `href="/admin/members"`, `action="/preferences"`} {
 		if !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("owner account menu missing %q: %s", want, home.Body.String())
 		}
+	}
+	if strings.Contains(home.Body.String(), `href="/imports"`) || strings.Contains(home.Body.String(), "待确认导入") {
+		t.Fatalf("account menu must not expose a second confirmation queue: %s", home.Body.String())
 	}
 	for _, want := range []string{`class="account-avatar"`, `class="menu-icon"`, `data-auto-submit`, `class="segmented language-segmented"`, `role="radiogroup"`, `type="radio" name="locale"`, `type="radio" name="theme"`} {
 		if !strings.Contains(home.Body.String(), want) {
@@ -140,7 +143,7 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	}
 	zhCookie := &http.Cookie{Name: localeCookie, Value: "zh-CN"}
 	english := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, zhCookie})
-	for _, want := range []string{`<html lang="en" data-theme="dark">`, "My assets", "Pending imports", "Asset type settings", "Log out"} {
+	for _, want := range []string{`<html lang="en" data-theme="dark">`, "My assets", "Asset type settings", "Log out"} {
 		if !strings.Contains(english.Body.String(), want) {
 			t.Fatalf("stored preference missing %q: %s", want, english.Body.String())
 		}
@@ -248,25 +251,13 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	}
 }
 
-func TestPendingImportsAreListFirstAndDraftFormUsesDrawer(t *testing.T) {
+func TestPendingImportRoutesDoNotExist(t *testing.T) {
 	handler := newTestHandler(t)
-	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
-	csrf := responseCookie(t, setupPage, csrfCookie)
-	setup := request(t, handler, http.MethodPost, "/setup", url.Values{
-		"csrf_token": {csrf.Value}, "tenant_name": {"Import Tenant"}, "base_currency": {"CNY"},
-		"username": {"owner"}, "password": {"owner secure password"},
-	}, []*http.Cookie{csrf})
-	session := responseCookie(t, setup, sessionCookie)
-
-	imports := request(t, handler, http.MethodGet, "/imports", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{"待确认记录", "暂无待确认记录", "确认前不会计入物品生命周期", `data-dialog-open="import-drawer"`, `id="import-drawer"`} {
-		if imports.Code != http.StatusOK || !strings.Contains(imports.Body.String(), want) {
-			t.Fatalf("list-first pending imports missing %q: status=%d body=%s", want, imports.Code, imports.Body.String())
+	for _, path := range []string{"/imports", "/imports/00000000-0000-0000-0000-000000000000"} {
+		response := request(t, handler, http.MethodGet, path, nil, nil)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("obsolete pending-import route %s: got %d, want %d", path, response.Code, http.StatusNotFound)
 		}
-	}
-	body := imports.Body.String()
-	if drawer, form := strings.Index(body, `id="import-drawer"`), strings.Index(body, `action="/imports" method="post"`); drawer < 0 || form < drawer {
-		t.Fatalf("manual draft form must stay inside the import drawer: %s", body)
 	}
 }
 
@@ -500,24 +491,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if corrected.Code != http.StatusSeeOther {
 		t.Fatalf("correct repair: status=%d body=%s", corrected.Code, corrected.Body.String())
 	}
-	draft := request(t, handler, http.MethodPost, "/imports", url.Values{
+	sale := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
 		"csrf_token": {csrf.Value}, "asset_id": {match[1]}, "event_type": {"sale"}, "amount": {"8000.00"},
 		"currency": {"CNY"}, "occurred_at": {"2026-08-20T10:00"}, "source": {"ai-harness"},
-		"external_reference": {"SALE-WEB-001"}, "notes": {"卖出"}, "raw_text": {"识别到卖出金额 8000 CNY"},
+		"external_reference": {"SALE-WEB-001"}, "notes": {"用户已在 Agent 对话中确认"},
 	}, []*http.Cookie{ownerSession, csrf})
-	if draft.Code != http.StatusSeeOther {
-		t.Fatalf("create sale draft: status=%d body=%s", draft.Code, draft.Body.String())
-	}
-	imports := request(t, handler, http.MethodGet, "/imports", nil, []*http.Cookie{ownerSession, csrf})
-	draftMatch := regexp.MustCompile(`/imports/([0-9a-f-]{36})`).FindStringSubmatch(imports.Body.String())
-	if len(draftMatch) != 2 || !strings.Contains(imports.Body.String(), "8000.00 CNY") {
-		t.Fatalf("pending import not shown: %s", imports.Body.String())
-	}
-	confirmed := request(t, handler, http.MethodPost, "/imports/"+draftMatch[1]+"/confirm", url.Values{
-		"csrf_token": {csrf.Value},
-	}, []*http.Cookie{ownerSession, csrf})
-	if confirmed.Code != http.StatusSeeOther {
-		t.Fatalf("confirm sale draft: status=%d body=%s", confirmed.Code, confirmed.Body.String())
+	if sale.Code != http.StatusSeeOther {
+		t.Fatalf("record Agent-confirmed sale: status=%d body=%s", sale.Code, sale.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
 	for _, want := range []string{"7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "已作废"} {
@@ -559,7 +539,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if strings.Contains(visible.Body.String(), `#add-event`) {
 		t.Fatalf("viewer should not receive lifecycle write controls: %s", visible.Body.String())
 	}
-	if !strings.Contains(visible.Body.String(), `href="/imports"`) || strings.Contains(visible.Body.String(), `href="/admin/members"`) {
+	if strings.Contains(visible.Body.String(), `href="/imports"`) || strings.Contains(visible.Body.String(), `href="/admin/members"`) {
 		t.Fatalf("viewer account menu has incorrect entries: %s", visible.Body.String())
 	}
 	adminDenied := request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{viewerSession, csrf})

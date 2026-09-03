@@ -9,7 +9,7 @@
 
 构建一个自用优先、可开源、可平滑演进为 SaaS 的物品生命周期与持有成本系统。
 
-用户通过 AI 对话提交订单、商品、价格或维修凭证截图。AI Harness 负责识别、补全和确认信息，通过语义化 MCP 工具写入系统。Web 页面负责人工复核、维护物品、查看二手行情、持有成本和生命周期记录。
+用户通过 AI 对话提交订单、商品、价格或维修凭证截图。AI Harness 负责识别、补全并在对话中逐项确认信息，随后通过语义化 MCP 工具直接写入正式生命周期。Web 页面负责维护与追加式更正物品记录，以及查看二手行情、持有成本和生命周期。
 
 Web 的主要用户入口是具体物品列表。物品类型配置以型号列表为主，类别是型号的归属字段，影响二手价格的规格挂在型号下面；物品录入时可复用同一组类型抽屉就地补充类别、型号和规格，不要求跳转到管理页面。AI Harness 通过 MCP 可直接调用对应应用用例。
 
@@ -26,7 +26,7 @@ Web 的主要用户入口是具体物品列表。物品类型配置以型号列�
 
 ### 2.1 第一阶段包含
 
-- 截图识别后的待确认入库流程。
+- Agent 对话确认后的语义化 MCP 直接入库流程。
 - 物品分类、型号、规格、具体物品和生命周期管理。
 - 买入、卖出、维修及其他资产事件。
 - 原币、本位币和汇率留痕。
@@ -177,7 +177,6 @@ fx_rate_source nullable
 
 ```go
 type Store interface {
-    ConfirmImportDraft(ctx context.Context, cmd ConfirmImportDraft) error
     AppendAssetEvent(ctx context.Context, cmd AppendAssetEvent) error
     ListAssets(ctx context.Context, query AssetQuery) ([]Asset, error)
     SaveMarketSnapshot(ctx context.Context, snapshot MarketSnapshot) error
@@ -445,7 +444,6 @@ ONEBOUND_APP_SECRET=
 
 ### 13.1 Web 页面
 
-- 待确认导入。
 - 物品列表和筛选。
 - 分类、型号和规格维护。
 - 具体物品详情和生命周期时间线。
@@ -455,7 +453,7 @@ ONEBOUND_APP_SECRET=
 - 持有成本、日均费用、账面损益和实际损益。
 - 租户业务设置。
 - 登录、首次初始化和租户成员管理。
-- 用户名下拉菜单中的待确认导入、物品类型管理、成员管理、语言、主题和退出；顶栏主导航只保留物品入口。
+- 用户名下拉菜单中的物品类型管理、成员管理、语言、主题和退出；顶栏主导航只保留物品入口。
 - 简体中文和英文代码语言包，以及账号级 `system`、`light`、`dark` 主题偏好。
 
 ### 13.2 MCP 工具
@@ -463,8 +461,6 @@ ONEBOUND_APP_SECRET=
 MCP 只暴露语义化工具，例如：
 
 ```text
-create_import_draft
-confirm_import_draft
 search_product_variants
 create_product_variant
 record_purchase
@@ -552,7 +548,7 @@ docs/
 
 - 交易与资产事件。
 - 本位币、原币、汇率确认和审计。
-- 待确认导入流程。
+- Agent 对话确认后直接记录正式生命周期事件。
 - 买入、维修、卖出、作废替换和生命周期时间线页面。
 
 验收：可以在 Web 中完整记录一件物品从买入、维修到卖出的生命周期，并正确计算本位币现金流；更正保留原始事件。
@@ -578,11 +574,11 @@ docs/
 
 ### 阶段 5：Web 和 MCP
 
-- 完成附件、行情和待确认导入等剩余 Web 页面及人工复核。
+- 完成附件和行情等剩余 Web 页面。
 - 完成语义化 MCP 工具。
-- 验证 Harness 截图识别到确认入库的完整链路。
+- 验证 Harness 截图识别、对话确认到 MCP 直接入库的完整链路。
 
-验收：用户可以通过对话提交截图，在 Web 中复核，并查看物品、行情和生命周期分析。
+验收：用户可以通过对话提交截图并确认字段，MCP 调用后立即在 Web 中看到正式物品和生命周期记录；需要修改时通过 Web 或 MCP 走追加式更正。
 
 ### 阶段 6：发布与 SaaS 准备
 

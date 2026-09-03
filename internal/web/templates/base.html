@@ -18,7 +18,6 @@
       <div class="account-menu-panel">
         <div class="account-identity"><span class="account-avatar">{{userInitial .Principal.Username}}</span><span><strong>{{.Principal.Username}}</strong><small>{{roleLabel $s .Principal.Role}}</small></span></div>
         <nav aria-label="{{t $s "menu.label"}}">
-          <a class="menu-item" href="/imports">{{template "icon-inbox"}}<span>{{t $s "menu.pending_imports"}}</span></a>
           {{if ne .Principal.Role "viewer"}}<a class="menu-item" href="/admin/catalog">{{template "icon-grid"}}<span>{{t $s "menu.catalog"}}</span></a>{{end}}
           {{if eq .Principal.Role "owner"}}<a class="menu-item" href="/admin/members">{{template "icon-users"}}<span>{{t $s "menu.members"}}</span></a>{{end}}
         </nav>
@@ -43,7 +42,6 @@
 </form>{{end}}
 
 {{define "icon-chevron"}}<svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>{{end}}
-{{define "icon-inbox"}}<svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zM4 14h4l2 3h4l2-3h4"/></svg>{{end}}
 {{define "icon-grid"}}<svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg>{{end}}
 {{define "icon-users"}}<svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M16 5.5a3 3 0 0 1 0 5.5M17 14.5a5 5 0 0 1 3.5 5.5"/></svg>{{end}}
 {{define "icon-language"}}<svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.3 3 14.7 0 18M12 3c-3 3.3-3 14.7 0 18"/></svg>{{end}}

@@ -217,29 +217,3 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
 FROM asset_events e
 WHERE e.tenant_id = $1 AND e.asset_id = $2
 ORDER BY e.occurred_at, e.created_at, e.id;
-
--- name: CreateImportDraft :exec
-INSERT INTO import_drafts
-    (id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-     source, external_reference, notes, raw_text, status, created_by_user_id, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
-
--- name: ListPendingImportDrafts :many
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = $1 AND status = 'pending'
-ORDER BY created_at, id;
-
--- name: GetImportDraft :one
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = $1 AND id = $2;
-
--- name: ConfirmImportDraft :execrows
-UPDATE import_drafts
-SET status = 'confirmed', confirmed_transaction_id = $1
-WHERE tenant_id = $2 AND id = $3 AND status = 'pending';

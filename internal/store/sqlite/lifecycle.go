@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -73,62 +72,6 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 	return result, nil
 }
 
-func (s *Store) CreateImportDraft(ctx context.Context, draft domain.ImportDraft) error {
-	return sqlitedb.New(s.db).CreateImportDraft(ctx, sqlitedb.CreateImportDraftParams{
-		ID: draft.ID, TenantID: draft.TenantID, AssetID: draft.AssetID, EventType: string(draft.EventType),
-		AmountMinor: draft.AmountMinor, Currency: draft.Currency, OccurredAt: sqliteTime(draft.OccurredAt),
-		Source: draft.Source, ExternalReference: draft.ExternalReference, Notes: draft.Notes,
-		RawText: draft.RawText, Status: draft.Status, CreatedByUserID: draft.CreatedByUserID,
-		CreatedAt: sqliteTime(draft.CreatedAt),
-	})
-}
-
-func (s *Store) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]domain.ImportDraft, error) {
-	rows, err := sqlitedb.New(s.db).ListPendingImportDrafts(ctx, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]domain.ImportDraft, 0, len(rows))
-	for _, row := range rows {
-		draft, err := sqliteDraft(row)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, draft)
-	}
-	return result, nil
-}
-
-func (s *Store) GetImportDraft(ctx context.Context, tenantID, draftID string) (domain.ImportDraft, error) {
-	row, err := sqlitedb.New(s.db).GetImportDraft(ctx, sqlitedb.GetImportDraftParams{TenantID: tenantID, ID: draftID})
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	return sqliteDraft(row)
-}
-
-func (s *Store) ConfirmImportDraft(ctx context.Context, draftID string, transaction domain.AssetTransaction, event domain.AssetEvent) error {
-	return s.lifecycleTx(ctx, func(q *sqlitedb.Queries) error {
-		if err := createSQLiteTransaction(ctx, q, transaction); err != nil {
-			return err
-		}
-		if err := q.CreateAssetEvent(ctx, sqliteEventParams(event)); err != nil {
-			return err
-		}
-		rows, err := q.ConfirmImportDraft(ctx, sqlitedb.ConfirmImportDraftParams{
-			ConfirmedTransactionID: sql.NullString{String: transaction.ID, Valid: true},
-			TenantID:               transaction.TenantID, ID: draftID,
-		})
-		if err != nil {
-			return err
-		}
-		if rows != 1 {
-			return errors.New("import draft is not pending")
-		}
-		return q.LockTenantBaseCurrency(ctx, sqlitedb.LockTenantBaseCurrencyParams{ID: event.TenantID, BaseCurrency: event.BaseCurrency})
-	})
-}
-
 func (s *Store) lifecycleTx(ctx context.Context, fn func(*sqlitedb.Queries) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -195,22 +138,4 @@ func sqliteEvent(id, tenantID, assetID, transactionID, eventType string, baseAmo
 		}
 	}
 	return event, nil
-}
-
-func sqliteDraft(row sqlitedb.ImportDraft) (domain.ImportDraft, error) {
-	occurredAt, err := time.Parse(time.RFC3339Nano, row.OccurredAt)
-	if err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("parse draft occurred_at: %w", err)
-	}
-	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
-	if err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("parse draft created_at: %w", err)
-	}
-	return domain.ImportDraft{
-		ID: row.ID, TenantID: row.TenantID, AssetID: row.AssetID, EventType: domain.AssetEventType(row.EventType),
-		AmountMinor: row.AmountMinor, Currency: row.Currency, OccurredAt: occurredAt, Source: row.Source,
-		ExternalReference: row.ExternalReference, Notes: row.Notes, RawText: row.RawText, Status: row.Status,
-		CreatedByUserID: row.CreatedByUserID, CreatedAt: createdAt,
-		ConfirmedTransactionID: row.ConfirmedTransactionID.String,
-	}, nil
 }

@@ -10,26 +10,6 @@ import (
 	"database/sql"
 )
 
-const confirmImportDraft = `-- name: ConfirmImportDraft :execrows
-UPDATE import_drafts
-SET status = 'confirmed', confirmed_transaction_id = ?
-WHERE tenant_id = ? AND id = ? AND status = 'pending'
-`
-
-type ConfirmImportDraftParams struct {
-	ConfirmedTransactionID sql.NullString
-	TenantID               string
-	ID                     string
-}
-
-func (q *Queries) ConfirmImportDraft(ctx context.Context, arg ConfirmImportDraftParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, confirmImportDraft, arg.ConfirmedTransactionID, arg.TenantID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const countUsers = `-- name: CountUsers :one
 SELECT COUNT(*) FROM users
 `
@@ -201,50 +181,6 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.TenantID,
 		arg.Name,
 		arg.IconKey,
-		arg.CreatedAt,
-	)
-	return err
-}
-
-const createImportDraft = `-- name: CreateImportDraft :exec
-INSERT INTO import_drafts
-    (id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-     source, external_reference, notes, raw_text, status, created_by_user_id, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`
-
-type CreateImportDraftParams struct {
-	ID                string
-	TenantID          string
-	AssetID           string
-	EventType         string
-	AmountMinor       int64
-	Currency          string
-	OccurredAt        string
-	Source            string
-	ExternalReference string
-	Notes             string
-	RawText           string
-	Status            string
-	CreatedByUserID   string
-	CreatedAt         string
-}
-
-func (q *Queries) CreateImportDraft(ctx context.Context, arg CreateImportDraftParams) error {
-	_, err := q.db.ExecContext(ctx, createImportDraft,
-		arg.ID,
-		arg.TenantID,
-		arg.AssetID,
-		arg.EventType,
-		arg.AmountMinor,
-		arg.Currency,
-		arg.OccurredAt,
-		arg.Source,
-		arg.ExternalReference,
-		arg.Notes,
-		arg.RawText,
-		arg.Status,
-		arg.CreatedByUserID,
 		arg.CreatedAt,
 	)
 	return err
@@ -732,42 +668,6 @@ func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (G
 	return i, err
 }
 
-const getImportDraft = `-- name: GetImportDraft :one
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = ? AND id = ?
-`
-
-type GetImportDraftParams struct {
-	TenantID string
-	ID       string
-}
-
-func (q *Queries) GetImportDraft(ctx context.Context, arg GetImportDraftParams) (ImportDraft, error) {
-	row := q.db.QueryRowContext(ctx, getImportDraft, arg.TenantID, arg.ID)
-	var i ImportDraft
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.AssetID,
-		&i.EventType,
-		&i.AmountMinor,
-		&i.Currency,
-		&i.OccurredAt,
-		&i.Source,
-		&i.ExternalReference,
-		&i.Notes,
-		&i.RawText,
-		&i.Status,
-		&i.CreatedByUserID,
-		&i.CreatedAt,
-		&i.ConfirmedTransactionID,
-	)
-	return i, err
-}
-
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
 SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
        u.locale, u.theme
@@ -1104,54 +1004,6 @@ func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModels
 			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listPendingImportDrafts = `-- name: ListPendingImportDrafts :many
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = ? AND status = 'pending'
-ORDER BY created_at, id
-`
-
-func (q *Queries) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]ImportDraft, error) {
-	rows, err := q.db.QueryContext(ctx, listPendingImportDrafts, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ImportDraft
-	for rows.Next() {
-		var i ImportDraft
-		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.AssetID,
-			&i.EventType,
-			&i.AmountMinor,
-			&i.Currency,
-			&i.OccurredAt,
-			&i.Source,
-			&i.ExternalReference,
-			&i.Notes,
-			&i.RawText,
-			&i.Status,
-			&i.CreatedByUserID,
-			&i.CreatedAt,
-			&i.ConfirmedTransactionID,
 		); err != nil {
 			return nil, err
 		}

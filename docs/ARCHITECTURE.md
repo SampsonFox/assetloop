@@ -34,7 +34,7 @@ The architecture optimizes for:
         SQLite/Postgres  Local/Aliyun OSS  OneBound/others
 ```
 
-The AI Harness interprets images and conversation. The application does not trust extracted data until application validation and required user confirmation have completed.
+The AI Harness interprets images and conversation and confirms every extracted field with the user before invoking a write MCP tool. A semantic MCP mutation therefore represents confirmed intent, but the application still validates identity, tenant scope, input shape, lifecycle invariants, money evidence, and transaction boundaries before writing.
 
 ## 3. Architectural style
 
@@ -78,7 +78,7 @@ It performs no I/O.
 
 Owns use cases and ports:
 
-- confirm an AI-generated import draft;
+- persist user-confirmed semantic commands received from Web or MCP;
 - create or resolve category/model/variant;
 - record purchase, repair, sale, void, and replacement;
 - attach evidence;
@@ -148,8 +148,8 @@ Rates are stored as signed-safe fixed-point integers scaled by `100,000,000` and
 units per original major unit.” Conversion applies the ISO minor-unit exponent for both currencies
 and rounds once to the nearest base minor unit. Floating point is never used for persisted or
 calculated money. When the original currency equals the base currency, original amount/currency
-and FX evidence remain null; otherwise all evidence fields are mandatory and user confirmation is
-required. The confirmation screen defaults the rate date to the current date.
+and FX evidence remain null; otherwise all evidence fields are mandatory. Web confirms them in its
+event form; the AI Harness confirms them in conversation before making a semantic MCP write.
 
 The first monetary record locks the tenant base currency. Changing it later requires a dedicated, audited migration operation, not a settings edit.
 
@@ -162,9 +162,11 @@ The first monetary record locks the tenant base currency. Changing it later requ
 SQLite and PostgreSQL have independent SQL and sqlc output, with a shared conformance suite. Vendor-specific SQL stays inside its adapter.
 
 The lifecycle Store atomically creates the grouping transaction and event, locks the base currency,
-and—for corrections or import confirmation—writes every related row in the same database
-transaction. `import_drafts` holds untrusted AI/manual extraction proposals; only an explicit
-confirmation can promote one pending draft into a confirmed lifecycle transaction.
+and, for corrections, writes the void and replacement rows in the same database transaction.
+Harness-confirmed MCP commands append formal lifecycle events directly through this same application
+use case. Historical installations may retain a dormant `import_drafts` compatibility table from an
+older migration; active code neither reads nor writes it, and a later contract migration may remove it
+only after an explicit data-retention decision.
 
 ### 7.2 Migration rules
 

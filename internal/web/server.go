@@ -69,8 +69,6 @@ type pageData struct {
 	CanManageCatalog   bool
 	Events             []domain.AssetEvent
 	Summary            domain.AssetSummary
-	Drafts             []domain.ImportDraft
-	Draft              *domain.ImportDraft
 	BaseCurrency       string
 	BaseCurrencyLocked bool
 	NowValue           string
@@ -112,7 +110,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"date":          func(value time.Time) string { return value.Format("2006-01-02") },
 		"rate":          formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "event_correct", "imports", "import_confirm", "error"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "event_correct", "error"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -125,7 +123,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
-	mux.HandleFunc("GET /", s.assetsPage)
+	mux.HandleFunc("GET /{$}", s.assetsPage)
 	mux.HandleFunc("GET /overview", s.dashboard)
 	mux.HandleFunc("GET /setup", s.setupForm)
 	mux.HandleFunc("POST /setup", s.setup)
@@ -150,10 +148,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
 	mux.HandleFunc("GET /events/{id}/correct", s.correctEventForm)
 	mux.HandleFunc("POST /events/{id}/correct", s.correctEvent)
-	mux.HandleFunc("GET /imports", s.importsPage)
-	mux.HandleFunc("POST /imports", s.createImportDraft)
-	mux.HandleFunc("GET /imports/{id}", s.confirmImportForm)
-	mux.HandleFunc("POST /imports/{id}/confirm", s.confirmImport)
 	staticFS, _ := fs.Sub(assets, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return securityHeaders(mux)
@@ -399,110 +393,6 @@ func (s *Server) correctEvent(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/assets/"+original.AssetID, http.StatusSeeOther)
 }
 
-func (s *Server) importsPage(w http.ResponseWriter, r *http.Request) {
-	principal, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return
-	}
-	s.renderImports(w, r, http.StatusOK, principal, "")
-}
-
-func (s *Server) createImportDraft(w http.ResponseWriter, r *http.Request) {
-	if !s.verifyCSRF(w, r) {
-		return
-	}
-	principal, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return
-	}
-	currency := r.FormValue("currency")
-	amount, err := domain.ParseMajorAmount(r.FormValue("amount"), currency)
-	if err == nil {
-		var occurredAt time.Time
-		occurredAt, err = parseFormTime(r.FormValue("occurred_at"))
-		if err == nil {
-			_, err = s.lifecycle.CreateDraft(r.Context(), principal, application.CreateImportDraft{
-				AssetID: r.FormValue("asset_id"), Type: domain.AssetEventType(r.FormValue("event_type")),
-				AmountMinor: amount, Currency: currency, OccurredAt: occurredAt, Source: r.FormValue("source"),
-				ExternalReference: r.FormValue("external_reference"), Notes: r.FormValue("notes"), RawText: r.FormValue("raw_text"),
-			})
-		}
-	}
-	if err != nil {
-		if errors.Is(err, application.ErrForbidden) {
-			s.renderForbidden(w, principal, "error.forbidden_import_create")
-			return
-		}
-		s.renderImports(w, r, http.StatusUnprocessableEntity, principal, s.userError(principal.Locale, err))
-		return
-	}
-	http.Redirect(w, r, "/imports", http.StatusSeeOther)
-}
-
-func (s *Server) confirmImportForm(w http.ResponseWriter, r *http.Request) {
-	principal, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return
-	}
-	if !principal.Can(application.CapabilityManageLifecycle) {
-		s.renderForbidden(w, principal, "error.forbidden_import_confirm")
-		return
-	}
-	draft, err := s.lifecycle.GetDraft(r.Context(), principal, r.PathValue("id"))
-	if err != nil || draft.Status != "pending" {
-		s.renderNotFound(w, principal, "error.not_found_import")
-		return
-	}
-	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
-	if err != nil {
-		s.renderError(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	s.render(w, http.StatusOK, "import_confirm", pageData{
-		Title: textFor(principal.Locale, "confirm.heading"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Draft: &draft, ReturnTo: r.URL.RequestURI(),
-		BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
-		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
-		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
-	})
-}
-
-func (s *Server) confirmImport(w http.ResponseWriter, r *http.Request) {
-	if !s.verifyCSRF(w, r) {
-		return
-	}
-	principal, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return
-	}
-	draft, err := s.lifecycle.GetDraft(r.Context(), principal, r.PathValue("id"))
-	confirmation := application.ConfirmImport{}
-	if err == nil {
-		baseCurrency, _, baseErr := s.lifecycle.BaseCurrency(r.Context(), principal)
-		if baseErr != nil {
-			err = baseErr
-		} else if draft.Currency != baseCurrency {
-			confirmation.FXRateScaled, err = domain.ParseFXRate(r.FormValue("fx_rate"))
-			if err == nil {
-				confirmation.FXRateDate, err = parseFormDate(r.FormValue("fx_rate_date"))
-			}
-			confirmation.FXRateSource = r.FormValue("fx_rate_source")
-			confirmation.FXConfirmed = r.FormValue("fx_confirmed") == "on"
-		}
-	}
-	if err == nil {
-		_, err = s.lifecycle.ConfirmDraft(r.Context(), principal, draft.ID, confirmation)
-	}
-	if err != nil {
-		if errors.Is(err, application.ErrForbidden) {
-			s.renderForbidden(w, principal, "error.forbidden_import_confirm")
-			return
-		}
-		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, Error: s.userError(principal.Locale, err)})
-		return
-	}
-	http.Redirect(w, r, "/assets/"+draft.AssetID, http.StatusSeeOther)
-}
-
 func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, assetID, message string) {
 	asset, err := s.catalog.GetAsset(r.Context(), principal, assetID)
 	if err != nil {
@@ -523,30 +413,6 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: events,
 		Summary: summary, BaseCurrency: summary.BaseCurrency, BaseCurrencyLocked: locked,
-		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
-		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
-	})
-}
-
-func (s *Server) renderImports(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
-	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
-	if err != nil {
-		s.renderError(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	drafts, err := s.lifecycle.PendingDrafts(r.Context(), principal)
-	if err != nil {
-		s.renderError(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
-	if err != nil {
-		s.renderError(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	s.render(w, status, "imports", pageData{
-		Title: textFor(principal.Locale, "title.imports"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
-		Assets: snapshot.Assets, Drafts: drafts, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
 	})

@@ -72,22 +72,16 @@ func runLifecycle(t *testing.T, store Store) {
 	if replacement.ReplacesEventID != repair.ID || replacement.BaseAmountMinor != -15_000 {
 		t.Fatalf("replacement mismatch: %+v", replacement)
 	}
-	draft, err := service.CreateDraft(ctx, owner, application.CreateImportDraft{
+	sale, err := service.Record(ctx, owner, application.RecordEvent{
 		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: 800_000, Currency: "CNY",
-		OccurredAt: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), Source: "ai-import",
-		ExternalReference: "SALE-001", Notes: "sale", RawText: "recognized sale receipt",
+		OccurredAt: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), Source: "ai-harness",
+		ExternalReference: "SALE-001", Notes: "user-confirmed sale",
 	})
 	if err != nil {
-		t.Fatalf("create import draft: %v", err)
+		t.Fatalf("record Agent-confirmed sale: %v", err)
 	}
-	if _, err := service.ConfirmDraft(ctx, owner, draft.ID, application.ConfirmImport{}); err != nil {
-		t.Fatalf("confirm base-currency import draft: %v", err)
-	}
-	if _, err := service.ConfirmDraft(ctx, owner, draft.ID, application.ConfirmImport{}); !errors.Is(err, application.ErrDraftNotPending) {
-		t.Fatalf("confirmed draft must not be confirmed twice, got %v", err)
-	}
-	if drafts, err := service.PendingDrafts(ctx, owner); err != nil || len(drafts) != 0 {
-		t.Fatalf("confirmed draft should leave pending list: drafts=%d err=%v", len(drafts), err)
+	if sale.BaseAmountMinor != 800_000 || sale.FX != nil {
+		t.Fatalf("Agent-confirmed base-currency sale mismatch: %+v", sale)
 	}
 	events, summary, err := service.Timeline(ctx, owner, asset.ID)
 	if err != nil {

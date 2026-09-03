@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -99,85 +98,6 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 	return result, nil
 }
 
-func (s *Store) CreateImportDraft(ctx context.Context, draft domain.ImportDraft) error {
-	id, tenantID, err := catalogIDs(draft.ID, draft.TenantID)
-	if err != nil {
-		return err
-	}
-	assetID, err := uuid.Parse(draft.AssetID)
-	if err != nil {
-		return fmt.Errorf("parse asset ID: %w", err)
-	}
-	userID, err := uuid.Parse(draft.CreatedByUserID)
-	if err != nil {
-		return fmt.Errorf("parse user ID: %w", err)
-	}
-	return postgresdb.New(s.db).CreateImportDraft(ctx, postgresdb.CreateImportDraftParams{
-		ID: id, TenantID: tenantID, AssetID: assetID, EventType: string(draft.EventType), AmountMinor: draft.AmountMinor,
-		Currency: draft.Currency, OccurredAt: draft.OccurredAt, Source: draft.Source,
-		ExternalReference: draft.ExternalReference, Notes: draft.Notes, RawText: draft.RawText,
-		Status: draft.Status, CreatedByUserID: userID, CreatedAt: draft.CreatedAt,
-	})
-}
-
-func (s *Store) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]domain.ImportDraft, error) {
-	id, err := uuid.Parse(tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("parse tenant ID: %w", err)
-	}
-	rows, err := postgresdb.New(s.db).ListPendingImportDrafts(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]domain.ImportDraft, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, postgresDraft(row))
-	}
-	return result, nil
-}
-
-func (s *Store) GetImportDraft(ctx context.Context, tenantID, draftID string) (domain.ImportDraft, error) {
-	tenantUUID, draftUUID, err := postgresIDs(tenantID, draftID)
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	row, err := postgresdb.New(s.db).GetImportDraft(ctx, postgresdb.GetImportDraftParams{TenantID: tenantUUID, ID: draftUUID})
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	return postgresDraft(row), nil
-}
-
-func (s *Store) ConfirmImportDraft(ctx context.Context, draftID string, transaction domain.AssetTransaction, event domain.AssetEvent) error {
-	return s.lifecycleTx(ctx, func(q *postgresdb.Queries) error {
-		if err := createPostgresTransaction(ctx, q, transaction); err != nil {
-			return err
-		}
-		params, err := postgresEventParams(event)
-		if err != nil {
-			return err
-		}
-		if err := q.CreateAssetEvent(ctx, params); err != nil {
-			return err
-		}
-		tenantID, draftUUID, err := postgresIDs(transaction.TenantID, draftID)
-		if err != nil {
-			return err
-		}
-		transactionID, _ := uuid.Parse(transaction.ID)
-		rows, err := q.ConfirmImportDraft(ctx, postgresdb.ConfirmImportDraftParams{
-			ConfirmedTransactionID: uuid.NullUUID{UUID: transactionID, Valid: true}, TenantID: tenantID, ID: draftUUID,
-		})
-		if err != nil {
-			return err
-		}
-		if rows != 1 {
-			return errors.New("import draft is not pending")
-		}
-		return q.LockTenantBaseCurrency(ctx, postgresdb.LockTenantBaseCurrencyParams{ID: tenantID, BaseCurrency: event.BaseCurrency})
-	})
-}
-
 func (s *Store) lifecycleTx(ctx context.Context, fn func(*postgresdb.Queries) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -269,19 +189,6 @@ func postgresEvent(id, tenantID, assetID, transactionID uuid.UUID, eventType str
 		}
 	}
 	return event
-}
-
-func postgresDraft(row postgresdb.ImportDraft) domain.ImportDraft {
-	draft := domain.ImportDraft{
-		ID: row.ID.String(), TenantID: row.TenantID.String(), AssetID: row.AssetID.String(), EventType: domain.AssetEventType(row.EventType),
-		AmountMinor: row.AmountMinor, Currency: row.Currency, OccurredAt: row.OccurredAt, Source: row.Source,
-		ExternalReference: row.ExternalReference, Notes: row.Notes, RawText: row.RawText, Status: row.Status,
-		CreatedByUserID: row.CreatedByUserID.String(), CreatedAt: row.CreatedAt,
-	}
-	if row.ConfirmedTransactionID.Valid {
-		draft.ConfirmedTransactionID = row.ConfirmedTransactionID.UUID.String()
-	}
-	return draft
 }
 
 func postgresIDs(first, second string) (uuid.UUID, uuid.UUID, error) {

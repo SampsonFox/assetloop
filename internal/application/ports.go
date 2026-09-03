@@ -49,8 +49,4 @@ type LifecycleStore interface {
 	GetAssetEvent(context.Context, string, string) (domain.AssetEvent, error)
 	ListAssetEvents(context.Context, string, string) ([]domain.AssetEvent, error)
 	CorrectAssetEvent(context.Context, domain.AssetTransaction, domain.AssetEvent, domain.AssetEvent) error
-	CreateImportDraft(context.Context, domain.ImportDraft) error
-	ListPendingImportDrafts(context.Context, string) ([]domain.ImportDraft, error)
-	GetImportDraft(context.Context, string, string) (domain.ImportDraft, error)
-	ConfirmImportDraft(context.Context, string, domain.AssetTransaction, domain.AssetEvent) error
 }
