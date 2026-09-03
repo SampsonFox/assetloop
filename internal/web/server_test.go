@@ -405,8 +405,8 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("type configuration must use the simpler specification label: %s", catalog.Body.String())
 	}
 	headingActions := regexp.MustCompile(`(?s)<div class="heading-actions">(.*?)</div>`).FindStringSubmatch(catalog.Body.String())
-	if len(headingActions) != 2 || strings.Contains(headingActions[1], "新增类别") {
-		t.Fatalf("category creation must not be a top-level action: %s", catalog.Body.String())
+	if len(headingActions) != 2 || strings.Contains(headingActions[1], "新增类别") || strings.Contains(headingActions[1], `href="/"`) {
+		t.Fatalf("catalog heading must expose only model creation: %s", catalog.Body.String())
 	}
 	modelForm := regexp.MustCompile(`(?s)<form id="model-form".*?>(.*?)</form>`).FindStringSubmatch(catalog.Body.String())
 	if len(modelForm) != 2 || !strings.Contains(modelForm[1], "新增类别") {
