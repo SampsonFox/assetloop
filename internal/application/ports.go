@@ -119,6 +119,8 @@ type EventListResult struct {
 type LifecycleStore interface {
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 	TenantBaseCurrency(context.Context, string) (string, bool, error)
+	CreateAssetEventType(context.Context, domain.AssetEventTypeDefinition) error
+	ListAssetEventTypes(context.Context, string) ([]domain.AssetEventTypeDefinition, error)
 	AppendAssetEvent(context.Context, domain.AssetTransaction, domain.AssetEvent) error
 	GetAssetEvent(context.Context, string, string) (domain.AssetEvent, error)
 	ListAssetEvents(context.Context, string, string) ([]domain.AssetEvent, error)

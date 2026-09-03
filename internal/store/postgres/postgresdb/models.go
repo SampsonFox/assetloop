@@ -44,6 +44,16 @@ type AssetEvent struct {
 	CreatedAt           time.Time
 }
 
+type AssetEventType struct {
+	ID                uuid.UUID
+	TenantID          uuid.UUID
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	CreatedByUserID   uuid.UUID
+	CreatedAt         time.Time
+}
+
 type AssetTransaction struct {
 	ID                uuid.UUID
 	TenantID          uuid.UUID

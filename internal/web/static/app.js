@@ -5,13 +5,33 @@
     categoryId: "category_id",
     modelId: "model_id",
     returnModelId: "return_model_id",
+    eventType: "event_type",
   };
   const dialogOpeners = new WeakMap();
 
   const syncFXFields = (select) => {
-    const foreign = select.value !== select.dataset.baseCurrency;
+    const neutral = select.form.querySelector("[data-event-type-select] option:checked")?.dataset.cashflow === "neutral";
+    const foreign = !neutral && select.value !== select.dataset.baseCurrency;
     for (const field of select.form.querySelectorAll("[data-fx-field]")) field.hidden = !foreign;
     for (const input of select.form.querySelectorAll("[data-fx-required]")) input.required = foreign;
+  };
+
+  const syncEventTypeFields = (select) => {
+    const neutral = select.selectedOptions[0]?.dataset.cashflow === "neutral";
+    const amount = select.form.elements.namedItem("amount");
+    for (const field of select.form.querySelectorAll("[data-money-field]")) field.hidden = neutral;
+    if (amount) {
+      if (neutral) {
+        if (amount.value !== "0") amount.dataset.previousValue = amount.value;
+        amount.value = "0";
+        amount.required = false;
+      } else {
+        if (amount.value === "0") amount.value = amount.dataset.previousValue || "";
+        amount.required = true;
+      }
+    }
+    const currency = select.form.querySelector("[data-currency-select]");
+    if (currency) syncFXFields(currency);
   };
 
   const dirtyForm = (dialog) => dialog?.querySelector("form[data-guard-dirty][data-dirty='true']");
@@ -83,6 +103,8 @@
       }
       const currency = form.querySelector("[data-currency-select]");
       if (currency) syncFXFields(currency);
+      const eventType = form.querySelector("[data-event-type-select]");
+      if (eventType) syncEventTypeFields(eventType);
       dialog.showModal();
       queueMicrotask(() => focusDialog(dialog));
       return;
@@ -107,6 +129,8 @@
     if (dirty) dirty.dataset.dirty = "true";
     const currency = event.target.closest("[data-currency-select]");
     if (currency) syncFXFields(currency);
+    const eventType = event.target.closest("[data-event-type-select]");
+    if (eventType) syncEventTypeFields(eventType);
     const form = event.target.closest("[data-auto-submit]");
     if (!form) return;
     if (event.target.name === "theme") document.documentElement.dataset.theme = event.target.value;
@@ -139,6 +163,7 @@
   });
 
   for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
+  for (const select of document.querySelectorAll("[data-event-type-select]")) syncEventTypeFields(select);
 
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");
@@ -157,6 +182,12 @@
     }
     opener.click();
   } else {
-    document.querySelector("[data-error-summary]")?.focus();
+    const erroredDialog = [...document.querySelectorAll("dialog.drawer")].find((dialog) => dialog.querySelector("[data-error-summary]"));
+    if (erroredDialog) {
+      erroredDialog.showModal();
+      queueMicrotask(() => focusDialog(erroredDialog));
+    } else {
+      document.querySelector("[data-error-summary]")?.focus();
+    }
   }
 })();

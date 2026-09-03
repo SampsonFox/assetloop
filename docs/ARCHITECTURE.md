@@ -130,6 +130,13 @@ Confirmed events cannot be updated or deleted at either Store or database level.
 atomically appends a zero-value void event plus a replacement economic event that references the
 original; the original row remains unchanged and queryable.
 
+Each tenant may register additional event types without changing the fixed meanings of purchase,
+repair, sale, and void. A custom type records a stable display name and exactly one cash-flow effect:
+expense, income, or neutral. The event row keeps that name and the resulting signed base amount, so
+later configuration cannot rewrite history. Neutral events persist a zero amount and do not lock the
+tenant base currency. Custom types do not implicitly change the built-in acquired, repairing, or sold
+status transitions.
+
 ## 6. Money architecture
 
 Money is represented as:
@@ -170,8 +177,9 @@ than calling a detail query once per row. Query count therefore remains bounded 
 grow. Web handlers never assemble SQL and do not implement in-memory pagination as a fallback.
 
 The current collection contract covers assets with lifecycle summaries, models with variants,
-tenant members, and asset lifecycle records. Both Store adapters run the same conformance tests for
-search, filters, sorting, paging, related-row hydration, and aggregate totals.
+tenant members, asset lifecycle records, and tenant-scoped custom event-type options. Both Store
+adapters run the same conformance tests for search, filters, sorting, paging, related-row hydration,
+aggregate totals, and custom event-type isolation.
 
 The lifecycle Store atomically creates the grouping transaction and event, locks the base currency,
 and, for corrections, writes the void and replacement rows in the same database transaction.

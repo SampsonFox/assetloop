@@ -172,6 +172,7 @@ ranked_events AS (
 SELECT asset_id, event_type,
        ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
 FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
 ),
 asset_rows AS (
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
@@ -261,6 +262,7 @@ ranked_events AS (
 SELECT asset_id, event_type,
        ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
 FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
 ),
 asset_rows AS (
 SELECT a.id,
@@ -423,6 +425,17 @@ INSERT INTO asset_events
      occurred_at, created_by_user_id, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+-- name: CreateAssetEventType :exec
+INSERT INTO asset_event_types
+    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- name: ListAssetEventTypes :many
+SELECT id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at
+FROM asset_event_types
+WHERE tenant_id = ?
+ORDER BY normalized_name, id;
+
 -- name: GetAssetEvent :one
 SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
@@ -488,7 +501,9 @@ WITH effective_events AS (
       AND e.event_type != 'void'
       AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
 ), latest_event AS (
-    SELECT event_type FROM effective_events ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
+    SELECT event_type FROM effective_events
+    WHERE event_type IN ('purchase', 'repair', 'sale')
+    ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
 )
 SELECT t.base_currency,
        CAST(COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0) AS INTEGER) AS expense_minor,

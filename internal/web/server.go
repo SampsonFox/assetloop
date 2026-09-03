@@ -74,6 +74,9 @@ type pageData struct {
 	BaseCurrencyLocked bool
 	NowValue           string
 	CanManageLifecycle bool
+	EventTypes         []domain.AssetEventTypeDefinition
+	EventTypeError     string
+	EventTypeForm      eventTypeFormData
 	AssetCount         int
 	TotalExpenseMinor  int64
 	TotalIncomeMinor   int64
@@ -129,6 +132,11 @@ type eventFormData struct {
 	Notes             string
 }
 
+type eventTypeFormData struct {
+	Name     string
+	Cashflow string
+}
+
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
 	templates := map[string]*template.Template{}
 	funcs := template.FuncMap{
@@ -148,7 +156,16 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 			return strings.ToUpper(string(runes[0]))
 		},
 		"eventLabel": func(values map[string]string, value domain.AssetEventType) string {
-			return values["event."+string(value)]
+			if label := values["event."+string(value)]; label != "" {
+				return label
+			}
+			return string(value)
+		},
+		"eventTypeLabel": func(values map[string]string, value domain.AssetEventTypeDefinition) string {
+			if value.BuiltIn {
+				return values["event."+value.Name]
+			}
+			return value.Name
 		},
 		"statusLabel":   func(values map[string]string, value string) string { return values["status."+value] },
 		"productImage":  productImage,
@@ -215,6 +232,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /assets/{id}", s.updateAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
+	mux.HandleFunc("POST /admin/event-types", s.createAssetEventType)
 	mux.HandleFunc("GET /events/{id}/correct", s.correctEventForm)
 	mux.HandleFunc("POST /events/{id}/correct", s.correctEvent)
 	staticFS, _ := fs.Sub(assets, "static")
@@ -440,7 +458,7 @@ func (s *Server) assetDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.renderAsset(w, r, http.StatusOK, principal, r.PathValue("id"), "")
+	s.renderAsset(w, r, http.StatusOK, principal, r.PathValue("id"), "", "")
 }
 
 func (s *Server) createAssetEvent(w http.ResponseWriter, r *http.Request) {
@@ -460,10 +478,38 @@ func (s *Server) createAssetEvent(w http.ResponseWriter, r *http.Request) {
 			s.renderForbidden(w, principal, "error.forbidden_lifecycle")
 			return
 		}
-		s.renderAsset(w, r, http.StatusUnprocessableEntity, principal, r.PathValue("id"), s.userError(principal.Locale, err))
+		s.renderAsset(w, r, http.StatusUnprocessableEntity, principal, r.PathValue("id"), s.userError(principal.Locale, err), "")
 		return
 	}
 	http.Redirect(w, r, "/assets/"+r.PathValue("id"), http.StatusSeeOther)
+}
+
+func (s *Server) createAssetEventType(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	assetID := r.FormValue("asset_id")
+	if _, err := s.catalog.GetAsset(r.Context(), principal, assetID); err != nil {
+		s.renderNotFound(w, principal, "error.not_found_asset")
+		return
+	}
+	eventType, err := s.lifecycle.CreateEventType(r.Context(), principal, application.CreateAssetEventType{
+		Name: r.FormValue("name"), Cashflow: domain.AssetEventCashflow(r.FormValue("cashflow")),
+	})
+	if err != nil {
+		if errors.Is(err, application.ErrForbidden) {
+			s.renderForbidden(w, principal, "error.forbidden_lifecycle")
+			return
+		}
+		s.renderAsset(w, r, http.StatusUnprocessableEntity, principal, assetID, "", s.userError(principal.Locale, err))
+		return
+	}
+	location := "/assets/" + assetID + "?dialog=event-drawer&event_type=" + url.QueryEscape(eventType.Name) + "#add-event"
+	http.Redirect(w, r, location, http.StatusSeeOther)
 }
 
 func (s *Server) correctEventForm(w http.ResponseWriter, r *http.Request) {
@@ -548,7 +594,7 @@ func eventFormForCorrection(event domain.AssetEvent) eventFormData {
 	return form
 }
 
-func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, assetID, message string) {
+func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, assetID, message, eventTypeMessage string) {
 	asset, err := s.catalog.GetAsset(r.Context(), principal, assetID)
 	if err != nil {
 		s.renderNotFound(w, principal, "error.not_found_asset")
@@ -563,6 +609,11 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 	result, err := s.lifecycle.TimelinePage(r.Context(), principal, assetID, application.EventListOptions{
 		Query: query, Type: eventType, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
 	})
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	eventTypes, err := s.lifecycle.EventTypes(r.Context(), principal)
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
@@ -586,6 +637,9 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		Summary: result.Summary, BaseCurrency: result.Summary.BaseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           nowValue,
 		EventForm:          eventFormFromRequest(r, result.Summary.BaseCurrency, nowValue),
+		EventTypes:         eventTypes,
+		EventTypeError:     eventTypeMessage,
+		EventTypeForm:      eventTypeFormFromRequest(r),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
 		TableQuery:         query, TableFilter: eventType, TableSort: sortKey, TableDirection: direction,
 		TableTotal: result.Total, TablePage: page, TableTotalPages: totalPages,
@@ -618,6 +672,15 @@ func eventFormFromRequest(r *http.Request, baseCurrency, nowValue string) eventF
 	form.FXRateSource = r.FormValue("fx_rate_source")
 	form.FXConfirmed = r.FormValue("fx_confirmed") == "on"
 	form.Notes = r.FormValue("notes")
+	return form
+}
+
+func eventTypeFormFromRequest(r *http.Request) eventTypeFormData {
+	form := eventTypeFormData{Cashflow: string(domain.AssetEventNeutral)}
+	if r.Method == http.MethodPost && r.URL.Path == "/admin/event-types" {
+		form.Name = r.FormValue("name")
+		form.Cashflow = r.FormValue("cashflow")
+	}
 	return form
 }
 
@@ -1424,14 +1487,17 @@ func parseFormDate(value string) (time.Time, error) {
 	return parsed, nil
 }
 
-func eventClass(value domain.AssetEventType) string {
-	if value == domain.AssetEventSale {
-		return "income"
-	}
-	if value == domain.AssetEventVoid {
+func eventClass(event domain.AssetEvent) string {
+	if event.Type == domain.AssetEventVoid {
 		return "void"
 	}
-	return "expense"
+	if event.BaseAmountMinor > 0 {
+		return "income"
+	}
+	if event.BaseAmountMinor < 0 {
+		return "expense"
+	}
+	return "neutral"
 }
 
 func formatRate(value int64) string {

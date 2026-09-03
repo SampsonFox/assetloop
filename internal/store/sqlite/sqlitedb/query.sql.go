@@ -32,6 +32,7 @@ ranked_events AS (
 SELECT asset_id, event_type,
        ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
 FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
 ),
 asset_rows AS (
 SELECT a.id,
@@ -159,6 +160,35 @@ func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventPara
 		arg.VoidsEventID,
 		arg.ReplacesEventID,
 		arg.OccurredAt,
+		arg.CreatedByUserID,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createAssetEventType = `-- name: CreateAssetEventType :exec
+INSERT INTO asset_event_types
+    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateAssetEventTypeParams struct {
+	ID                string
+	TenantID          string
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+func (q *Queries) CreateAssetEventType(ctx context.Context, arg CreateAssetEventTypeParams) error {
+	_, err := q.db.ExecContext(ctx, createAssetEventType,
+		arg.ID,
+		arg.TenantID,
+		arg.Name,
+		arg.NormalizedName,
+		arg.CashflowDirection,
 		arg.CreatedByUserID,
 		arg.CreatedAt,
 	)
@@ -766,7 +796,9 @@ WITH effective_events AS (
       AND e.event_type != 'void'
       AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
 ), latest_event AS (
-    SELECT event_type FROM effective_events ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
+    SELECT event_type FROM effective_events
+    WHERE event_type IN ('purchase', 'repair', 'sale')
+    ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
 )
 SELECT t.base_currency,
        CAST(COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0) AS INTEGER) AS expense_minor,
@@ -911,6 +943,44 @@ func (q *Queries) GetTenantBaseCurrency(ctx context.Context, id string) (GetTena
 	var i GetTenantBaseCurrencyRow
 	err := row.Scan(&i.BaseCurrency, &i.BaseCurrencyLocked)
 	return i, err
+}
+
+const listAssetEventTypes = `-- name: ListAssetEventTypes :many
+SELECT id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at
+FROM asset_event_types
+WHERE tenant_id = ?
+ORDER BY normalized_name, id
+`
+
+func (q *Queries) ListAssetEventTypes(ctx context.Context, tenantID string) ([]AssetEventType, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetEventTypes, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssetEventType
+	for rows.Next() {
+		var i AssetEventType
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Name,
+			&i.NormalizedName,
+			&i.CashflowDirection,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAssetEvents = `-- name: ListAssetEvents :many
@@ -1212,6 +1282,7 @@ ranked_events AS (
 SELECT asset_id, event_type,
        ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
 FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
 ),
 asset_rows AS (
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,

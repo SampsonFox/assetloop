@@ -52,6 +52,24 @@ func runLifecycle(t *testing.T, store Store) {
 	if purchase.BaseAmountMinor != -71_000 || purchase.FX == nil || purchase.FX.OriginalCurrency != "USD" {
 		t.Fatalf("purchase conversion evidence mismatch: %+v", purchase)
 	}
+	maintenanceType, err := service.CreateEventType(ctx, owner, application.CreateAssetEventType{Name: "保养", Cashflow: domain.AssetEventNeutral})
+	if err != nil || maintenanceType.Name != "保养" || maintenanceType.Cashflow != domain.AssetEventNeutral {
+		t.Fatalf("create custom event type: type=%+v err=%v", maintenanceType, err)
+	}
+	if _, err := service.CreateEventType(ctx, owner, application.CreateAssetEventType{Name: "保养", Cashflow: domain.AssetEventExpense}); err == nil {
+		t.Fatal("duplicate custom event type should fail")
+	}
+	eventTypes, err := service.EventTypes(ctx, owner)
+	if err != nil || len(eventTypes) != 4 || eventTypes[3].Name != "保养" {
+		t.Fatalf("list built-in and custom event types: types=%+v err=%v", eventTypes, err)
+	}
+	maintenance, err := service.Record(ctx, owner, application.RecordEvent{
+		AssetID: asset.ID, Type: domain.AssetEventType("保养"), AmountMinor: 0, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "cleaned and inspected",
+	})
+	if err != nil || maintenance.BaseAmountMinor != 0 || maintenance.Type != domain.AssetEventType("保养") {
+		t.Fatalf("record custom no-amount event: event=%+v err=%v", maintenance, err)
+	}
 	_, locked, err := service.BaseCurrency(ctx, owner)
 	if err != nil || !locked {
 		t.Fatalf("base currency should lock after first money event: locked=%v err=%v", locked, err)
@@ -91,7 +109,7 @@ func runLifecycle(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("timeline: %v", err)
 	}
-	if len(events) != 5 || summary.ExpenseMinor != 86_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 714_000 || summary.Status != "sold" {
+	if len(events) != 6 || summary.ExpenseMinor != 86_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 714_000 || summary.Status != "sold" {
 		t.Fatalf("unexpected lifecycle result: events=%d summary=%+v", len(events), summary)
 	}
 	if events[len(events)-1].FX != nil {
@@ -104,6 +122,10 @@ func runLifecycle(t *testing.T, store Store) {
 	searchedEvents, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Query: "corrected", Page: 1, PageSize: 25})
 	if err != nil || searchedEvents.Total != 1 || len(searchedEvents.Events) != 1 || searchedEvents.Events[0].ID != replacement.ID {
 		t.Fatalf("lifecycle search mismatch: result=%+v err=%v", searchedEvents, err)
+	}
+	customEvents, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "保养", Page: 1, PageSize: 25})
+	if err != nil || customEvents.Total != 1 || len(customEvents.Events) != 1 || customEvents.Events[0].ID != maintenance.ID {
+		t.Fatalf("custom event type filter mismatch: result=%+v err=%v", customEvents, err)
 	}
 	portfolio, err := service.PortfolioSummary(ctx, owner)
 	if err != nil || portfolio.AssetCount != 1 || portfolio.ExpenseMinor != 86_000 || portfolio.IncomeMinor != 800_000 || portfolio.NetMinor != 714_000 || portfolio.BaseCurrency != "CNY" {
@@ -126,6 +148,9 @@ func runLifecycle(t *testing.T, store Store) {
 	}
 	viewer := owner
 	viewer.Role = application.RoleViewer
+	if _, err := service.CreateEventType(ctx, viewer, application.CreateAssetEventType{Name: "借出", Cashflow: domain.AssetEventNeutral}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer custom event type write should be forbidden, got %v", err)
+	}
 	if _, _, err := service.Timeline(ctx, viewer, asset.ID); err != nil {
 		t.Fatalf("viewer should read lifecycle: %v", err)
 	}

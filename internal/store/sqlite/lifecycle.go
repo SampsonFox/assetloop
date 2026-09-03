@@ -27,6 +27,30 @@ func (s *Store) TenantBaseCurrency(ctx context.Context, tenantID string) (string
 	return row.BaseCurrency, row.BaseCurrencyLocked != 0, err
 }
 
+func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.AssetEventTypeDefinition) error {
+	return sqlitedb.New(s.db).CreateAssetEventType(ctx, sqlitedb.CreateAssetEventTypeParams{
+		ID: eventType.ID, TenantID: eventType.TenantID, Name: eventType.Name,
+		NormalizedName: eventType.NormalizedName, CashflowDirection: string(eventType.Cashflow),
+		CreatedByUserID: eventType.CreatedByUserID, CreatedAt: sqliteTime(eventType.CreatedAt),
+	})
+}
+
+func (s *Store) ListAssetEventTypes(ctx context.Context, tenantID string) ([]domain.AssetEventTypeDefinition, error) {
+	rows, err := sqlitedb.New(s.db).ListAssetEventTypes(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.AssetEventTypeDefinition, 0, len(rows))
+	for _, row := range rows {
+		eventType, err := sqliteEventType(row)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, eventType)
+	}
+	return result, nil
+}
+
 func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTransaction, event domain.AssetEvent) error {
 	return s.lifecycleTx(ctx, func(q *sqlitedb.Queries) error {
 		if err := createSQLiteTransaction(ctx, q, transaction); err != nil {
@@ -34,6 +58,9 @@ func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTr
 		}
 		if err := q.CreateAssetEvent(ctx, sqliteEventParams(event)); err != nil {
 			return err
+		}
+		if event.BaseAmountMinor == 0 {
+			return nil
 		}
 		return q.LockTenantBaseCurrency(ctx, sqlitedb.LockTenantBaseCurrencyParams{ID: event.TenantID, BaseCurrency: event.BaseCurrency})
 	})
@@ -50,8 +77,22 @@ func (s *Store) CorrectAssetEvent(ctx context.Context, transaction domain.AssetT
 		if err := q.CreateAssetEvent(ctx, sqliteEventParams(replacement)); err != nil {
 			return err
 		}
+		if replacement.BaseAmountMinor == 0 {
+			return nil
+		}
 		return q.LockTenantBaseCurrency(ctx, sqlitedb.LockTenantBaseCurrencyParams{ID: replacement.TenantID, BaseCurrency: replacement.BaseCurrency})
 	})
+}
+
+func sqliteEventType(row sqlitedb.AssetEventType) (domain.AssetEventTypeDefinition, error) {
+	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
+	if err != nil {
+		return domain.AssetEventTypeDefinition{}, fmt.Errorf("parse event type created_at: %w", err)
+	}
+	return domain.AssetEventTypeDefinition{
+		ID: row.ID, TenantID: row.TenantID, Name: row.Name, NormalizedName: row.NormalizedName,
+		Cashflow: domain.AssetEventCashflow(row.CashflowDirection), CreatedByUserID: row.CreatedByUserID, CreatedAt: createdAt,
+	}, nil
 }
 
 func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (domain.AssetEvent, error) {

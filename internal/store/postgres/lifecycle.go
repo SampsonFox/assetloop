@@ -36,6 +36,37 @@ func (s *Store) TenantBaseCurrency(ctx context.Context, tenantID string) (string
 	return row.BaseCurrency, row.BaseCurrencyLocked, err
 }
 
+func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.AssetEventTypeDefinition) error {
+	id, tenantID, err := catalogIDs(eventType.ID, eventType.TenantID)
+	if err != nil {
+		return err
+	}
+	userID, err := uuid.Parse(eventType.CreatedByUserID)
+	if err != nil {
+		return fmt.Errorf("parse event type user ID: %w", err)
+	}
+	return postgresdb.New(s.db).CreateAssetEventType(ctx, postgresdb.CreateAssetEventTypeParams{
+		ID: id, TenantID: tenantID, Name: eventType.Name, NormalizedName: eventType.NormalizedName,
+		CashflowDirection: string(eventType.Cashflow), CreatedByUserID: userID, CreatedAt: eventType.CreatedAt,
+	})
+}
+
+func (s *Store) ListAssetEventTypes(ctx context.Context, tenantID string) ([]domain.AssetEventTypeDefinition, error) {
+	id, err := uuid.Parse(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("parse tenant ID: %w", err)
+	}
+	rows, err := postgresdb.New(s.db).ListAssetEventTypes(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.AssetEventTypeDefinition, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, postgresEventType(row))
+	}
+	return result, nil
+}
+
 func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTransaction, event domain.AssetEvent) error {
 	return s.lifecycleTx(ctx, func(q *postgresdb.Queries) error {
 		if err := createPostgresTransaction(ctx, q, transaction); err != nil {
@@ -51,6 +82,9 @@ func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTr
 		tenantID, err := uuid.Parse(event.TenantID)
 		if err != nil {
 			return err
+		}
+		if event.BaseAmountMinor == 0 {
+			return nil
 		}
 		return q.LockTenantBaseCurrency(ctx, postgresdb.LockTenantBaseCurrencyParams{ID: tenantID, BaseCurrency: event.BaseCurrency})
 	})
@@ -76,8 +110,18 @@ func (s *Store) CorrectAssetEvent(ctx context.Context, transaction domain.AssetT
 			return err
 		}
 		tenantID, _ := uuid.Parse(replacement.TenantID)
+		if replacement.BaseAmountMinor == 0 {
+			return nil
+		}
 		return q.LockTenantBaseCurrency(ctx, postgresdb.LockTenantBaseCurrencyParams{ID: tenantID, BaseCurrency: replacement.BaseCurrency})
 	})
+}
+
+func postgresEventType(row postgresdb.AssetEventType) domain.AssetEventTypeDefinition {
+	return domain.AssetEventTypeDefinition{
+		ID: row.ID.String(), TenantID: row.TenantID.String(), Name: row.Name, NormalizedName: row.NormalizedName,
+		Cashflow: domain.AssetEventCashflow(row.CashflowDirection), CreatedByUserID: row.CreatedByUserID.String(), CreatedAt: row.CreatedAt,
+	}
 }
 
 func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (domain.AssetEvent, error) {
