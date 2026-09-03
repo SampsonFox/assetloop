@@ -22,10 +22,10 @@
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>
 </section>
-<section class="grid section-gap">
-  <article class="card"><span class="metric">{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</span><h2>{{t $s "overview.expense"}}</h2><p>{{t $s "overview.expense_help"}}</p></article>
-  <article class="card"><span class="metric">{{money .Summary.IncomeMinor .Summary.BaseCurrency}}</span><h2>{{t $s "asset.income"}}</h2><p>{{t $s "asset.income_help"}}</p></article>
-  <article class="card"><span class="metric">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</span><h2>{{t $s "overview.net"}} · {{statusLabel $s .Summary.Status}}</h2><p>{{if .BaseCurrencyLocked}}{{t $s "asset.base_locked"}}{{else}}{{t $s "asset.base_locks_after_first"}}{{end}}</p></article>
+<section class="card cashflow-strip section-gap">
+  <article class="cashflow-stat"><div><h2>{{t $s "overview.expense"}}</h2><p>{{t $s "overview.expense_help"}}</p></div><span class="metric">{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</span></article>
+  <article class="cashflow-stat"><div><h2>{{t $s "asset.income"}}</h2><p>{{t $s "asset.income_help"}}</p></div><span class="metric">{{money .Summary.IncomeMinor .Summary.BaseCurrency}}</span></article>
+  <article class="cashflow-stat"><div><h2>{{t $s "overview.net"}} · {{statusLabel $s .Summary.Status}}</h2><p>{{if .BaseCurrencyLocked}}{{t $s "asset.base_locked"}}{{else}}{{t $s "asset.base_locks_after_first"}}{{end}}</p></div><span class="metric">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</span></article>
 </section>
 
 <section class="card section-gap" id="lifecycle-timeline">

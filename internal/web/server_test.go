@@ -240,7 +240,7 @@ func TestLifecycleFormUsesResponsiveDrawerInteraction(t *testing.T) {
 func TestAssetDetailsUseResponsiveGrid(t *testing.T) {
 	handler := newTestHandler(t)
 	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
-	for _, want := range []string{`.asset-profile { display:grid; grid-template-columns:minmax(300px,.9fr) minmax(0,1.1fr);`, `.asset-product-image {`, `.asset-details-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));`, `.asset-notes {`} {
+	for _, want := range []string{`.asset-profile { display:grid; grid-template-columns:minmax(300px,.9fr) minmax(0,1.1fr);`, `.asset-product-image {`, `.asset-details-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));`, `.asset-notes {`, `.cashflow-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));`, `.cashflow-stat .metric {`} {
 		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
 			t.Fatalf("responsive asset details style missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
 		}
@@ -556,10 +556,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-heading"`, `id="add-event"`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="card cashflow-strip section-gap"`, `class="timeline-heading"`, `id="add-event"`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
+	}
+	if strings.Count(detail.Body.String(), `class="cashflow-stat"`) != 3 || strings.Contains(detail.Body.String(), `class="grid section-gap"`) {
+		t.Fatalf("asset cashflow summary must be a single compact three-metric strip: %s", detail.Body.String())
 	}
 	if strings.Contains(detail.Body.String(), `class="two-column"`) {
 		t.Fatalf("asset notes must remain inside the responsive details card: %s", detail.Body.String())
