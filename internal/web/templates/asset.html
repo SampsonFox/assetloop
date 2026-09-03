@@ -23,25 +23,17 @@
   <article class="card"><span class="metric">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</span><h2>{{t $s "overview.net"}} · {{statusLabel $s .Summary.Status}}</h2><p>{{if .BaseCurrencyLocked}}{{t $s "asset.base_locked"}}{{else}}{{t $s "asset.base_locks_after_first"}}{{end}}</p></article>
 </section>
 
-<section class="card table-card section-gap">
-  <h2>{{t $s "asset.timeline"}}</h2>
-  {{if .Events}}<table>
-    <thead><tr><th>{{t $s "asset.time"}}</th><th>{{t $s "asset.event"}}</th><th>{{t $s "asset.base_amount"}}</th><th>{{t $s "asset.fx_evidence"}}</th><th>{{t $s "common.notes"}}</th><th></th></tr></thead>
-    <tbody>{{range .Events}}<tr class="event-{{eventClass .Type}} {{if .IsVoided}}is-voided{{end}}">
-      <td>{{dateTime .OccurredAt}}</td><td><span class="badge">{{eventLabel $s .Type}}</span>{{if .IsVoided}} {{t $s "asset.voided"}}{{end}}</td>
-      <td>{{money .BaseAmountMinor .BaseCurrency}}</td>
-      <td>{{if .FX}}{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<br><span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span>{{else}}—{{end}}</td>
-      <td>{{.Notes}}</td>
-      <td>{{if $.CanManageLifecycle}}{{if canCorrect .}}<a href="/events/{{.ID}}/correct">{{t $s "asset.correct"}}</a>{{end}}{{end}}</td>
-    </tr>{{end}}</tbody>
-  </table>{{else}}<p class="muted">{{t $s "asset.no_events"}}</p>{{end}}
+<section class="card section-gap" id="lifecycle-timeline">
+  <header class="timeline-heading"><h2>{{t $s "asset.timeline"}}</h2>{{if .CanManageLifecycle}}<button class="button auto" id="add-event" type="button" data-dialog-open="event-drawer" data-title="{{t $s "asset.add_event"}}" data-action="/assets/{{.Asset.ID}}/events" aria-controls="event-drawer"><span aria-hidden="true">＋</span>{{t $s "asset.add_event_short"}}</button>{{end}}</header>
+  {{if .Events}}<ol class="timeline-list">{{range .Events}}<li class="timeline-item event-{{eventClass .Type}} {{if .IsVoided}}is-voided{{end}}"><span class="timeline-dot" aria-hidden="true"></span><article class="timeline-entry"><header class="timeline-entry-heading"><div class="timeline-entry-title"><span class="badge">{{eventLabel $s .Type}}</span>{{if .IsVoided}}<span class="muted">{{t $s "asset.voided"}}</span>{{end}}<time>{{dateTime .OccurredAt}}</time></div><strong class="timeline-amount">{{money .BaseAmountMinor .BaseCurrency}}</strong></header>{{if .FX}}<p class="timeline-evidence">{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span></p>{{end}}{{if .Notes}}<p class="timeline-note">{{.Notes}}</p>{{end}}{{if $.CanManageLifecycle}}{{if canCorrect .}}<footer class="timeline-entry-footer"><a href="/events/{{.ID}}/correct">{{t $s "asset.correct"}}</a></footer>{{end}}{{end}}</article></li>{{end}}</ol>{{else}}<p class="muted">{{t $s "asset.no_events"}}</p>{{end}}
 </section>
 
 {{if .CanManageLifecycle}}
-<section class="card section-gap" id="add-event">
-  <h2>{{t $s "asset.add_event"}}</h2>
-  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-  <form class="form-grid" action="/assets/{{.Asset.ID}}/events" method="post">
+<dialog class="drawer" id="event-drawer" aria-labelledby="event-drawer-title">
+  <form class="drawer-panel event-drawer-panel" id="event-form" action="/assets/{{.Asset.ID}}/events" method="post">
+    <header class="drawer-heading"><div><p class="eyebrow">{{t $s "asset.timeline"}}</p><h2 id="event-drawer-title" data-dialog-title>{{t $s "asset.add_event"}}</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.close"}}">×</button></header>
+    <div class="drawer-body event-form-grid">
+    {{if .Error}}<p class="error wide" role="alert">{{.Error}}</p>{{end}}
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>{{t $s "asset.event_type"}}<select name="event_type" required><option value="purchase">{{t $s "event.purchase"}}</option><option value="repair">{{t $s "event.repair"}}</option><option value="sale">{{t $s "event.sale"}}</option></select></label>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.NowValue}}" required></label>
@@ -54,8 +46,9 @@
     <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
     <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required>{{t $s "asset.fx_confirm"}} {{.BaseCurrency}}</label>
     <label class="wide">{{t $s "common.notes"}}<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
-    <button type="submit">{{t $s "asset.append"}}</button>
+    </div>
+    <footer class="drawer-footer"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button><button class="auto" type="submit">{{t $s "asset.append"}}</button></footer>
   </form>
-</section>
+</dialog>
 {{end}}
 {{end}}

@@ -46,6 +46,8 @@
           group.hidden = group.dataset.variantGroup !== modelId;
         }
       }
+      const currency = form.querySelector("[data-currency-select]");
+      if (currency) syncFXFields(currency);
       dialog.showModal();
       return;
     }
@@ -78,10 +80,13 @@
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");
   const initialModelId = params.get("edit_model_id");
-  const opener = [...document.querySelectorAll("[data-dialog-open]")].find(
+  let opener = [...document.querySelectorAll("[data-dialog-open]")].find(
     (candidate) => candidate.dataset.dialogOpen === initialDialog
       && (!initialModelId || candidate.dataset.editModelId === initialModelId),
   );
+  if (!opener && (window.location.hash === "#add-event" || document.querySelector("#event-drawer .error"))) {
+    opener = document.querySelector('[data-dialog-open="event-drawer"]');
+  }
   if (opener) {
     for (const [dataKey, fieldName] of Object.entries(fields)) {
       const value = params.get(fieldName);

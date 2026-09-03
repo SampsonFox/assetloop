@@ -221,6 +221,22 @@ func TestFXFieldsOnlyExpandForForeignCurrency(t *testing.T) {
 	}
 }
 
+func TestLifecycleFormUsesResponsiveDrawerInteraction(t *testing.T) {
+	handler := newTestHandler(t)
+	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
+	for _, want := range []string{`.timeline-heading {`, `.event-drawer-panel { display:flex; flex-direction:column;`, `.event-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));`, `.drawer-footer {`} {
+		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
+			t.Fatalf("lifecycle drawer style missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
+		}
+	}
+	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
+	for _, want := range []string{`window.location.hash === "#add-event"`, `document.querySelector("#event-drawer .error")`, `document.querySelector('[data-dialog-open="event-drawer"]')`} {
+		if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
+			t.Fatalf("lifecycle drawer interaction missing %q: status=%d body=%s", want, script.Code, script.Body.String())
+		}
+	}
+}
+
 func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	handler := newTestHandler(t)
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
@@ -482,10 +498,14 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `id="add-event"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="timeline-heading"`, `id="add-event"`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
+	}
+	visibleDetail := strings.Split(detail.Body.String(), `<dialog class="drawer" id="event-drawer"`)[0]
+	if regexp.MustCompile(`<form[^>]+action="/assets/` + regexp.QuoteMeta(match[1]) + `/events"`).MatchString(visibleDetail) {
+		t.Fatalf("lifecycle create form must not be rendered in the page flow: %s", visibleDetail)
 	}
 	if strings.Count(detail.Body.String(), `data-fx-field hidden`) != 4 {
 		t.Fatalf("same-currency event form should initially hide all FX controls: %s", detail.Body.String())
@@ -535,7 +555,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("record Agent-confirmed sale: status=%d body=%s", sale.Code, sale.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "已作废"} {
+	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "已作废"} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
