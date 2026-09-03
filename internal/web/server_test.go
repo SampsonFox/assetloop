@@ -237,6 +237,28 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	}
 }
 
+func TestPendingImportsAreListFirstAndDraftFormUsesDrawer(t *testing.T) {
+	handler := newTestHandler(t)
+	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
+	csrf := responseCookie(t, setupPage, csrfCookie)
+	setup := request(t, handler, http.MethodPost, "/setup", url.Values{
+		"csrf_token": {csrf.Value}, "tenant_name": {"Import Tenant"}, "base_currency": {"CNY"},
+		"username": {"owner"}, "password": {"owner secure password"},
+	}, []*http.Cookie{csrf})
+	session := responseCookie(t, setup, sessionCookie)
+
+	imports := request(t, handler, http.MethodGet, "/imports", nil, []*http.Cookie{session, csrf})
+	for _, want := range []string{"待确认记录", "暂无待确认记录", "确认前不会计入物品生命周期", `data-dialog-open="import-drawer"`, `id="import-drawer"`} {
+		if imports.Code != http.StatusOK || !strings.Contains(imports.Body.String(), want) {
+			t.Fatalf("list-first pending imports missing %q: status=%d body=%s", want, imports.Code, imports.Body.String())
+		}
+	}
+	body := imports.Body.String()
+	if drawer, form := strings.Index(body, `id="import-drawer"`), strings.Index(body, `action="/imports" method="post"`); drawer < 0 || form < drawer {
+		t.Fatalf("manual draft form must stay inside the import drawer: %s", body)
+	}
+}
+
 func TestAssetDrawerCreatesMissingTypeWithoutLeavingAssetList(t *testing.T) {
 	handler := newTestHandler(t)
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
