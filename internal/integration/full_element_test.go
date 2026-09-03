@@ -82,7 +82,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil {
 		t.Fatalf("login viewer: %v", err)
 	}
-	if _, err := auth.ListMembers(ctx, viewerSession.Principal); !errors.Is(err, application.ErrForbidden) {
+	if _, err := auth.ListMembers(ctx, viewerSession.Principal, application.MemberListOptions{}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer should not list members, got %v", err)
 	}
 

@@ -6,9 +6,21 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite/sqlitedb"
 )
+
+func (s *Store) GetPortfolioSummary(ctx context.Context, tenantID string) (application.PortfolioSummary, error) {
+	row, err := sqlitedb.New(s.db).GetPortfolioSummary(ctx, tenantID)
+	if err != nil {
+		return application.PortfolioSummary{}, err
+	}
+	return application.PortfolioSummary{
+		AssetCount: int(row.AssetCount), ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetMinor: row.NetMinor, BaseCurrency: row.BaseCurrency,
+	}, nil
+}
 
 func (s *Store) TenantBaseCurrency(ctx context.Context, tenantID string) (string, bool, error) {
 	row, err := sqlitedb.New(s.db).GetTenantBaseCurrency(ctx, tenantID)
@@ -70,6 +82,42 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 		result = append(result, event)
 	}
 	return result, nil
+}
+
+func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID string, opts application.EventListOptions) ([]domain.AssetEvent, int, error) {
+	rows, err := sqlitedb.New(s.db).ListAssetEventsPage(ctx, sqlitedb.ListAssetEventsPageParams{
+		TenantID: tenantID, AssetID: assetID, SearchQuery: opts.Query, EventTypeFilter: opts.Type,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	result := make([]domain.AssetEvent, 0, len(rows))
+	total := 0
+	for _, row := range rows {
+		total = int(row.TotalCount)
+		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
+			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
+		if err != nil {
+			return nil, 0, err
+		}
+		result = append(result, event)
+	}
+	return result, total, nil
+}
+
+func (s *Store) GetAssetSummary(ctx context.Context, tenantID, assetID string) (domain.AssetSummary, error) {
+	row, err := sqlitedb.New(s.db).GetAssetSummary(ctx, sqlitedb.GetAssetSummaryParams{TenantID: tenantID, AssetID: assetID})
+	if err != nil {
+		return domain.AssetSummary{}, err
+	}
+	return domain.AssetSummary{
+		BaseCurrency: row.BaseCurrency, ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetCashflowMinor: row.NetMinor, Status: row.Status,
+	}, nil
 }
 
 func (s *Store) lifecycleTx(ctx context.Context, fn func(*sqlitedb.Queries) error) error {

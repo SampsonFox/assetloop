@@ -150,6 +150,7 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 	}
 	rows, err := queries.ListAssetsWithSummary(ctx, sqlitedb.ListAssetsWithSummaryParams{
 		TenantID: tenantID, SearchQuery: opts.Query, StatusFilter: opts.Status,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
 	})
 	if err != nil {
@@ -173,6 +174,47 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 				NetCashflowMinor: row.NetMinor, Status: row.Status,
 			},
 		})
+	}
+	return result, nil
+}
+
+func (s *Store) ListModelsWithVariants(ctx context.Context, tenantID string, opts application.ModelListOptions) (application.ModelListResult, error) {
+	rows, err := sqlitedb.New(s.db).ListModelsWithVariants(ctx, sqlitedb.ListModelsWithVariantsParams{
+		TenantID: tenantID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
+	if err != nil {
+		return application.ModelListResult{}, err
+	}
+	result := application.ModelListResult{Models: []domain.ProductModel{}, Variants: []domain.ProductVariant{}}
+	seen := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		if result.Total == 0 {
+			result.Total = int(row.TotalCount)
+		}
+		if _, ok := seen[row.ID]; !ok {
+			createdAt, err := parseCatalogTime(row.CreatedAt)
+			if err != nil {
+				return application.ModelListResult{}, err
+			}
+			result.Models = append(result.Models, domain.ProductModel{
+				ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID,
+				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: createdAt,
+			})
+			seen[row.ID] = struct{}{}
+		}
+		if row.VariantID.Valid {
+			createdAt, err := parseCatalogTime(row.VariantCreatedAt.String)
+			if err != nil {
+				return application.ModelListResult{}, err
+			}
+			result.Variants = append(result.Variants, domain.ProductVariant{
+				ID: row.VariantID.String, TenantID: row.TenantID, CategoryID: row.CategoryID,
+				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon,
+				ModelID: row.ID, ModelName: row.Name, Name: row.VariantName.String, CreatedAt: createdAt,
+			})
+		}
 	}
 	return result, nil
 }

@@ -1,10 +1,18 @@
 {{define "content"}}{{$s := .Strings}}
 <section class="page-heading"><div><p class="eyebrow">{{t $s "members.eyebrow"}}</p><h1>{{t $s "members.heading"}}</h1></div></section>
 {{if .Error}}<div class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</div>{{end}}
+<form class="asset-filters table-filters" method="get" action="/admin/members">
+  <label class="asset-search"><span>{{t $s "members.search"}}</span><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "members.search_placeholder"}}"></label>
+  <label><span>{{t $s "members.role"}}</span><select name="role"><option value="">{{t $s "members.all_roles"}}</option><option value="owner" {{if eq .TableFilter "owner"}}selected{{end}}>{{t $s "role.owner"}}</option><option value="editor" {{if eq .TableFilter "editor"}}selected{{end}}>{{t $s "role.editor"}}</option><option value="viewer" {{if eq .TableFilter "viewer"}}selected{{end}}>{{t $s "role.viewer"}}</option></select></label>
+  <label><span>{{t $s "table.sort"}}</span><select name="sort"><option value="username" {{if eq .TableSort "username"}}selected{{end}}>{{t $s "members.username"}}</option><option value="role" {{if eq .TableSort "role"}}selected{{end}}>{{t $s "members.role"}}</option><option value="created" {{if eq .TableSort "created"}}selected{{end}}>{{t $s "members.joined"}}</option></select></label>
+  <label><span>{{t $s "table.direction"}}</span><select name="direction"><option value="asc" {{if eq .TableDirection "asc"}}selected{{end}}>{{t $s "table.ascending"}}</option><option value="desc" {{if eq .TableDirection "desc"}}selected{{end}}>{{t $s "table.descending"}}</option></select></label>
+  <button class="auto" type="submit">{{t $s "assets.filter"}}</button>{{if .TableHasFilters}}<a class="button secondary" href="{{.TableClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
+</form>
 <section class="two-column">
   <div class="card table-card">
-    <table><thead><tr><th>{{t $s "members.username"}}</th><th>{{t $s "members.role"}}</th><th>{{t $s "members.joined"}}</th></tr></thead>
-    <tbody>{{range .Members}}<tr><td>{{.Username}}</td><td><span class="badge">{{roleLabel $s .Role}}</span></td><td>{{.CreatedAt.Format "2006-01-02"}}</td></tr>{{end}}</tbody></table>
+    <table class="members-table"><thead><tr><th aria-sort="{{ariaSort .TableSort .TableDirection "username"}}"><a class="table-sort" href="{{index .TableSortURLs "username"}}">{{t $s "members.username"}} <span aria-hidden="true">{{sortMark .TableSort .TableDirection "username"}}</span></a></th><th aria-sort="{{ariaSort .TableSort .TableDirection "role"}}"><a class="table-sort" href="{{index .TableSortURLs "role"}}">{{t $s "members.role"}} <span aria-hidden="true">{{sortMark .TableSort .TableDirection "role"}}</span></a></th><th aria-sort="{{ariaSort .TableSort .TableDirection "created"}}"><a class="table-sort" href="{{index .TableSortURLs "created"}}">{{t $s "members.joined"}} <span aria-hidden="true">{{sortMark .TableSort .TableDirection "created"}}</span></a></th></tr></thead>
+    <tbody>{{range .Members}}<tr><td data-label="{{t $s "members.username"}}">{{.Username}}</td><td data-label="{{t $s "members.role"}}"><span class="badge">{{roleLabel $s .Role}}</span></td><td data-label="{{t $s "members.joined"}}">{{.CreatedAt.Format "2006-01-02"}}</td></tr>{{else}}<tr><td colspan="3"><span class="muted">{{t $s "members.no_results"}}</span></td></tr>{{end}}</tbody></table>
+    {{if gt .TableTotalPages 1}}<nav class="pagination table-pagination" aria-label="{{t $s "members.pagination"}}"><span>{{t $s "assets.page"}} {{.TablePage}} / {{.TableTotalPages}} · {{.TableTotal}}</span><div>{{if .TablePreviousURL}}<a class="button secondary" href="{{.TablePreviousURL}}">{{t $s "assets.previous"}}</a>{{end}}{{if .TableNextURL}}<a class="button secondary" href="{{.TableNextURL}}">{{t $s "assets.next"}}</a>{{end}}</div></nav>{{end}}
   </div>
   <form method="post" action="/admin/members" class="card stack" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">

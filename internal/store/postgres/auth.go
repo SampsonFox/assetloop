@@ -114,20 +114,26 @@ func (s *Store) CreateMember(ctx context.Context, user application.User, members
 	return tx.Commit()
 }
 
-func (s *Store) ListMembers(ctx context.Context, tenantID string) ([]application.Member, error) {
+func (s *Store) ListMembers(ctx context.Context, tenantID string, opts application.MemberListOptions) (application.MemberListResult, error) {
 	id, err := uuid.Parse(tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("parse tenant ID: %w", err)
+		return application.MemberListResult{}, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	rows, err := postgresdb.New(s.db).ListMembers(ctx, id)
+	rows, err := postgresdb.New(s.db).ListMembersPage(ctx, postgresdb.ListMembersPageParams{
+		TenantID: id, SearchQuery: opts.Query, RoleFilter: opts.Role,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
 	if err != nil {
-		return nil, err
+		return application.MemberListResult{}, err
 	}
 	members := make([]application.Member, 0, len(rows))
+	total := 0
 	for _, row := range rows {
+		total = int(row.TotalCount)
 		members = append(members, application.Member{UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), CreatedAt: row.CreatedAt})
 	}
-	return members, nil
+	return application.MemberListResult{Members: members, Total: total}, nil
 }
 
 func (s *Store) RecordSecurityEvent(ctx context.Context, event application.SecurityEvent) error {

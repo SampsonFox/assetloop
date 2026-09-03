@@ -107,6 +107,14 @@ var allowedAssetListStatuses = map[string]struct{}{
 	"repairing":  {},
 }
 
+var allowedAssetSorts = map[string]struct{}{
+	"created": {}, "name": {}, "model": {}, "status": {}, "net": {}, "cost": {},
+}
+
+var allowedModelSorts = map[string]struct{}{
+	"category": {}, "name": {}, "created": {},
+}
+
 func NewCatalogService(store CatalogStore) *CatalogService {
 	return &CatalogService{store: store, now: time.Now}
 }
@@ -348,25 +356,81 @@ func (s *CatalogService) Snapshot(ctx context.Context, actor Principal) (Catalog
 	return CatalogSnapshot{Categories: categories, Models: models, Variants: variants, Assets: assets}, nil
 }
 
+func (s *CatalogService) Categories(ctx context.Context, actor Principal) ([]domain.ItemCategory, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return nil, err
+	}
+	categories, err := s.store.ListCategories(ctx, actor.TenantID)
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	return categories, nil
+}
+
 func (s *CatalogService) ListAssetsWithSummary(ctx context.Context, actor Principal, opts AssetListOptions) (AssetListResult, error) {
 	if err := actor.Require(CapabilityView); err != nil {
 		return AssetListResult{}, err
 	}
-	if opts.Page <= 0 {
-		opts.Page = 1
-	}
-	if opts.PageSize <= 0 {
-		opts.PageSize = defaultAssetPageSize
-	}
-	if opts.PageSize > 200 {
-		opts.PageSize = 200
-	}
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
 	opts.Query = strings.TrimSpace(opts.Query)
 	opts.Status = strings.TrimSpace(opts.Status)
 	if _, allowed := allowedAssetListStatuses[opts.Status]; !allowed {
 		return AssetListResult{}, NewInputError("validation.filter_invalid")
 	}
+	var err error
+	opts.Sort, opts.Direction, err = normalizeSort(opts.Sort, opts.Direction, "created", "desc", allowedAssetSorts)
+	if err != nil {
+		return AssetListResult{}, err
+	}
 	return s.store.ListAssetsWithSummary(ctx, actor.TenantID, opts)
+}
+
+func (s *CatalogService) ListModelsWithVariants(ctx context.Context, actor Principal, opts ModelListOptions) (ModelListResult, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return ModelListResult{}, err
+	}
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
+	opts.Query = strings.TrimSpace(opts.Query)
+	opts.CategoryID = strings.TrimSpace(opts.CategoryID)
+	if opts.CategoryID != "" {
+		if err := validID("category ID", opts.CategoryID); err != nil {
+			return ModelListResult{}, NewInputError("validation.filter_invalid")
+		}
+	}
+	var err error
+	opts.Sort, opts.Direction, err = normalizeSort(opts.Sort, opts.Direction, "category", "asc", allowedModelSorts)
+	if err != nil {
+		return ModelListResult{}, err
+	}
+	return s.store.ListModelsWithVariants(ctx, actor.TenantID, opts)
+}
+
+func normalizePage(page, pageSize int) (int, int) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = defaultAssetPageSize
+	}
+	if pageSize > 200 {
+		pageSize = 200
+	}
+	return page, pageSize
+}
+
+func normalizeSort(sort, direction, defaultSort, defaultDirection string, allowed map[string]struct{}) (string, string, error) {
+	sort = strings.TrimSpace(strings.ToLower(sort))
+	direction = strings.TrimSpace(strings.ToLower(direction))
+	if sort == "" {
+		sort = defaultSort
+	}
+	if direction == "" {
+		direction = defaultDirection
+	}
+	if _, ok := allowed[sort]; !ok || (direction != "asc" && direction != "desc") {
+		return "", "", NewInputError("validation.filter_invalid")
+	}
+	return sort, direction, nil
 }
 
 func (s *CatalogService) GetAsset(ctx context.Context, actor Principal, assetID string) (domain.Asset, error) {

@@ -47,6 +47,17 @@ func (s *LifecycleService) BaseCurrency(ctx context.Context, actor Principal) (s
 	return currency, locked, nil
 }
 
+func (s *LifecycleService) PortfolioSummary(ctx context.Context, actor Principal) (PortfolioSummary, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return PortfolioSummary{}, err
+	}
+	summary, err := s.store.GetPortfolioSummary(ctx, actor.TenantID)
+	if err != nil {
+		return PortfolioSummary{}, fmt.Errorf("get portfolio summary: %w", err)
+	}
+	return summary, nil
+}
+
 func (s *LifecycleService) Record(ctx context.Context, actor Principal, cmd RecordEvent) (domain.AssetEvent, error) {
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEvent{}, err
@@ -117,6 +128,35 @@ func (s *LifecycleService) Timeline(ctx context.Context, actor Principal, assetI
 	}
 	summary := summarizeEvents(baseCurrency, events)
 	return events, summary, nil
+}
+
+func (s *LifecycleService) TimelinePage(ctx context.Context, actor Principal, assetID string, opts EventListOptions) (EventListResult, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return EventListResult{}, err
+	}
+	if err := validID("asset ID", assetID); err != nil {
+		return EventListResult{}, err
+	}
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
+	opts.Query = strings.TrimSpace(opts.Query)
+	opts.Type = strings.TrimSpace(strings.ToLower(opts.Type))
+	if opts.Type != "" && opts.Type != string(domain.AssetEventPurchase) && opts.Type != string(domain.AssetEventRepair) && opts.Type != string(domain.AssetEventSale) && opts.Type != string(domain.AssetEventVoid) {
+		return EventListResult{}, NewInputError("validation.filter_invalid")
+	}
+	var err error
+	opts.Sort, opts.Direction, err = normalizeSort(opts.Sort, opts.Direction, "occurred", "asc", map[string]struct{}{"occurred": {}, "amount": {}, "type": {}})
+	if err != nil {
+		return EventListResult{}, err
+	}
+	events, total, err := s.store.ListAssetEventsPage(ctx, actor.TenantID, assetID, opts)
+	if err != nil {
+		return EventListResult{}, fmt.Errorf("list asset events page: %w", err)
+	}
+	summary, err := s.store.GetAssetSummary(ctx, actor.TenantID, assetID)
+	if err != nil {
+		return EventListResult{}, fmt.Errorf("get asset summary: %w", err)
+	}
+	return EventListResult{Events: events, Summary: summary, Total: total}, nil
 }
 
 func (s *LifecycleService) GetEvent(ctx context.Context, actor Principal, eventID string) (domain.AssetEvent, error) {

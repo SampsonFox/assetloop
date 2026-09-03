@@ -97,6 +97,18 @@ func runLifecycle(t *testing.T, store Store) {
 	if events[len(events)-1].FX != nil {
 		t.Fatalf("base-currency sale should keep original-currency evidence nullable: %+v", events[len(events)-1])
 	}
+	eventPage, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "repair", Sort: "amount", Direction: "desc", Page: 1, PageSize: 1})
+	if err != nil || eventPage.Total != 2 || len(eventPage.Events) != 1 || eventPage.Events[0].ID != replacement.ID || eventPage.Summary.NetCashflowMinor != 714_000 {
+		t.Fatalf("server-paged lifecycle result mismatch: result=%+v err=%v", eventPage, err)
+	}
+	searchedEvents, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Query: "corrected", Page: 1, PageSize: 25})
+	if err != nil || searchedEvents.Total != 1 || len(searchedEvents.Events) != 1 || searchedEvents.Events[0].ID != replacement.ID {
+		t.Fatalf("lifecycle search mismatch: result=%+v err=%v", searchedEvents, err)
+	}
+	portfolio, err := service.PortfolioSummary(ctx, owner)
+	if err != nil || portfolio.AssetCount != 1 || portfolio.ExpenseMinor != 86_000 || portfolio.IncomeMinor != 800_000 || portfolio.NetMinor != 714_000 || portfolio.BaseCurrency != "CNY" {
+		t.Fatalf("bulk portfolio summary mismatch: summary=%+v err=%v", portfolio, err)
+	}
 	soldList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Query: "Example Ultra", Status: "sold", Page: 1, PageSize: 1})
 	if err != nil || soldList.Total != 1 || len(soldList.Assets) != 1 || soldList.Assets[0].Summary.NetCashflowMinor != 714_000 {
 		t.Fatalf("sold asset search mismatch: result=%+v err=%v", soldList, err)
@@ -131,6 +143,14 @@ func runLifecycle(t *testing.T, store Store) {
 	pageTwo, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Page: 2, PageSize: 1})
 	if err != nil || pageTwo.Total != 2 || len(pageTwo.Assets) != 1 || pageTwo.Assets[0].Asset.ID == secondAsset.ID {
 		t.Fatalf("second asset page mismatch: result=%+v err=%v", pageTwo, err)
+	}
+	byName, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Sort: "name", Direction: "asc", Page: 1, PageSize: 25})
+	if err != nil || len(byName.Assets) != 2 || byName.Assets[0].Asset.ID != secondAsset.ID {
+		t.Fatalf("asset name sort mismatch: result=%+v err=%v", byName, err)
+	}
+	byNet, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Sort: "net", Direction: "desc", Page: 1, PageSize: 25})
+	if err != nil || len(byNet.Assets) != 2 || byNet.Assets[0].Asset.ID != asset.ID {
+		t.Fatalf("asset net sort mismatch: result=%+v err=%v", byNet, err)
 	}
 }
 
@@ -230,6 +250,25 @@ func runCatalog(t *testing.T, store Store) {
 	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 1 || len(snapshot.Assets) != 1 {
 		t.Fatalf("unexpected catalog counts: categories=%d models=%d variants=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Variants), len(snapshot.Assets))
 	}
+	accessoryCategory, err := service.CreateCategory(ctx, owner, application.CreateCategory{Name: "Accessories", IconKey: "headphones"})
+	if err != nil {
+		t.Fatalf("create second category: %v", err)
+	}
+	accessoryModel, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: accessoryCategory.ID, Name: "Audio One"})
+	if err != nil {
+		t.Fatalf("create second model: %v", err)
+	}
+	if _, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: accessoryModel.ID, Name: "Black"}); err != nil {
+		t.Fatalf("create second model variant: %v", err)
+	}
+	modelPage, err := service.ListModelsWithVariants(ctx, owner, application.ModelListOptions{Sort: "name", Direction: "asc", Page: 1, PageSize: 1})
+	if err != nil || modelPage.Total != 2 || len(modelPage.Models) != 1 || modelPage.Models[0].ID != accessoryModel.ID || len(modelPage.Variants) != 1 || modelPage.Variants[0].ModelID != accessoryModel.ID {
+		t.Fatalf("bulk model page mismatch: result=%+v err=%v", modelPage, err)
+	}
+	filteredModels, err := service.ListModelsWithVariants(ctx, owner, application.ModelListOptions{Query: "Ultra", CategoryID: category.ID, Page: 1, PageSize: 25})
+	if err != nil || filteredModels.Total != 1 || len(filteredModels.Models) != 1 || filteredModels.Models[0].ID != model.ID || len(filteredModels.Variants) != 1 {
+		t.Fatalf("filtered model page mismatch: result=%+v err=%v", filteredModels, err)
+	}
 	viewer := owner
 	viewer.Role = application.RoleViewer
 	if _, err := service.CreateCategory(ctx, viewer, application.CreateCategory{Name: "Forbidden"}); !errors.Is(err, application.ErrForbidden) {
@@ -325,9 +364,13 @@ func runAuth(t *testing.T, store Store) {
 	if _, err := service.AddMember(ctx, got, application.AddMember{Username: "store-viewer", Password: "store viewer password", Role: application.RoleViewer}); err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	members, err := service.ListMembers(ctx, got)
-	if err != nil || len(members) != 2 {
-		t.Fatalf("list members: count=%d err=%v", len(members), err)
+	members, err := service.ListMembers(ctx, got, application.MemberListOptions{})
+	if err != nil || len(members.Members) != 2 || members.Total != 2 {
+		t.Fatalf("list members: count=%d total=%d err=%v", len(members.Members), members.Total, err)
+	}
+	viewerMembers, err := service.ListMembers(ctx, got, application.MemberListOptions{Query: "viewer", Role: "viewer", Sort: "created", Direction: "desc", Page: 1, PageSize: 1})
+	if err != nil || viewerMembers.Total != 1 || len(viewerMembers.Members) != 1 || viewerMembers.Members[0].Username != "store-viewer" {
+		t.Fatalf("filtered member page mismatch: result=%+v err=%v", viewerMembers, err)
 	}
 	err = store.CreateSession(ctx, application.Session{
 		TokenHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

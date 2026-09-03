@@ -91,6 +91,36 @@ JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1
 ORDER BY c.name, m.name, m.id;
 
+-- name: ListModelsWithVariants :many
+WITH filtered_models AS (
+    SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
+           c.icon_key AS category_icon, m.name, m.created_at
+    FROM product_models m
+    JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+    WHERE m.tenant_id = sqlc.arg(tenant_id)
+      AND (sqlc.arg(search_query)::text = '' OR m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR c.name ILIKE '%' || sqlc.arg(search_query)::text || '%')
+      AND (sqlc.arg(category_filter)::text = '' OR m.category_id::text = sqlc.arg(category_filter)::text)
+),
+paged_models AS (
+    SELECT *, COUNT(*) OVER () AS total_count,
+           ROW_NUMBER() OVER (ORDER BY
+             CASE WHEN sqlc.arg(sort_key)::text = 'category' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(category_name) END ASC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'category' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(category_name) END DESC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(name) END ASC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(name) END DESC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'asc' THEN created_at END ASC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'desc' THEN created_at END DESC,
+             LOWER(category_name), LOWER(name), id) AS page_order
+    FROM filtered_models
+    LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint
+)
+SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
+       pm.name, pm.created_at, pm.total_count, pm.page_order,
+       v.id AS variant_id, v.name AS variant_name, v.created_at AS variant_created_at
+FROM paged_models pm
+LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
+ORDER BY pm.page_order, LOWER(v.name), v.id;
+
 -- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
        c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.created_at
@@ -187,7 +217,20 @@ WHERE sqlc.arg(status_filter)::text IN ('', 'all')
    OR (sqlc.arg(status_filter)::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
    OR (sqlc.arg(status_filter)::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
    OR (sqlc.arg(status_filter)::text = 'unacquired' AND NOT has_sale AND NOT has_purchase)
-ORDER BY created_at DESC, id
+ORDER BY
+  CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(display_name) END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(display_name) END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(model_name || ' ' || variant_name) END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(model_name || ' ' || variant_name) END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'status' AND sqlc.arg(sort_direction)::text = 'asc' THEN status END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'status' AND sqlc.arg(sort_direction)::text = 'desc' THEN status END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'net' AND sqlc.arg(sort_direction)::text = 'asc' THEN net_minor END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'net' AND sqlc.arg(sort_direction)::text = 'desc' THEN net_minor END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'cost' AND sqlc.arg(sort_direction)::text = 'asc' THEN expense_minor END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'cost' AND sqlc.arg(sort_direction)::text = 'desc' THEN expense_minor END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'asc' THEN created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'desc' THEN created_at END DESC,
+  id
 LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint;
 
 -- name: CountAssetsWithSummary :one
@@ -302,6 +345,23 @@ JOIN users u ON u.id = tm.user_id
 WHERE tm.tenant_id = $1
 ORDER BY u.username_normalized;
 
+-- name: ListMembersPage :many
+SELECT u.id AS user_id, u.username, tm.role, tm.created_at, COUNT(*) OVER () AS total_count
+FROM tenant_memberships tm
+JOIN users u ON u.id = tm.user_id
+WHERE tm.tenant_id = sqlc.arg(tenant_id)
+  AND (sqlc.arg(search_query)::text = '' OR u.username ILIKE '%' || sqlc.arg(search_query)::text || '%')
+  AND (sqlc.arg(role_filter)::text = '' OR tm.role = sqlc.arg(role_filter)::text)
+ORDER BY
+  CASE WHEN sqlc.arg(sort_key)::text = 'username' AND sqlc.arg(sort_direction)::text = 'asc' THEN u.username_normalized END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'username' AND sqlc.arg(sort_direction)::text = 'desc' THEN u.username_normalized END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'role' AND sqlc.arg(sort_direction)::text = 'asc' THEN tm.role END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'role' AND sqlc.arg(sort_direction)::text = 'desc' THEN tm.role END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'asc' THEN tm.created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'desc' THEN tm.created_at END DESC,
+  u.id
+LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint;
+
 -- name: CreateSecurityAuditEvent :exec
 INSERT INTO security_audit_events
     (id, tenant_id, actor_user_id, action, target_user_id, detail, occurred_at)
@@ -311,6 +371,28 @@ VALUES ($1, $2, $3, $4, $5, $6, $7);
 SELECT base_currency, base_currency_locked
 FROM tenants
 WHERE id = $1;
+
+-- name: GetPortfolioSummary :one
+WITH effective_events AS (
+    SELECT e.*
+    FROM asset_events e
+    WHERE e.tenant_id = sqlc.arg(tenant_id)
+      AND e.event_type != 'void'
+      AND NOT EXISTS (
+          SELECT 1 FROM asset_events void_event
+          WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+      )
+)
+SELECT COUNT(DISTINCT a.id)::bigint AS asset_count,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0)::bigint AS expense_minor,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0)::bigint AS income_minor,
+       COALESCE(SUM(e.base_amount_minor), 0)::bigint AS net_minor,
+       t.base_currency::text AS base_currency
+FROM tenants t
+LEFT JOIN assets a ON a.tenant_id = t.id
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = sqlc.arg(tenant_id)
+GROUP BY t.base_currency;
 
 -- name: LockTenantBaseCurrency :exec
 UPDATE tenants
@@ -356,3 +438,54 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
 FROM asset_events e
 WHERE e.tenant_id = $1 AND e.asset_id = $2
 ORDER BY e.occurred_at, e.created_at, e.id;
+
+-- name: ListAssetEventsPage :many
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided,
+       COUNT(*) OVER ()::bigint AS total_count
+FROM asset_events e
+WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+  AND (sqlc.arg(search_query)::text = '' OR e.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || sqlc.arg(search_query)::text || '%')
+  AND (sqlc.arg(event_type_filter)::text = '' OR e.event_type = sqlc.arg(event_type_filter)::text)
+ORDER BY
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.occurred_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.occurred_at END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'amount' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.base_amount_minor END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'amount' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.base_amount_minor END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'type' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.event_type END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'type' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.event_type END DESC,
+  e.created_at DESC, e.id DESC
+LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint;
+
+-- name: GetAssetSummary :one
+WITH effective_events AS (
+    SELECT e.*
+    FROM asset_events e
+    WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+      AND e.event_type != 'void'
+      AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
+), latest_event AS (
+    SELECT event_type FROM effective_events ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
+)
+SELECT t.base_currency::text AS base_currency,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0)::bigint AS expense_minor,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0)::bigint AS income_minor,
+       COALESCE(SUM(e.base_amount_minor), 0)::bigint AS net_minor,
+       CASE
+         WHEN COALESCE(BOOL_OR(e.event_type = 'sale'), FALSE) THEN 'sold'
+         WHEN NOT COALESCE(BOOL_OR(e.event_type = 'purchase'), FALSE) THEN 'unacquired'
+         WHEN COALESCE((SELECT event_type FROM latest_event), '') = 'repair' THEN 'repairing'
+         ELSE 'active'
+       END::text AS status
+FROM tenants t
+JOIN assets a ON a.tenant_id = t.id AND a.id = sqlc.arg(asset_id)
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = sqlc.arg(tenant_id)
+GROUP BY t.base_currency;

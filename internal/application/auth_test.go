@@ -105,8 +105,9 @@ func (s *memoryAuthStore) CreateMember(_ context.Context, user User, membership 
 	return nil
 }
 
-func (s *memoryAuthStore) ListMembers(_ context.Context, tenantID string) ([]Member, error) {
-	return append([]Member(nil), s.members[tenantID]...), nil
+func (s *memoryAuthStore) ListMembers(_ context.Context, tenantID string, opts MemberListOptions) (MemberListResult, error) {
+	members := append([]Member(nil), s.members[tenantID]...)
+	return MemberListResult{Members: members, Total: len(members)}, nil
 }
 
 func (s *memoryAuthStore) RecordSecurityEvent(_ context.Context, event SecurityEvent) error {

@@ -161,6 +161,18 @@ The first monetary record locks the tenant base currency. Changing it later requ
 
 SQLite and PostgreSQL have independent SQL and sqlc output, with a shared conformance suite. Vendor-specific SQL stays inside its adapter.
 
+User-facing collection queries use resource-specific application options and results. The
+application layer trims filters, caps page sizes, and validates sort keys and directions against a
+fixed allowlist. SQLite and PostgreSQL then perform filtering, sorting, and pagination in SQL.
+Related rows required by one page are loaded in bulk joins or CTEs (for example, a page of product
+models and all of those models' variants); aggregate screens use aggregate Store operations rather
+than calling a detail query once per row. Query count therefore remains bounded as result counts
+grow. Web handlers never assemble SQL and do not implement in-memory pagination as a fallback.
+
+The current collection contract covers assets with lifecycle summaries, models with variants,
+tenant members, and asset lifecycle records. Both Store adapters run the same conformance tests for
+search, filters, sorting, paging, related-row hydration, and aggregate totals.
+
 The lifecycle Store atomically creates the grouping transaction and event, locks the base currency,
 and, for corrections, writes the void and replacement rows in the same database transaction.
 Harness-confirmed MCP commands append formal lifecycle events directly through this same application

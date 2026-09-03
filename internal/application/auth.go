@@ -326,11 +326,22 @@ func (s *AuthService) AddMember(ctx context.Context, actor Principal, cmd AddMem
 	return Member{UserID: user.ID, Username: user.Username, Role: cmd.Role, CreatedAt: now}, nil
 }
 
-func (s *AuthService) ListMembers(ctx context.Context, actor Principal) ([]Member, error) {
+func (s *AuthService) ListMembers(ctx context.Context, actor Principal, opts MemberListOptions) (MemberListResult, error) {
 	if err := actor.Require(CapabilityManageMembers); err != nil {
-		return nil, err
+		return MemberListResult{}, err
 	}
-	return s.store.ListMembers(ctx, actor.TenantID)
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
+	opts.Query = strings.TrimSpace(opts.Query)
+	opts.Role = strings.TrimSpace(strings.ToLower(opts.Role))
+	if opts.Role != "" && opts.Role != string(RoleOwner) && opts.Role != string(RoleEditor) && opts.Role != string(RoleViewer) {
+		return MemberListResult{}, NewInputError("validation.filter_invalid")
+	}
+	var err error
+	opts.Sort, opts.Direction, err = normalizeSort(opts.Sort, opts.Direction, "username", "asc", map[string]struct{}{"username": {}, "role": {}, "created": {}})
+	if err != nil {
+		return MemberListResult{}, err
+	}
+	return s.store.ListMembers(ctx, actor.TenantID, opts)
 }
 
 func (s *AuthService) issueSession(ctx context.Context, principal Principal) (SessionCredential, error) {

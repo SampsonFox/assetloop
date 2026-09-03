@@ -93,20 +93,26 @@ func (s *Store) CreateMember(ctx context.Context, user application.User, members
 	return tx.Commit()
 }
 
-func (s *Store) ListMembers(ctx context.Context, tenantID string) ([]application.Member, error) {
-	rows, err := sqlitedb.New(s.db).ListMembers(ctx, tenantID)
+func (s *Store) ListMembers(ctx context.Context, tenantID string, opts application.MemberListOptions) (application.MemberListResult, error) {
+	rows, err := sqlitedb.New(s.db).ListMembersPage(ctx, sqlitedb.ListMembersPageParams{
+		TenantID: tenantID, SearchQuery: opts.Query, RoleFilter: opts.Role,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
 	if err != nil {
-		return nil, err
+		return application.MemberListResult{}, err
 	}
 	members := make([]application.Member, 0, len(rows))
+	total := 0
 	for _, row := range rows {
+		total = int(row.TotalCount)
 		createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
 		if err != nil {
-			return nil, fmt.Errorf("parse membership created_at: %w", err)
+			return application.MemberListResult{}, fmt.Errorf("parse membership created_at: %w", err)
 		}
 		members = append(members, application.Member{UserID: row.UserID, Username: row.Username, Role: application.Role(row.Role), CreatedAt: createdAt})
 	}
-	return members, nil
+	return application.MemberListResult{Members: members, Total: total}, nil
 }
 
 func (s *Store) RecordSecurityEvent(ctx context.Context, event application.SecurityEvent) error {

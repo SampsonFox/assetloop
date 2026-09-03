@@ -19,7 +19,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport; asset-list-first SSR UI, detail-style asset create/edit pages, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, lifecycle, and FX confirmation screens |
+| `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, lifecycle, and FX confirmation screens |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
@@ -60,7 +60,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Coverage |
 |---|---|
 | `internal/application/*_test.go` | validation, exact money/FX conversion, auth, catalog, lifecycle, and role policy |
-| `internal/store/storetest/` | shared dual-database auth/catalog/lifecycle behavior, FX evidence, append-only correction, locks, and tenant isolation |
+| `internal/store/storetest/` | shared dual-database auth/catalog/lifecycle behavior, bulk relation loading, server-side list query contracts, aggregate summaries, FX evidence, append-only correction, locks, and tenant isolation |
 | `internal/store/migration_upgrade_test.go` | previous-schema upgrade without data loss |
 | `internal/web/i18n.go` | registered locales, stable message keys, browser/cookie locale matching, and zh-CN fallback |
 | `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, FX confirmation, correction, import confirmation, totals, and role denial |

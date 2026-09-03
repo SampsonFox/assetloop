@@ -4,10 +4,17 @@
   <div class="heading-actions"><button class="button auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_model"}}</button></div>
 </section>
 {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
+<form class="asset-filters table-filters" method="get" action="/admin/catalog">
+  <label class="asset-search"><span>{{t $s "catalog.search"}}</span><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "catalog.search_placeholder"}}"></label>
+  <label><span>{{t $s "catalog.model_category"}}</span><select name="category"><option value="">{{t $s "catalog.all_categories"}}</option>{{range .Categories}}<option value="{{.ID}}" {{if eq $.TableFilter .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+  <label><span>{{t $s "table.sort"}}</span><select name="sort"><option value="category" {{if eq .TableSort "category"}}selected{{end}}>{{t $s "catalog.model_category"}}</option><option value="name" {{if eq .TableSort "name"}}selected{{end}}>{{t $s "catalog.model_name"}}</option><option value="created" {{if eq .TableSort "created"}}selected{{end}}>{{t $s "table.created"}}</option></select></label>
+  <label><span>{{t $s "table.direction"}}</span><select name="direction"><option value="asc" {{if eq .TableDirection "asc"}}selected{{end}}>{{t $s "table.ascending"}}</option><option value="desc" {{if eq .TableDirection "desc"}}selected{{end}}>{{t $s "table.descending"}}</option></select></label>
+  <button class="auto" type="submit">{{t $s "assets.filter"}}</button>{{if .TableHasFilters}}<a class="button secondary" href="{{.TableClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
+</form>
 {{if .Models}}
 <section class="card table-card catalog-table-card">
   <table class="catalog-table">
-    <thead><tr><th>{{t $s "catalog.model_category"}}</th><th>{{t $s "catalog.model_name"}}</th><th>{{t $s "catalog.variant"}}</th><th>{{t $s "common.actions"}}</th></tr></thead>
+    <thead><tr><th aria-sort="{{ariaSort .TableSort .TableDirection "category"}}"><a class="table-sort" href="{{index .TableSortURLs "category"}}">{{t $s "catalog.model_category"}} <span aria-hidden="true">{{sortMark .TableSort .TableDirection "category"}}</span></a></th><th aria-sort="{{ariaSort .TableSort .TableDirection "name"}}"><a class="table-sort" href="{{index .TableSortURLs "name"}}">{{t $s "catalog.model_name"}} <span aria-hidden="true">{{sortMark .TableSort .TableDirection "name"}}</span></a></th><th>{{t $s "catalog.variant"}}</th><th>{{t $s "common.actions"}}</th></tr></thead>
     <tbody>{{range $model := .Models}}<tr>
       <td data-label="{{t $s "catalog.model_category"}}"><span class="catalog-category"><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{$model.CategoryIcon}}"></use></svg><span>{{$model.CategoryName}}</span></span></td>
       <td data-label="{{t $s "catalog.model_name"}}"><strong>{{$model.Name}}</strong></td>
@@ -16,6 +23,9 @@
     </tr>{{end}}</tbody>
   </table>
 </section>
+{{if gt .TableTotalPages 1}}<nav class="pagination" aria-label="{{t $s "catalog.pagination"}}"><span>{{t $s "assets.page"}} {{.TablePage}} / {{.TableTotalPages}} · {{.TableTotal}} {{t $s "catalog.count_suffix"}}</span><div>{{if .TablePreviousURL}}<a class="button secondary" href="{{.TablePreviousURL}}">{{t $s "assets.previous"}}</a>{{end}}{{if .TableNextURL}}<a class="button secondary" href="{{.TableNextURL}}">{{t $s "assets.next"}}</a>{{end}}</div></nav>{{end}}
+{{else if .TableHasFilters}}
+<section class="empty-state"><h2>{{t $s "catalog.no_results_heading"}}</h2><p class="muted">{{t $s "catalog.no_results_help"}}</p><a class="button secondary" href="{{.TableClearURL}}">{{t $s "assets.clear_filters"}}</a></section>
 {{else}}
 <section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "catalog.empty_heading"}}</h2><p class="muted">{{t $s "catalog.empty_help"}}</p><button class="button auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_first_model"}}</button></section>
 {{end}}

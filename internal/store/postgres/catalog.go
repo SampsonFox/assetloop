@@ -215,6 +215,7 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 	}
 	rows, err := queries.ListAssetsWithSummary(ctx, postgresdb.ListAssetsWithSummaryParams{
 		TenantID: tenantUUID, SearchQuery: opts.Query, StatusFilter: opts.Status,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
 	})
 	if err != nil {
@@ -234,6 +235,43 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 				NetCashflowMinor: row.NetMinor, Status: row.Status,
 			},
 		})
+	}
+	return result, nil
+}
+
+func (s *Store) ListModelsWithVariants(ctx context.Context, tenantID string, opts application.ModelListOptions) (application.ModelListResult, error) {
+	tenantUUID, err := uuid.Parse(tenantID)
+	if err != nil {
+		return application.ModelListResult{}, fmt.Errorf("parse tenant ID: %w", err)
+	}
+	rows, err := postgresdb.New(s.db).ListModelsWithVariants(ctx, postgresdb.ListModelsWithVariantsParams{
+		TenantID: tenantUUID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
+	if err != nil {
+		return application.ModelListResult{}, err
+	}
+	result := application.ModelListResult{Models: []domain.ProductModel{}, Variants: []domain.ProductVariant{}}
+	seen := make(map[uuid.UUID]struct{}, len(rows))
+	for _, row := range rows {
+		if result.Total == 0 {
+			result.Total = int(row.TotalCount)
+		}
+		if _, ok := seen[row.ID]; !ok {
+			result.Models = append(result.Models, domain.ProductModel{
+				ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(),
+				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: row.CreatedAt,
+			})
+			seen[row.ID] = struct{}{}
+		}
+		if row.VariantID.Valid {
+			result.Variants = append(result.Variants, domain.ProductVariant{
+				ID: row.VariantID.UUID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(),
+				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon,
+				ModelID: row.ID.String(), ModelName: row.Name, Name: row.VariantName.String, CreatedAt: row.VariantCreatedAt.Time,
+			})
+		}
 	}
 	return result, nil
 }

@@ -6,10 +6,26 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	"github.com/SampsonFox/assetloop/internal/store/postgres/postgresdb"
 	"github.com/google/uuid"
 )
+
+func (s *Store) GetPortfolioSummary(ctx context.Context, tenantID string) (application.PortfolioSummary, error) {
+	id, err := uuid.Parse(tenantID)
+	if err != nil {
+		return application.PortfolioSummary{}, fmt.Errorf("parse tenant ID: %w", err)
+	}
+	row, err := postgresdb.New(s.db).GetPortfolioSummary(ctx, id)
+	if err != nil {
+		return application.PortfolioSummary{}, err
+	}
+	return application.PortfolioSummary{
+		AssetCount: int(row.AssetCount), ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetMinor: row.NetMinor, BaseCurrency: row.BaseCurrency,
+	}, nil
+}
 
 func (s *Store) TenantBaseCurrency(ctx context.Context, tenantID string) (string, bool, error) {
 	id, err := uuid.Parse(tenantID)
@@ -96,6 +112,46 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided))
 	}
 	return result, nil
+}
+
+func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID string, opts application.EventListOptions) ([]domain.AssetEvent, int, error) {
+	tenantUUID, assetUUID, err := postgresIDs(tenantID, assetID)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := postgresdb.New(s.db).ListAssetEventsPage(ctx, postgresdb.ListAssetEventsPageParams{
+		TenantID: tenantUUID, AssetID: assetUUID, SearchQuery: opts.Query, EventTypeFilter: opts.Type,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	result := make([]domain.AssetEvent, 0, len(rows))
+	total := 0
+	for _, row := range rows {
+		total = int(row.TotalCount)
+		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
+			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided))
+	}
+	return result, total, nil
+}
+
+func (s *Store) GetAssetSummary(ctx context.Context, tenantID, assetID string) (domain.AssetSummary, error) {
+	tenantUUID, assetUUID, err := postgresIDs(tenantID, assetID)
+	if err != nil {
+		return domain.AssetSummary{}, err
+	}
+	row, err := postgresdb.New(s.db).GetAssetSummary(ctx, postgresdb.GetAssetSummaryParams{TenantID: tenantUUID, AssetID: assetUUID})
+	if err != nil {
+		return domain.AssetSummary{}, err
+	}
+	return domain.AssetSummary{
+		BaseCurrency: row.BaseCurrency, ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetCashflowMinor: row.NetMinor, Status: row.Status,
+	}, nil
 }
 
 func (s *Store) lifecycleTx(ctx context.Context, fn func(*postgresdb.Queries) error) error {

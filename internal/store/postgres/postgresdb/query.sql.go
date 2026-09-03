@@ -761,6 +761,103 @@ func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (G
 	return i, err
 }
 
+const getAssetSummary = `-- name: GetAssetSummary :one
+WITH effective_events AS (
+    SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+    FROM asset_events e
+    WHERE e.tenant_id = $2 AND e.asset_id = $1
+      AND e.event_type != 'void'
+      AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
+), latest_event AS (
+    SELECT event_type FROM effective_events ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
+)
+SELECT t.base_currency::text AS base_currency,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0)::bigint AS expense_minor,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0)::bigint AS income_minor,
+       COALESCE(SUM(e.base_amount_minor), 0)::bigint AS net_minor,
+       CASE
+         WHEN COALESCE(BOOL_OR(e.event_type = 'sale'), FALSE) THEN 'sold'
+         WHEN NOT COALESCE(BOOL_OR(e.event_type = 'purchase'), FALSE) THEN 'unacquired'
+         WHEN COALESCE((SELECT event_type FROM latest_event), '') = 'repair' THEN 'repairing'
+         ELSE 'active'
+       END::text AS status
+FROM tenants t
+JOIN assets a ON a.tenant_id = t.id AND a.id = $1
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = $2
+GROUP BY t.base_currency
+`
+
+type GetAssetSummaryParams struct {
+	AssetID  uuid.UUID
+	TenantID uuid.UUID
+}
+
+type GetAssetSummaryRow struct {
+	BaseCurrency string
+	ExpenseMinor int64
+	IncomeMinor  int64
+	NetMinor     int64
+	Status       string
+}
+
+func (q *Queries) GetAssetSummary(ctx context.Context, arg GetAssetSummaryParams) (GetAssetSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getAssetSummary, arg.AssetID, arg.TenantID)
+	var i GetAssetSummaryRow
+	err := row.Scan(
+		&i.BaseCurrency,
+		&i.ExpenseMinor,
+		&i.IncomeMinor,
+		&i.NetMinor,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getPortfolioSummary = `-- name: GetPortfolioSummary :one
+WITH effective_events AS (
+    SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+    FROM asset_events e
+    WHERE e.tenant_id = $1
+      AND e.event_type != 'void'
+      AND NOT EXISTS (
+          SELECT 1 FROM asset_events void_event
+          WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+      )
+)
+SELECT COUNT(DISTINCT a.id)::bigint AS asset_count,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0)::bigint AS expense_minor,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0)::bigint AS income_minor,
+       COALESCE(SUM(e.base_amount_minor), 0)::bigint AS net_minor,
+       t.base_currency::text AS base_currency
+FROM tenants t
+LEFT JOIN assets a ON a.tenant_id = t.id
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = $1
+GROUP BY t.base_currency
+`
+
+type GetPortfolioSummaryRow struct {
+	AssetCount   int64
+	ExpenseMinor int64
+	IncomeMinor  int64
+	NetMinor     int64
+	BaseCurrency string
+}
+
+func (q *Queries) GetPortfolioSummary(ctx context.Context, tenantID uuid.UUID) (GetPortfolioSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getPortfolioSummary, tenantID)
+	var i GetPortfolioSummaryRow
+	err := row.Scan(
+		&i.AssetCount,
+		&i.ExpenseMinor,
+		&i.IncomeMinor,
+		&i.NetMinor,
+		&i.BaseCurrency,
+	)
+	return i, err
+}
+
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
 SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
        u.locale, u.theme
@@ -904,6 +1001,119 @@ func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams
 	return items, nil
 }
 
+const listAssetEventsPage = `-- name: ListAssetEventsPage :many
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided,
+       COUNT(*) OVER ()::bigint AS total_count
+FROM asset_events e
+WHERE e.tenant_id = $1 AND e.asset_id = $2
+  AND ($3::text = '' OR e.notes ILIKE '%' || $3::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || $3::text || '%')
+  AND ($4::text = '' OR e.event_type = $4::text)
+ORDER BY
+  CASE WHEN $5::text = 'occurred' AND $6::text = 'asc' THEN e.occurred_at END ASC,
+  CASE WHEN $5::text = 'occurred' AND $6::text = 'desc' THEN e.occurred_at END DESC,
+  CASE WHEN $5::text = 'amount' AND $6::text = 'asc' THEN e.base_amount_minor END ASC,
+  CASE WHEN $5::text = 'amount' AND $6::text = 'desc' THEN e.base_amount_minor END DESC,
+  CASE WHEN $5::text = 'type' AND $6::text = 'asc' THEN e.event_type END ASC,
+  CASE WHEN $5::text = 'type' AND $6::text = 'desc' THEN e.event_type END DESC,
+  e.created_at DESC, e.id DESC
+LIMIT $8::bigint OFFSET $7::bigint
+`
+
+type ListAssetEventsPageParams struct {
+	TenantID        uuid.UUID
+	AssetID         uuid.UUID
+	SearchQuery     string
+	EventTypeFilter string
+	SortKey         string
+	SortDirection   string
+	PageOffset      int64
+	PageSize        int64
+}
+
+type ListAssetEventsPageRow struct {
+	ID                  uuid.UUID
+	TenantID            uuid.UUID
+	AssetID             uuid.UUID
+	TransactionID       uuid.UUID
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullTime
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        uuid.NullUUID
+	ReplacesEventID     uuid.NullUUID
+	OccurredAt          time.Time
+	CreatedByUserID     uuid.UUID
+	CreatedAt           time.Time
+	IsVoided            bool
+	TotalCount          int64
+}
+
+func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPageParams) ([]ListAssetEventsPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetEventsPage,
+		arg.TenantID,
+		arg.AssetID,
+		arg.SearchQuery,
+		arg.EventTypeFilter,
+		arg.SortKey,
+		arg.SortDirection,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetEventsPageRow
+	for rows.Next() {
+		var i ListAssetEventsPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AssetID,
+			&i.TransactionID,
+			&i.EventType,
+			&i.BaseAmountMinor,
+			&i.BaseCurrency,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.FxRateScaled,
+			&i.FxRateDate,
+			&i.FxRateSource,
+			&i.Notes,
+			&i.VoidsEventID,
+			&i.ReplacesEventID,
+			&i.OccurredAt,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.IsVoided,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssets = `-- name: ListAssets :many
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
@@ -979,7 +1189,7 @@ const listAssetsWithSummary = `-- name: ListAssetsWithSummary :many
 WITH effective_events AS (
 SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
 FROM asset_events e
-WHERE e.tenant_id = $4
+WHERE e.tenant_id = $6
   AND e.event_type != 'void'
   AND NOT EXISTS (
       SELECT 1 FROM asset_events void_event
@@ -1021,16 +1231,16 @@ JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 JOIN tenants t ON t.id = a.tenant_id
 LEFT JOIN event_rollup er ON er.asset_id = a.id
 LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
-WHERE a.tenant_id = $4
-  AND ($5::text = '' OR (
-       a.display_name ILIKE '%' || $5::text || '%' OR
-       a.serial_number ILIKE '%' || $5::text || '%' OR
-       a.color ILIKE '%' || $5::text || '%' OR
-       a.purchase_channel ILIKE '%' || $5::text || '%' OR
-       a.notes ILIKE '%' || $5::text || '%' OR
-       m.name ILIKE '%' || $5::text || '%' OR
-       v.name ILIKE '%' || $5::text || '%' OR
-       c.name ILIKE '%' || $5::text || '%'
+WHERE a.tenant_id = $6
+  AND ($7::text = '' OR (
+       a.display_name ILIKE '%' || $7::text || '%' OR
+       a.serial_number ILIKE '%' || $7::text || '%' OR
+       a.color ILIKE '%' || $7::text || '%' OR
+       a.purchase_channel ILIKE '%' || $7::text || '%' OR
+       a.notes ILIKE '%' || $7::text || '%' OR
+       m.name ILIKE '%' || $7::text || '%' OR
+       v.name ILIKE '%' || $7::text || '%' OR
+       c.name ILIKE '%' || $7::text || '%'
   ))
 )
 SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
@@ -1049,16 +1259,31 @@ WHERE $1::text IN ('', 'all')
    OR ($1::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
    OR ($1::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
    OR ($1::text = 'unacquired' AND NOT has_sale AND NOT has_purchase)
-ORDER BY created_at DESC, id
-LIMIT $3::bigint OFFSET $2::bigint
+ORDER BY
+  CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN LOWER(display_name) END ASC,
+  CASE WHEN $2::text = 'name' AND $3::text = 'desc' THEN LOWER(display_name) END DESC,
+  CASE WHEN $2::text = 'model' AND $3::text = 'asc' THEN LOWER(model_name || ' ' || variant_name) END ASC,
+  CASE WHEN $2::text = 'model' AND $3::text = 'desc' THEN LOWER(model_name || ' ' || variant_name) END DESC,
+  CASE WHEN $2::text = 'status' AND $3::text = 'asc' THEN status END ASC,
+  CASE WHEN $2::text = 'status' AND $3::text = 'desc' THEN status END DESC,
+  CASE WHEN $2::text = 'net' AND $3::text = 'asc' THEN net_minor END ASC,
+  CASE WHEN $2::text = 'net' AND $3::text = 'desc' THEN net_minor END DESC,
+  CASE WHEN $2::text = 'cost' AND $3::text = 'asc' THEN expense_minor END ASC,
+  CASE WHEN $2::text = 'cost' AND $3::text = 'desc' THEN expense_minor END DESC,
+  CASE WHEN $2::text = 'created' AND $3::text = 'asc' THEN created_at END ASC,
+  CASE WHEN $2::text = 'created' AND $3::text = 'desc' THEN created_at END DESC,
+  id
+LIMIT $5::bigint OFFSET $4::bigint
 `
 
 type ListAssetsWithSummaryParams struct {
-	StatusFilter string
-	PageOffset   int64
-	PageSize     int64
-	TenantID     uuid.UUID
-	SearchQuery  string
+	StatusFilter  string
+	SortKey       string
+	SortDirection string
+	PageOffset    int64
+	PageSize      int64
+	TenantID      uuid.UUID
+	SearchQuery   string
 }
 
 type ListAssetsWithSummaryRow struct {
@@ -1087,6 +1312,8 @@ type ListAssetsWithSummaryRow struct {
 func (q *Queries) ListAssetsWithSummary(ctx context.Context, arg ListAssetsWithSummaryParams) ([]ListAssetsWithSummaryRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAssetsWithSummary,
 		arg.StatusFilter,
+		arg.SortKey,
+		arg.SortDirection,
 		arg.PageOffset,
 		arg.PageSize,
 		arg.TenantID,
@@ -1221,6 +1448,79 @@ func (q *Queries) ListMembers(ctx context.Context, tenantID uuid.UUID) ([]ListMe
 	return items, nil
 }
 
+const listMembersPage = `-- name: ListMembersPage :many
+SELECT u.id AS user_id, u.username, tm.role, tm.created_at, COUNT(*) OVER () AS total_count
+FROM tenant_memberships tm
+JOIN users u ON u.id = tm.user_id
+WHERE tm.tenant_id = $1
+  AND ($2::text = '' OR u.username ILIKE '%' || $2::text || '%')
+  AND ($3::text = '' OR tm.role = $3::text)
+ORDER BY
+  CASE WHEN $4::text = 'username' AND $5::text = 'asc' THEN u.username_normalized END ASC,
+  CASE WHEN $4::text = 'username' AND $5::text = 'desc' THEN u.username_normalized END DESC,
+  CASE WHEN $4::text = 'role' AND $5::text = 'asc' THEN tm.role END ASC,
+  CASE WHEN $4::text = 'role' AND $5::text = 'desc' THEN tm.role END DESC,
+  CASE WHEN $4::text = 'created' AND $5::text = 'asc' THEN tm.created_at END ASC,
+  CASE WHEN $4::text = 'created' AND $5::text = 'desc' THEN tm.created_at END DESC,
+  u.id
+LIMIT $7::bigint OFFSET $6::bigint
+`
+
+type ListMembersPageParams struct {
+	TenantID      uuid.UUID
+	SearchQuery   string
+	RoleFilter    string
+	SortKey       string
+	SortDirection string
+	PageOffset    int64
+	PageSize      int64
+}
+
+type ListMembersPageRow struct {
+	UserID     uuid.UUID
+	Username   string
+	Role       string
+	CreatedAt  time.Time
+	TotalCount int64
+}
+
+func (q *Queries) ListMembersPage(ctx context.Context, arg ListMembersPageParams) ([]ListMembersPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMembersPage,
+		arg.TenantID,
+		arg.SearchQuery,
+		arg.RoleFilter,
+		arg.SortKey,
+		arg.SortDirection,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembersPageRow
+	for rows.Next() {
+		var i ListMembersPageRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Role,
+			&i.CreatedAt,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listModels = `-- name: ListModels :many
 SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
 FROM product_models m
@@ -1256,6 +1556,106 @@ func (q *Queries) ListModels(ctx context.Context, tenantID uuid.UUID) ([]ListMod
 			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModelsWithVariants = `-- name: ListModelsWithVariants :many
+WITH filtered_models AS (
+    SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
+           c.icon_key AS category_icon, m.name, m.created_at
+    FROM product_models m
+    JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+    WHERE m.tenant_id = $1
+      AND ($2::text = '' OR m.name ILIKE '%' || $2::text || '%' OR c.name ILIKE '%' || $2::text || '%')
+      AND ($3::text = '' OR m.category_id::text = $3::text)
+),
+paged_models AS (
+    SELECT id, tenant_id, category_id, category_name, category_icon, name, created_at, COUNT(*) OVER () AS total_count,
+           ROW_NUMBER() OVER (ORDER BY
+             CASE WHEN $4::text = 'category' AND $5::text = 'asc' THEN LOWER(category_name) END ASC,
+             CASE WHEN $4::text = 'category' AND $5::text = 'desc' THEN LOWER(category_name) END DESC,
+             CASE WHEN $4::text = 'name' AND $5::text = 'asc' THEN LOWER(name) END ASC,
+             CASE WHEN $4::text = 'name' AND $5::text = 'desc' THEN LOWER(name) END DESC,
+             CASE WHEN $4::text = 'created' AND $5::text = 'asc' THEN created_at END ASC,
+             CASE WHEN $4::text = 'created' AND $5::text = 'desc' THEN created_at END DESC,
+             LOWER(category_name), LOWER(name), id) AS page_order
+    FROM filtered_models
+    LIMIT $7::bigint OFFSET $6::bigint
+)
+SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
+       pm.name, pm.created_at, pm.total_count, pm.page_order,
+       v.id AS variant_id, v.name AS variant_name, v.created_at AS variant_created_at
+FROM paged_models pm
+LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
+ORDER BY pm.page_order, LOWER(v.name), v.id
+`
+
+type ListModelsWithVariantsParams struct {
+	TenantID       uuid.UUID
+	SearchQuery    string
+	CategoryFilter string
+	SortKey        string
+	SortDirection  string
+	PageOffset     int64
+	PageSize       int64
+}
+
+type ListModelsWithVariantsRow struct {
+	ID               uuid.UUID
+	TenantID         uuid.UUID
+	CategoryID       uuid.UUID
+	CategoryName     string
+	CategoryIcon     string
+	Name             string
+	CreatedAt        time.Time
+	TotalCount       int64
+	PageOrder        int64
+	VariantID        uuid.NullUUID
+	VariantName      sql.NullString
+	VariantCreatedAt sql.NullTime
+}
+
+func (q *Queries) ListModelsWithVariants(ctx context.Context, arg ListModelsWithVariantsParams) ([]ListModelsWithVariantsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listModelsWithVariants,
+		arg.TenantID,
+		arg.SearchQuery,
+		arg.CategoryFilter,
+		arg.SortKey,
+		arg.SortDirection,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModelsWithVariantsRow
+	for rows.Next() {
+		var i ListModelsWithVariantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryIcon,
+			&i.Name,
+			&i.CreatedAt,
+			&i.TotalCount,
+			&i.PageOrder,
+			&i.VariantID,
+			&i.VariantName,
+			&i.VariantCreatedAt,
 		); err != nil {
 			return nil, err
 		}

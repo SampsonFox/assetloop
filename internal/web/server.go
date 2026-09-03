@@ -81,6 +81,9 @@ type pageData struct {
 	AssetView          string
 	AssetQuery         string
 	AssetStatus        string
+	AssetSort          string
+	AssetDirection     string
+	AssetSortURLs      map[string]string
 	AssetTotal         int
 	AssetPage          int
 	AssetTotalPages    int
@@ -90,6 +93,18 @@ type pageData struct {
 	AssetGridURL       string
 	AssetClearURL      string
 	AssetHasFilters    bool
+	TableQuery         string
+	TableFilter        string
+	TableSort          string
+	TableDirection     string
+	TableTotal         int
+	TablePage          int
+	TableTotalPages    int
+	TablePreviousURL   string
+	TableNextURL       string
+	TableClearURL      string
+	TableHasFilters    bool
+	TableSortURLs      map[string]string
 	CategoryIcons      []application.CategoryIconOption
 	CatalogFlow        string
 	AssetFormAction    string
@@ -141,7 +156,25 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"dateTime":      func(value time.Time) string { return value.Local().Format("2006-01-02 15:04") },
 		"dateTimeInput": func(value time.Time) string { return value.Local().Format("2006-01-02T15:04") },
 		"date":          func(value time.Time) string { return value.Format("2006-01-02") },
-		"rate":          formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
+		"ariaSort": func(current, direction, column string) string {
+			if current != column {
+				return "none"
+			}
+			if direction == "asc" {
+				return "ascending"
+			}
+			return "descending"
+		},
+		"sortMark": func(current, direction, column string) string {
+			if current != column {
+				return "↕"
+			}
+			if direction == "asc" {
+				return "↑"
+			}
+			return "↓"
+		},
+		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
 	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/"+page+".html")
@@ -521,11 +554,26 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		s.renderNotFound(w, principal, "error.not_found_asset")
 		return
 	}
-	events, summary, err := s.lifecycle.Timeline(r.Context(), principal, assetID)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	eventType := strings.TrimSpace(r.URL.Query().Get("event_type"))
+	sortKey := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("sort")), "occurred")
+	direction := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("direction")), "asc")
+	page := queryPage(r)
+	const pageSize = 20
+	result, err := s.lifecycle.TimelinePage(r.Context(), principal, assetID, application.EventListOptions{
+		Query: query, Type: eventType, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
+	})
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	if result.Total == 0 && page > 1 {
+		http.Redirect(w, r, eventListURL(assetID, query, eventType, sortKey, direction, 1), http.StatusFound)
+		return
+	}
+	totalPages, previousURL, nextURL := tablePagination(result.Total, page, pageSize, func(target int) string {
+		return eventListURL(assetID, query, eventType, sortKey, direction, target)
+	})
 	_, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
@@ -534,12 +582,21 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 	nowValue := time.Now().Local().Format("2006-01-02T15:04")
 	s.render(w, status, "asset", pageData{
 		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
-		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: events,
-		Summary: summary, BaseCurrency: summary.BaseCurrency, BaseCurrencyLocked: locked,
+		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: result.Events,
+		Summary: result.Summary, BaseCurrency: result.Summary.BaseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           nowValue,
-		EventForm:          eventFormFromRequest(r, summary.BaseCurrency, nowValue),
+		EventForm:          eventFormFromRequest(r, result.Summary.BaseCurrency, nowValue),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
+		TableQuery:         query, TableFilter: eventType, TableSort: sortKey, TableDirection: direction,
+		TableTotal: result.Total, TablePage: page, TableTotalPages: totalPages,
+		TablePreviousURL: previousURL, TableNextURL: nextURL,
+		TableClearURL:   eventListURL(assetID, "", "", "occurred", "asc", 1),
+		TableHasFilters: query != "" || eventType != "" || sortKey != "occurred" || direction != "asc",
 	})
+}
+
+func eventListURL(assetID, query, eventType, sortKey, direction string, page int) string {
+	return tableURL("/assets/"+assetID, query, "event_type", eventType, sortKey, direction, "occurred", "asc", page) + "#lifecycle-timeline"
 }
 
 func eventFormFromRequest(r *http.Request, baseCurrency, nowValue string) eventFormData {
@@ -707,12 +764,19 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
-	page, err := strconv.Atoi(r.URL.Query().Get("page"))
-	if err != nil || page < 1 {
-		page = 1
+	sortKey := strings.TrimSpace(r.URL.Query().Get("sort"))
+	if sortKey == "" {
+		sortKey = "created"
 	}
+	direction := strings.TrimSpace(r.URL.Query().Get("direction"))
+	if direction == "" {
+		direction = "desc"
+	}
+	page := queryPage(r)
 	const pageSize = 25
-	result, err := s.catalog.ListAssetsWithSummary(r.Context(), principal, application.AssetListOptions{Query: query, Status: statusFilter, Page: page, PageSize: pageSize})
+	result, err := s.catalog.ListAssetsWithSummary(r.Context(), principal, application.AssetListOptions{
+		Query: query, Status: statusFilter, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
+	})
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
@@ -722,7 +786,7 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 		totalPages = (result.Total + pageSize - 1) / pageSize
 	}
 	if totalPages > 0 && page > totalPages {
-		http.Redirect(w, r, assetsURL(view, query, statusFilter, totalPages), http.StatusFound)
+		http.Redirect(w, r, assetsURL(view, query, statusFilter, sortKey, direction, totalPages), http.StatusFound)
 		return
 	}
 	assetRows := make([]domain.Asset, 0, len(result.Assets))
@@ -733,23 +797,28 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 	}
 	previousURL, nextURL := "", ""
 	if page > 1 {
-		previousURL = assetsURL(view, query, statusFilter, page-1)
+		previousURL = assetsURL(view, query, statusFilter, sortKey, direction, page-1)
 	}
 	if page < totalPages {
-		nextURL = assetsURL(view, query, statusFilter, page+1)
+		nextURL = assetsURL(view, query, statusFilter, sortKey, direction, page+1)
+	}
+	sortURLs := map[string]string{}
+	for _, column := range []string{"name", "model", "status", "net", "cost", "created"} {
+		sortURLs[column] = assetsURL(view, query, statusFilter, column, nextSortDirection(sortKey, direction, column), 1)
 	}
 	s.render(w, status, "assets", pageData{
 		Title: textFor(principal.Locale, "title.assets"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Assets: assetRows, AssetSummaries: summaries, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle), AssetView: view,
-		AssetQuery: query, AssetStatus: statusFilter, AssetTotal: result.Total, AssetPage: page, AssetTotalPages: totalPages,
+		AssetQuery: query, AssetStatus: statusFilter, AssetSort: sortKey, AssetDirection: direction, AssetSortURLs: sortURLs,
+		AssetTotal: result.Total, AssetPage: page, AssetTotalPages: totalPages,
 		AssetPreviousURL: previousURL, AssetNextURL: nextURL,
-		AssetListURL: assetsURL("list", query, statusFilter, page), AssetGridURL: assetsURL("grid", query, statusFilter, page),
-		AssetClearURL: assetsURL(view, "", "", 1), AssetHasFilters: query != "" || (statusFilter != "" && statusFilter != "all"),
+		AssetListURL: assetsURL("list", query, statusFilter, sortKey, direction, page), AssetGridURL: assetsURL("grid", query, statusFilter, sortKey, direction, page),
+		AssetClearURL: assetsURL(view, "", "", "created", "desc", 1), AssetHasFilters: query != "" || (statusFilter != "" && statusFilter != "all") || sortKey != "created" || direction != "desc",
 	})
 }
 
-func assetsURL(view, query, status string, page int) string {
+func assetsURL(view, query, status, sortKey, direction string, page int) string {
 	values := url.Values{}
 	if view == "grid" {
 		values.Set("view", view)
@@ -760,6 +829,12 @@ func assetsURL(view, query, status string, page int) string {
 	if status != "" && status != "all" {
 		values.Set("status", status)
 	}
+	if sortKey != "" && sortKey != "created" {
+		values.Set("sort", sortKey)
+	}
+	if direction != "" && direction != "desc" {
+		values.Set("direction", direction)
+	}
 	if page > 1 {
 		values.Set("page", strconv.Itoa(page))
 	}
@@ -767,6 +842,74 @@ func assetsURL(view, query, status string, page int) string {
 		return "/"
 	}
 	return "/?" + values.Encode()
+}
+
+func catalogURL(query, categoryID, sortKey, direction string, page int) string {
+	return tableURL("/admin/catalog", query, "category", categoryID, sortKey, direction, "category", "asc", page)
+}
+
+func membersURL(query, role, sortKey, direction string, page int) string {
+	return tableURL("/admin/members", query, "role", role, sortKey, direction, "username", "asc", page)
+}
+
+func tableURL(path, query, filterName, filter, sortKey, direction, defaultSort, defaultDirection string, page int) string {
+	values := url.Values{}
+	if query != "" {
+		values.Set("q", query)
+	}
+	if filter != "" {
+		values.Set(filterName, filter)
+	}
+	if sortKey != "" && sortKey != defaultSort {
+		values.Set("sort", sortKey)
+	}
+	if direction != "" && direction != defaultDirection {
+		values.Set("direction", direction)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	if len(values) == 0 {
+		return path
+	}
+	return path + "?" + values.Encode()
+}
+
+func queryPage(r *http.Request) int {
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		return 1
+	}
+	return page
+}
+
+func valueOrDefault(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func nextSortDirection(currentSort, currentDirection, column string) string {
+	if currentSort == column && currentDirection == "asc" {
+		return "desc"
+	}
+	return "asc"
+}
+
+func tablePagination(total, page, pageSize int, pageURL func(int) string) (int, string, string) {
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	previousURL, nextURL := "", ""
+	if page > 1 {
+		previousURL = pageURL(page - 1)
+	}
+	if page < totalPages {
+		nextURL = pageURL(page + 1)
+	}
+	return totalPages, previousURL, nextURL
 }
 
 func assetView(r *http.Request) string {
@@ -777,16 +920,44 @@ func assetView(r *http.Request) string {
 }
 
 func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
-	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	categoryID := strings.TrimSpace(r.URL.Query().Get("category"))
+	sortKey := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("sort")), "category")
+	direction := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("direction")), "asc")
+	page := queryPage(r)
+	const pageSize = 25
+	categories, err := s.catalog.Categories(r.Context(), principal)
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	result, err := s.catalog.ListModelsWithVariants(r.Context(), principal, application.ModelListOptions{
+		Query: query, CategoryID: categoryID, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
+	})
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if result.Total == 0 && page > 1 {
+		http.Redirect(w, r, catalogURL(query, categoryID, sortKey, direction, 1), http.StatusFound)
+		return
+	}
+	totalPages, previousURL, nextURL := tablePagination(result.Total, page, pageSize, func(target int) string {
+		return catalogURL(query, categoryID, sortKey, direction, target)
+	})
+	sortURLs := map[string]string{}
+	for _, column := range []string{"category", "name", "created"} {
+		sortURLs[column] = catalogURL(query, categoryID, column, nextSortDirection(sortKey, direction, column), 1)
+	}
 	s.render(w, status, "catalog", pageData{
 		Title: textFor(principal.Locale, "title.catalog"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
-		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
-		Assets: snapshot.Assets, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+		Categories: categories, Models: result.Models, Variants: result.Variants, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CategoryIcons: application.CategoryIconOptions,
+		TableQuery:    query, TableFilter: categoryID, TableSort: sortKey, TableDirection: direction,
+		TableTotal: result.Total, TablePage: page, TableTotalPages: totalPages,
+		TablePreviousURL: previousURL, TableNextURL: nextURL,
+		TableClearURL: catalogURL("", "", "category", "asc", 1), TableHasFilters: query != "" || categoryID != "" || sortKey != "category" || direction != "asc",
+		TableSortURLs: sortURLs,
 	})
 }
 
@@ -804,29 +975,15 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
-	if err != nil {
-		s.renderError(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	baseCurrency, _, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	summary, err := s.lifecycle.PortfolioSummary(r.Context(), principal)
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	data := pageData{
 		Title: textFor(principal.Locale, "title.overview"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, ReturnTo: r.URL.RequestURI(),
-		AssetCount: len(snapshot.Assets), BaseCurrency: baseCurrency,
-	}
-	for _, asset := range snapshot.Assets {
-		_, summary, err := s.lifecycle.Timeline(r.Context(), principal, asset.ID)
-		if err != nil {
-			s.renderError(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		data.TotalExpenseMinor += summary.ExpenseMinor
-		data.TotalIncomeMinor += summary.IncomeMinor
-		data.TotalNetMinor += summary.NetCashflowMinor
+		AssetCount: summary.AssetCount, BaseCurrency: summary.BaseCurrency,
+		TotalExpenseMinor: summary.ExpenseMinor, TotalIncomeMinor: summary.IncomeMinor, TotalNetMinor: summary.NetMinor,
 	}
 	s.render(w, http.StatusOK, "dashboard", data)
 }
@@ -968,7 +1125,19 @@ func (s *Server) members(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	members, err := s.auth.ListMembers(r.Context(), principal)
+	s.renderMembers(w, r, http.StatusOK, principal, "")
+}
+
+func (s *Server) renderMembers(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	role := strings.TrimSpace(r.URL.Query().Get("role"))
+	sortKey := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("sort")), "username")
+	direction := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("direction")), "asc")
+	page := queryPage(r)
+	const pageSize = 25
+	result, err := s.auth.ListMembers(r.Context(), principal, application.MemberListOptions{
+		Query: query, Role: role, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
+	})
 	if errors.Is(err, application.ErrForbidden) {
 		s.renderForbidden(w, principal, "error.forbidden_members")
 		return
@@ -977,7 +1146,26 @@ func (s *Server) members(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	s.render(w, http.StatusOK, "members", pageData{Title: textFor(principal.Locale, "title.members"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Members: members, ReturnTo: r.URL.RequestURI()})
+	if result.Total == 0 && page > 1 {
+		http.Redirect(w, r, membersURL(query, role, sortKey, direction, 1), http.StatusFound)
+		return
+	}
+	totalPages, previousURL, nextURL := tablePagination(result.Total, page, pageSize, func(target int) string {
+		return membersURL(query, role, sortKey, direction, target)
+	})
+	sortURLs := map[string]string{}
+	for _, column := range []string{"username", "role", "created"} {
+		sortURLs[column] = membersURL(query, role, column, nextSortDirection(sortKey, direction, column), 1)
+	}
+	s.render(w, status, "members", pageData{
+		Title: textFor(principal.Locale, "title.members"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal,
+		Members: result.Members, Error: message, ReturnTo: r.URL.RequestURI(),
+		TableQuery: query, TableFilter: role, TableSort: sortKey, TableDirection: direction,
+		TableTotal: result.Total, TablePage: page, TableTotalPages: totalPages,
+		TablePreviousURL: previousURL, TableNextURL: nextURL,
+		TableClearURL: membersURL("", "", "username", "asc", 1), TableHasFilters: query != "" || role != "" || sortKey != "username" || direction != "asc",
+		TableSortURLs: sortURLs,
+	})
 }
 
 func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
@@ -994,8 +1182,7 @@ func (s *Server) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		members, _ := s.auth.ListMembers(r.Context(), principal)
-		s.render(w, http.StatusUnprocessableEntity, "members", pageData{Title: textFor(principal.Locale, "title.members"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Members: members, Error: s.userError(principal.Locale, err), ReturnTo: r.URL.RequestURI()})
+		s.renderMembers(w, r, http.StatusUnprocessableEntity, principal, s.userError(principal.Locale, err))
 		return
 	}
 	http.Redirect(w, r, "/admin/members", http.StatusSeeOther)

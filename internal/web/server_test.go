@@ -58,8 +58,12 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 		t.Fatalf("owner create editor: status=%d body=%s", response.Code, response.Body.String())
 	}
 	members := request(t, handler, http.MethodGet, "/admin/members", nil, []*http.Cookie{session, csrf})
-	if members.Code != http.StatusOK || !strings.Contains(members.Body.String(), "editor") {
+	if members.Code != http.StatusOK || !strings.Contains(members.Body.String(), "editor") || !strings.Contains(members.Body.String(), `name="q"`) || !strings.Contains(members.Body.String(), `name="role"`) || !strings.Contains(members.Body.String(), `aria-sort="ascending"`) {
 		t.Fatalf("members page: status=%d body=%s", members.Code, members.Body.String())
+	}
+	filteredMembers := request(t, handler, http.MethodGet, "/admin/members?q=editor&role=editor&sort=created&direction=desc", nil, []*http.Cookie{session, csrf})
+	if filteredMembers.Code != http.StatusOK || !strings.Contains(filteredMembers.Body.String(), "editor") || strings.Contains(filteredMembers.Body.String(), `data-label="用户名">owner`) {
+		t.Fatalf("server-filtered member page: status=%d body=%s", filteredMembers.Code, filteredMembers.Body.String())
 	}
 
 	loginPage := request(t, handler, http.MethodGet, "/login", nil, []*http.Cookie{csrf})
@@ -479,10 +483,14 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("create second variant: status=%d body=%s", created.Code, created.Body.String())
 	}
 	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"物品类型配置", `class="catalog-table"`, `class="catalog-category"`, `class="variant-tags"`, `class="variant-tag">256GB`, `class="variant-tag">512GB`, `data-model-variants`, "新增型号", "新增类别", "新增规格"} {
+	for _, want := range []string{"物品类型配置", `class="catalog-table"`, `class="catalog-category"`, `class="variant-tags"`, `class="variant-tag">256GB`, `class="variant-tag">512GB`, `data-model-variants`, "新增型号", "新增类别", "新增规格", `name="q"`, `name="category"`, `name="sort"`, `aria-sort="ascending"`} {
 		if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), want) {
 			t.Fatalf("model-first type configuration missing %q: status=%d body=%s", want, catalog.Code, catalog.Body.String())
 		}
+	}
+	filteredCatalog := request(t, handler, http.MethodGet, "/admin/catalog?q=iPhone&category="+categoryID+"&sort=name&direction=desc", nil, []*http.Cookie{ownerSession, csrf})
+	if filteredCatalog.Code != http.StatusOK || !strings.Contains(filteredCatalog.Body.String(), "iPhone 17 Pro") || !strings.Contains(filteredCatalog.Body.String(), `class="variant-tag">256GB`) {
+		t.Fatalf("server-filtered catalog page must retain bulk-loaded specifications: status=%d body=%s", filteredCatalog.Code, filteredCatalog.Body.String())
 	}
 	if strings.Contains(catalog.Body.String(), "价格规格") {
 		t.Fatalf("type configuration must use the simpler specification label: %s", catalog.Body.String())
@@ -679,13 +687,17 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("record Agent-confirmed sale: status=%d body=%s", sale.Code, sale.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "已作废"} {
+	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, `class="timeline-filters"`, `name="event_type"`, `name="sort"`, "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "已作废"} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
 	}
+	filteredTimeline := request(t, handler, http.MethodGet, "/assets/"+match[1]+"?event_type=sale&sort=amount&direction=desc", nil, []*http.Cookie{ownerSession, csrf})
+	if filteredTimeline.Code != http.StatusOK || !strings.Contains(filteredTimeline.Body.String(), "用户已在 Agent 对话中确认") || strings.Contains(filteredTimeline.Body.String(), "正确维修金额") || !strings.Contains(filteredTimeline.Body.String(), "730.00 CNY") {
+		t.Fatalf("server-filtered timeline must keep full summary while filtering rows: status=%d body=%s", filteredTimeline.Code, filteredTimeline.Body.String())
+	}
 	assetList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"7270.00 CNY", "730.00 CNY", "最终结算", "已卖出", `name="q"`, `name="status"`} {
+	for _, want := range []string{"7270.00 CNY", "730.00 CNY", "最终结算", "已卖出", `name="q"`, `name="status"`, `name="sort"`, `name="direction"`, `class="table-sort"`} {
 		if assetList.Code != http.StatusOK || !strings.Contains(assetList.Body.String(), want) {
 			t.Fatalf("asset list should show server-filtered lifecycle summary %q: status=%d body=%s", want, assetList.Code, assetList.Body.String())
 		}
@@ -693,6 +705,10 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	filteredAssetList := request(t, handler, http.MethodGet, "/?q=主力&status=sold", nil, []*http.Cookie{ownerSession, csrf})
 	if filteredAssetList.Code != http.StatusOK || !strings.Contains(filteredAssetList.Body.String(), "我的主力手机") {
 		t.Fatalf("asset list search should match asset data: status=%d body=%s", filteredAssetList.Code, filteredAssetList.Body.String())
+	}
+	sortedAssetList := request(t, handler, http.MethodGet, "/?sort=net&direction=asc", nil, []*http.Cookie{ownerSession, csrf})
+	if sortedAssetList.Code != http.StatusOK || !strings.Contains(sortedAssetList.Body.String(), `href="/?sort=net"`) || !strings.Contains(sortedAssetList.Body.String(), `aria-sort="ascending"`) {
+		t.Fatalf("asset server sort controls missing: status=%d body=%s", sortedAssetList.Code, sortedAssetList.Body.String())
 	}
 	emptyAssetList := request(t, handler, http.MethodGet, "/?q=不存在的物品", nil, []*http.Cookie{ownerSession, csrf})
 	if emptyAssetList.Code != http.StatusOK || !strings.Contains(emptyAssetList.Body.String(), "没有匹配的物品") {
