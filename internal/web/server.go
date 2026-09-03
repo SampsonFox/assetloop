@@ -94,6 +94,24 @@ type pageData struct {
 	CatalogFlow        string
 	AssetFormAction    string
 	AssetFormEditing   bool
+	NavAssets          bool
+	NavCatalog         bool
+	NavMembers         bool
+	EventForm          eventFormData
+}
+
+type eventFormData struct {
+	Type              string
+	OccurredAt        string
+	Amount            string
+	Currency          string
+	Source            string
+	ExternalReference string
+	FXRate            string
+	FXRateDate        string
+	FXRateSource      string
+	FXConfirmed       bool
+	Notes             string
 }
 
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
@@ -118,6 +136,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 			return values["event."+string(value)]
 		},
 		"statusLabel":   func(values map[string]string, value string) string { return values["status."+value] },
+		"productImage":  productImage,
 		"iconLabel":     func(values map[string]string, key string) string { return values["icon."+key] },
 		"dateTime":      func(value time.Time) string { return value.Local().Format("2006-01-02 15:04") },
 		"dateTimeInput": func(value time.Time) string { return value.Local().Format("2006-01-02T15:04") },
@@ -428,16 +447,7 @@ func (s *Server) correctEventForm(w http.ResponseWriter, r *http.Request) {
 		s.renderNotFound(w, principal, "error.not_found_event")
 		return
 	}
-	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
-	if err != nil {
-		s.renderError(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	s.render(w, http.StatusOK, "event_correct", pageData{
-		Title: textFor(principal.Locale, "correct.heading"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, ReturnTo: r.URL.RequestURI(),
-		Events: []domain.AssetEvent{event}, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked,
-		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
-	})
+	s.renderCorrectionForm(w, r, http.StatusOK, principal, event, "", eventFormForCorrection(event))
 }
 
 func (s *Server) correctEvent(w http.ResponseWriter, r *http.Request) {
@@ -461,10 +471,48 @@ func (s *Server) correctEvent(w http.ResponseWriter, r *http.Request) {
 			s.renderForbidden(w, principal, "error.forbidden_correct")
 			return
 		}
-		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, Error: s.userError(principal.Locale, err)})
+		if original.ID == "" {
+			s.renderNotFound(w, principal, "error.not_found_event")
+			return
+		}
+		baseCurrency, _, baseErr := s.lifecycle.BaseCurrency(r.Context(), principal)
+		if baseErr != nil {
+			s.renderError(w, r, http.StatusInternalServerError, baseErr)
+			return
+		}
+		form := eventFormFromRequest(r, baseCurrency, time.Now().Local().Format("2006-01-02T15:04"))
+		s.renderCorrectionForm(w, r, http.StatusUnprocessableEntity, principal, original, s.userError(principal.Locale, err), form)
 		return
 	}
 	http.Redirect(w, r, "/assets/"+original.AssetID, http.StatusSeeOther)
+}
+
+func (s *Server) renderCorrectionForm(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, event domain.AssetEvent, message string, form eventFormData) {
+	baseCurrency, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, status, "event_correct", pageData{
+		Title: textFor(principal.Locale, "correct.heading"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
+		Events: []domain.AssetEvent{event}, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked, EventForm: form,
+		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
+	})
+}
+
+func eventFormForCorrection(event domain.AssetEvent) eventFormData {
+	currency, amountMinor := event.BaseCurrency, event.BaseAmountMinor
+	form := eventFormData{OccurredAt: event.OccurredAt.Local().Format("2006-01-02T15:04"), Source: "manual-correction"}
+	if event.FX != nil {
+		currency, amountMinor = event.FX.OriginalCurrency, event.FX.OriginalAmountMinor
+		form.FXRate = formatRate(event.FX.RateScaled)
+		form.FXRateDate = event.FX.RateDate.Format("2006-01-02")
+		form.FXRateSource = event.FX.RateSource
+		form.FXConfirmed = true
+	}
+	form.Currency = currency
+	form.Amount = strings.TrimSuffix(domain.FormatMinor(amountMinor, currency), " "+currency)
+	return form
 }
 
 func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, assetID, message string) {
@@ -483,13 +531,44 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	nowValue := time.Now().Local().Format("2006-01-02T15:04")
 	s.render(w, status, "asset", pageData{
 		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: events,
 		Summary: summary, BaseCurrency: summary.BaseCurrency, BaseCurrencyLocked: locked,
-		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
+		NowValue:           nowValue,
+		EventForm:          eventFormFromRequest(r, summary.BaseCurrency, nowValue),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
 	})
+}
+
+func eventFormFromRequest(r *http.Request, baseCurrency, nowValue string) eventFormData {
+	form := eventFormData{
+		Type: "purchase", OccurredAt: nowValue, Currency: baseCurrency, Source: "manual",
+		FXRateDate: strings.SplitN(nowValue, "T", 2)[0],
+	}
+	if r.Method != http.MethodPost {
+		return form
+	}
+	form.Type = r.FormValue("event_type")
+	form.OccurredAt = r.FormValue("occurred_at")
+	form.Amount = r.FormValue("amount")
+	form.Currency = r.FormValue("currency")
+	form.Source = r.FormValue("source")
+	form.ExternalReference = r.FormValue("external_reference")
+	form.FXRate = r.FormValue("fx_rate")
+	form.FXRateDate = r.FormValue("fx_rate_date")
+	form.FXRateSource = r.FormValue("fx_rate_source")
+	form.FXConfirmed = r.FormValue("fx_confirmed") == "on"
+	form.Notes = r.FormValue("notes")
+	return form
+}
+
+func productImage(asset *domain.Asset) string {
+	if asset != nil && asset.Model == "iPhone 17 Pro" {
+		return "/static/product-demo-iphone-17-pro-deep-blue.jpg"
+	}
+	return ""
 }
 
 func (s *Server) recordEventFromForm(r *http.Request, principal application.Principal, assetID string, eventType domain.AssetEventType) (application.RecordEvent, error) {
@@ -1005,6 +1084,11 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 	data.Strings = stringsFor(data.Locale)
 	if data.ReturnTo == "" {
 		data.ReturnTo = "/"
+	}
+	if returnURL, err := url.Parse(data.ReturnTo); err == nil {
+		data.NavAssets = returnURL.Path == "/" || strings.HasPrefix(returnURL.Path, "/assets/") || strings.HasPrefix(returnURL.Path, "/events/")
+		data.NavCatalog = strings.HasPrefix(returnURL.Path, "/admin/catalog")
+		data.NavMembers = strings.HasPrefix(returnURL.Path, "/admin/members")
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)

@@ -5,7 +5,7 @@
 </div>
 <section class="card asset-profile">
   <figure class="asset-product-visual">
-    {{if eq .Asset.Model "iPhone 17 Pro"}}<img class="asset-product-image" src="/static/product-demo-iphone-17-pro-deep-blue.jpg" alt="{{.Asset.Model}}">{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>{{end}}
+    {{$productImage := productImage .Asset}}{{if $productImage}}<img class="asset-product-image" src="{{$productImage}}" alt="{{.Asset.Model}} · {{t $s "asset.model_image_caption"}}" width="1728" height="912" decoding="async" fetchpriority="high"><figcaption class="asset-product-caption">{{t $s "asset.model_image_caption"}}</figcaption>{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>{{end}}
   </figure>
   <div class="asset-profile-content">
     <p class="eyebrow">{{.Asset.Category}}</p>
@@ -35,22 +35,22 @@
 
 {{if .CanManageLifecycle}}
 <dialog class="drawer" id="event-drawer" aria-labelledby="event-drawer-title">
-  <form class="drawer-panel event-drawer-panel" id="event-form" action="/assets/{{.Asset.ID}}/events" method="post">
+  <form class="drawer-panel event-drawer-panel" id="event-form" action="/assets/{{.Asset.ID}}/events" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <header class="drawer-heading"><div><p class="eyebrow">{{t $s "asset.timeline"}}</p><h2 id="event-drawer-title" data-dialog-title>{{t $s "asset.add_event"}}</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.close"}}">×</button></header>
     <div class="drawer-body event-form-grid">
-    {{if .Error}}<p class="error wide" role="alert">{{.Error}}</p>{{end}}
+    {{if .Error}}<p class="error wide" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label>{{t $s "asset.event_type"}}<select name="event_type" required><option value="purchase">{{t $s "event.purchase"}}</option><option value="repair">{{t $s "event.repair"}}</option><option value="sale">{{t $s "event.sale"}}</option></select></label>
-    <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.NowValue}}" required></label>
-    <label>{{t $s "asset.amount_positive"}}<input name="amount" inputmode="decimal" required placeholder="6999.00"></label>
-    <label>{{t $s "asset.original_currency"}}<select name="currency" required data-currency-select data-base-currency="{{.BaseCurrency}}"><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
-    <label>{{t $s "asset.source"}}<input name="source" value="manual" maxlength="120"></label>
-    <label>{{t $s "asset.reference"}}<input name="external_reference" maxlength="200"></label>
-    <label data-fx-field hidden>{{t $s "asset.fx_rate"}}<input name="fx_rate" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
-    <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" value="{{.NowValue | printf "%.10s"}}" data-fx-required></label>
-    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
-    <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required>{{t $s "asset.fx_confirm"}} {{.BaseCurrency}}</label>
-    <label class="wide">{{t $s "common.notes"}}<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
+    <label>{{t $s "asset.event_type"}}<select name="event_type" required data-dialog-initial-focus><option value="purchase" {{if eq .EventForm.Type "purchase"}}selected{{end}}>{{t $s "event.purchase"}}</option><option value="repair" {{if eq .EventForm.Type "repair"}}selected{{end}}>{{t $s "event.repair"}}</option><option value="sale" {{if eq .EventForm.Type "sale"}}selected{{end}}>{{t $s "event.sale"}}</option></select></label>
+    <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
+    <label>{{t $s "asset.amount_positive"}}<input name="amount" inputmode="decimal" required placeholder="6999.00" value="{{.EventForm.Amount}}"></label>
+    <label>{{t $s "asset.original_currency"}}<select name="currency" required data-currency-select data-base-currency="{{.BaseCurrency}}"><option {{if eq .EventForm.Currency .BaseCurrency}}selected{{end}}>{{.BaseCurrency}}</option><option {{if eq .EventForm.Currency "USD"}}selected{{end}}>USD</option><option {{if eq .EventForm.Currency "EUR"}}selected{{end}}>EUR</option><option {{if eq .EventForm.Currency "GBP"}}selected{{end}}>GBP</option><option {{if eq .EventForm.Currency "HKD"}}selected{{end}}>HKD</option><option {{if eq .EventForm.Currency "AUD"}}selected{{end}}>AUD</option><option {{if eq .EventForm.Currency "CAD"}}selected{{end}}>CAD</option><option {{if eq .EventForm.Currency "SGD"}}selected{{end}}>SGD</option><option {{if eq .EventForm.Currency "TWD"}}selected{{end}}>TWD</option><option {{if eq .EventForm.Currency "JPY"}}selected{{end}}>JPY</option><option {{if eq .EventForm.Currency "KRW"}}selected{{end}}>KRW</option></select></label>
+    <label>{{t $s "asset.source"}}<input name="source" value="{{.EventForm.Source}}" maxlength="120"></label>
+    <label>{{t $s "asset.reference"}}<input name="external_reference" value="{{.EventForm.ExternalReference}}" maxlength="200"></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_rate"}}<input name="fx_rate" value="{{.EventForm.FXRate}}" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" value="{{.EventForm.FXRateDate}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" value="{{.EventForm.FXRateSource}}" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
+    <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required {{if .EventForm.FXConfirmed}}checked{{end}}>{{t $s "asset.fx_confirm"}} {{.BaseCurrency}}</label>
+    <label class="wide">{{t $s "common.notes"}}<textarea name="notes" maxlength="2000" rows="3">{{.EventForm.Notes}}</textarea></label>
     </div>
     <footer class="drawer-footer"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button><button class="auto" type="submit">{{t $s "asset.append"}}</button></footer>
   </form>

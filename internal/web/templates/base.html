@@ -3,23 +3,25 @@
 <html lang="{{.Locale}}" data-theme="{{.Theme}}">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  {{if eq .Theme "dark"}}<meta name="theme-color" content="#111714">{{else if eq .Theme "light"}}<meta name="theme-color" content="#f7f8f5">{{else}}<meta name="theme-color" content="#f7f8f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111714" media="(prefers-color-scheme: dark)">{{end}}
   <title>{{.Title}} · {{t $s "app.name"}}</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">{{t $s "common.skip_main"}}</a>
   <header class="topbar">
-    <a class="brand" href="/overview">AssetLoop <span>物迹</span></a>
+    <a class="brand" href="/overview" translate="no">AssetLoop <span>物迹</span></a>
     {{if .Principal}}
-    <nav aria-label="{{t $s "nav.main"}}"><a href="/">{{t $s "nav.assets"}}</a></nav>
+    <nav aria-label="{{t $s "nav.main"}}"><a href="/" {{if .NavAssets}}aria-current="page"{{end}}>{{t $s "nav.assets"}}</a></nav>
     <details class="account-menu">
       <summary aria-label="{{t $s "menu.label"}}"><span class="account-avatar compact">{{userInitial .Principal.Username}}</span><span class="account-trigger-name">{{.Principal.Username}}</span>{{template "icon-chevron"}}</summary>
       <div class="account-menu-panel">
         <div class="account-identity"><span class="account-avatar">{{userInitial .Principal.Username}}</span><span><strong>{{.Principal.Username}}</strong><small>{{roleLabel $s .Principal.Role}}</small></span></div>
         <nav aria-label="{{t $s "menu.label"}}">
-          {{if ne .Principal.Role "viewer"}}<a class="menu-item" href="/admin/catalog">{{template "icon-grid"}}<span>{{t $s "menu.catalog"}}</span></a>{{end}}
-          {{if eq .Principal.Role "owner"}}<a class="menu-item" href="/admin/members">{{template "icon-users"}}<span>{{t $s "menu.members"}}</span></a>{{end}}
+          {{if ne .Principal.Role "viewer"}}<a class="menu-item" href="/admin/catalog" {{if .NavCatalog}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "menu.catalog"}}</span></a>{{end}}
+          {{if eq .Principal.Role "owner"}}<a class="menu-item" href="/admin/members" {{if .NavMembers}}aria-current="page"{{end}}>{{template "icon-users"}}<span>{{t $s "menu.members"}}</span></a>{{end}}
         </nav>
         <form action="/preferences" method="post" class="preference-form" data-auto-submit>
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="return_to" value="{{.ReturnTo}}">
@@ -31,7 +33,7 @@
     </details>
     {{end}}
   </header>
-  <main class="shell">{{template "content" .}}</main>
+  <main class="shell" id="main-content" tabindex="-1">{{template "content" .}}</main>
 </body>
 </html>{{end}}
 

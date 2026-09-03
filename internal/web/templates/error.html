@@ -1,3 +1,3 @@
 {{define "content"}}{{$s := .Strings}}
-<section class="auth-card"><p class="eyebrow">{{t $s "error.eyebrow"}}</p><h1>{{.Title}}</h1><div class="error" role="alert">{{.Error}}</div><p><a href="/">{{t $s "common.back_assets"}}</a></p></section>
+<section class="auth-card"><p class="eyebrow">{{t $s "error.eyebrow"}}</p><h1>{{.Title}}</h1><div class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</div><p><a href="/">{{t $s "common.back_assets"}}</a></p></section>
 {{end}}

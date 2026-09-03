@@ -2,7 +2,7 @@
 <section class="auth-card">
   <p class="eyebrow">{{t $s "login.eyebrow"}}</p>
   <h1>{{t $s "login.heading"}}</h1>
-  {{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
+  {{if .Error}}<div class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</div>{{end}}
   <form method="post" action="/login" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>{{t $s "login.username"}}<input name="username" required autofocus autocomplete="username"></label>

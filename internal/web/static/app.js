@@ -6,6 +6,7 @@
     modelId: "model_id",
     returnModelId: "return_model_id",
   };
+  const dialogOpeners = new WeakMap();
 
   const syncFXFields = (select) => {
     const foreign = select.value !== select.dataset.baseCurrency;
@@ -13,22 +14,58 @@
     for (const input of select.form.querySelectorAll("[data-fx-required]")) input.required = foreign;
   };
 
+  const dirtyForm = (dialog) => dialog?.querySelector("form[data-guard-dirty][data-dirty='true']");
+  const canDiscardDialog = (dialog) => {
+    const form = dirtyForm(dialog);
+    return !form || window.confirm(form.dataset.discardConfirm);
+  };
+  const closeDialog = (dialog) => {
+    if (!dialog || !canDiscardDialog(dialog)) return false;
+    const form = dialog.querySelector("form[data-guard-dirty]");
+    if (form) form.dataset.dirty = "false";
+    dialog.close();
+    return true;
+  };
+  const focusDialog = (dialog) => {
+    const target = dialog.querySelector("[data-error-summary]")
+      || dialog.querySelector("[data-dialog-initial-focus]")
+      || dialog.querySelector("input:not([type='hidden']), select, textarea, button");
+    target?.focus();
+  };
+
+  for (const dialog of document.querySelectorAll("dialog.drawer")) {
+    dialog.addEventListener("cancel", (event) => {
+      if (!canDiscardDialog(dialog)) {
+        event.preventDefault();
+        return;
+      }
+      const form = dialog.querySelector("form[data-guard-dirty]");
+      if (form) form.dataset.dirty = "false";
+    });
+    dialog.addEventListener("close", () => dialogOpeners.get(dialog)?.focus());
+  }
+
   document.addEventListener("click", (event) => {
-	for (const menu of document.querySelectorAll(".account-menu[open]")) {
-	  if (!menu.contains(event.target)) menu.removeAttribute("open");
-	}
+    for (const menu of document.querySelectorAll(".account-menu[open]")) {
+      if (!menu.contains(event.target)) menu.removeAttribute("open");
+    }
     if (event.target.matches("dialog.drawer")) {
-      event.target.close();
+      if (canDiscardDialog(event.target)) {
+        const form = event.target.querySelector("form[data-guard-dirty]");
+        if (form) form.dataset.dirty = "false";
+        event.target.close();
+      }
       return;
     }
+
     const opener = event.target.closest("[data-dialog-open]");
     if (opener) {
       const dialog = document.getElementById(opener.dataset.dialogOpen);
-      const form = dialog && dialog.querySelector("form");
+      const form = dialog?.querySelector("form");
       if (!dialog || !form) return;
-      const currentDialog = opener.closest("dialog");
-      if (currentDialog?.open && currentDialog !== dialog) currentDialog.close();
+      dialogOpeners.set(dialog, opener);
       form.reset();
+      form.dataset.dirty = "false";
       form.action = opener.dataset.action;
       const title = dialog.querySelector("[data-dialog-title]");
       if (title) title.textContent = opener.dataset.title;
@@ -47,19 +84,27 @@
       const currency = form.querySelector("[data-currency-select]");
       if (currency) syncFXFields(currency);
       dialog.showModal();
+      queueMicrotask(() => focusDialog(dialog));
       return;
     }
 
     const closer = event.target.closest("[data-dialog-close]");
-    if (closer) closer.closest("dialog")?.close();
+    if (closer) closeDialog(closer.closest("dialog"));
   });
 
   document.addEventListener("keydown", (event) => {
-	if (event.key !== "Escape") return;
-	for (const menu of document.querySelectorAll(".account-menu[open]")) menu.removeAttribute("open");
+    if (event.key !== "Escape") return;
+    for (const menu of document.querySelectorAll(".account-menu[open]")) menu.removeAttribute("open");
+  });
+
+  document.addEventListener("input", (event) => {
+    const form = event.target.closest("form[data-guard-dirty]");
+    if (form) form.dataset.dirty = "true";
   });
 
   document.addEventListener("change", (event) => {
+    const dirty = event.target.closest("form[data-guard-dirty]");
+    if (dirty) dirty.dataset.dirty = "true";
     const currency = event.target.closest("[data-currency-select]");
     if (currency) syncFXFields(currency);
     const form = event.target.closest("[data-auto-submit]");
@@ -69,8 +114,28 @@
   });
 
   document.addEventListener("submit", (event) => {
-    const message = event.target.dataset.confirm;
-    if (message && !window.confirm(message)) event.preventDefault();
+    const form = event.target;
+    const message = form.dataset.confirm;
+    if (message && !window.confirm(message)) {
+      event.preventDefault();
+      return;
+    }
+    if (form.dataset.submitting === "true") {
+      event.preventDefault();
+      return;
+    }
+    form.dataset.submitting = "true";
+    form.dataset.dirty = "false";
+    if (event.submitter) {
+      event.submitter.disabled = true;
+      event.submitter.setAttribute("aria-busy", "true");
+    }
+  });
+
+  window.addEventListener("beforeunload", (event) => {
+    if (!document.querySelector("form[data-guard-dirty][data-dirty='true']")) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
 
   for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
@@ -91,5 +156,7 @@
       if (value) opener.dataset[dataKey] = value;
     }
     opener.click();
+  } else {
+    document.querySelector("[data-error-summary]")?.focus();
   }
 })();

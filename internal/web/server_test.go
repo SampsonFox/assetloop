@@ -41,8 +41,11 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 	if dashboard.Code != http.StatusOK || !strings.Contains(dashboard.Body.String(), "owner") {
 		t.Fatalf("authenticated dashboard: status=%d body=%s", dashboard.Code, dashboard.Body.String())
 	}
-	if !strings.Contains(dashboard.Body.String(), `<a class="brand" href="/overview">`) || strings.Contains(dashboard.Body.String(), `>概览</a>`) {
+	if !strings.Contains(dashboard.Body.String(), `<a class="brand" href="/overview" translate="no">`) || strings.Contains(dashboard.Body.String(), `>概览</a>`) {
 		t.Fatalf("brand must be the sole overview entry: %s", dashboard.Body.String())
+	}
+	if !strings.Contains(dashboard.Body.String(), `href="/" aria-current="page"`) {
+		t.Fatalf("asset navigation must expose the current page: %s", dashboard.Body.String())
 	}
 	if dashboard.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("security headers were not applied")
@@ -192,6 +195,49 @@ func TestThemeStylesUseSemanticSurfaces(t *testing.T) {
 	}
 }
 
+func TestFrontendQualityGuardrails(t *testing.T) {
+	handler := newTestHandler(t)
+	setup := request(t, handler, http.MethodGet, "/setup", nil, nil)
+	for _, want := range []string{
+		`name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"`,
+		`name="theme-color"`,
+		`class="skip-link" href="#main-content"`,
+		`<main class="shell" id="main-content" tabindex="-1">`,
+		`class="brand" href="/overview" translate="no"`,
+	} {
+		if setup.Code != http.StatusOK || !strings.Contains(setup.Body.String(), want) {
+			t.Fatalf("base accessibility markup missing %q: status=%d body=%s", want, setup.Code, setup.Body.String())
+		}
+	}
+
+	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
+	for _, want := range []string{
+		`.skip-link {`,
+		`font-variant-numeric:tabular-nums`,
+		`overscroll-behavior:contain`,
+		`touch-action:manipulation`,
+		`@media (prefers-reduced-motion:reduce)`,
+		`@media (pointer:coarse)`,
+	} {
+		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
+			t.Fatalf("frontend quality stylesheet missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
+		}
+	}
+
+	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
+	for _, want := range []string{
+		`[data-error-summary]`,
+		`[data-dialog-initial-focus]`,
+		`data-guard-dirty`,
+		`beforeunload`,
+		`dataset.submitting`,
+	} {
+		if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
+			t.Fatalf("frontend interaction guard missing %q: status=%d body=%s", want, script.Code, script.Body.String())
+		}
+	}
+}
+
 func TestCatalogManagementListUsesTagsAndContainedDrawer(t *testing.T) {
 	handler := newTestHandler(t)
 	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
@@ -286,11 +332,11 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 
 	grid := request(t, handler, http.MethodGet, "/?view=grid", nil, []*http.Cookie{session, csrf})
 	viewCookie := responseCookie(t, grid, assetViewCookie)
-	if viewCookie.Value != "grid" || !strings.Contains(grid.Body.String(), `class="is-active">卡片`) {
+	if viewCookie.Value != "grid" || !strings.Contains(grid.Body.String(), `class="is-active" aria-current="page">卡片`) {
 		t.Fatalf("grid preference was not selected: cookie=%q body=%s", viewCookie.Value, grid.Body.String())
 	}
 	persisted := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, viewCookie})
-	if !strings.Contains(persisted.Body.String(), `class="is-active">卡片`) {
+	if !strings.Contains(persisted.Body.String(), `class="is-active" aria-current="page">卡片`) {
 		t.Fatalf("grid preference was not persisted: %s", persisted.Body.String())
 	}
 	legacy := request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{session, csrf})
@@ -556,7 +602,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="card cashflow-strip section-gap"`, `class="timeline-heading"`, `id="add-event"`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以物品记录为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="card cashflow-strip section-gap"`, `class="timeline-heading"`, `id="add-event"`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -583,6 +629,11 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if unconfirmedFX.Code != http.StatusUnprocessableEntity || !strings.Contains(unconfirmedFX.Body.String(), "必须确认汇率换算") {
 		t.Fatalf("unconfirmed FX should be rejected: status=%d body=%s", unconfirmedFX.Code, unconfirmedFX.Body.String())
 	}
+	for _, want := range []string{`value="1000.00"`, `<option selected>USD</option>`, `value="7.12"`, `value="2026-08-01"`, `value="web-fixture"`, `value="2026-08-01T10:00"`} {
+		if !strings.Contains(unconfirmedFX.Body.String(), want) {
+			t.Fatalf("rejected event form must retain %q: %s", want, unconfirmedFX.Body.String())
+		}
+	}
 	purchase := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
 		"csrf_token": {csrf.Value}, "event_type": {"purchase"}, "amount": {"1000.00"}, "currency": {"USD"},
 		"fx_rate": {"7.12"}, "fx_rate_date": {"2026-08-01"}, "fx_rate_source": {"web-fixture"}, "fx_confirmed": {"on"},
@@ -602,6 +653,15 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	correctionLinks := regexp.MustCompile(`/events/([0-9a-f-]{36})/correct`).FindAllStringSubmatch(detail.Body.String(), -1)
 	if len(correctionLinks) != 2 {
 		t.Fatalf("expected purchase and repair correction links: %s", detail.Body.String())
+	}
+	invalidCorrection := request(t, handler, http.MethodPost, "/events/"+correctionLinks[1][1]+"/correct", url.Values{
+		"csrf_token": {csrf.Value}, "amount": {"invalid"}, "currency": {"CNY"},
+		"occurred_at": {"2026-08-10T10:00"}, "source": {"manual-correction"}, "notes": {"保留这段更正说明"},
+	}, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{`value="invalid"`, `value="2026-08-10T10:00"`, `value="manual-correction"`, `保留这段更正说明`, `data-error-summary`} {
+		if invalidCorrection.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidCorrection.Body.String(), want) {
+			t.Fatalf("invalid correction must retain %q: status=%d body=%s", want, invalidCorrection.Code, invalidCorrection.Body.String())
+		}
 	}
 	corrected := request(t, handler, http.MethodPost, "/events/"+correctionLinks[1][1]+"/correct", url.Values{
 		"csrf_token": {csrf.Value}, "amount": {"150.00"}, "currency": {"CNY"},

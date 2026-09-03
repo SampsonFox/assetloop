@@ -1,12 +1,12 @@
 {{define "content"}}{{$s := .Strings}}
 <section class="page-heading"><div><p class="eyebrow">{{t $s "members.eyebrow"}}</p><h1>{{t $s "members.heading"}}</h1></div></section>
-{{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</div>{{end}}
 <section class="two-column">
   <div class="card table-card">
     <table><thead><tr><th>{{t $s "members.username"}}</th><th>{{t $s "members.role"}}</th><th>{{t $s "members.joined"}}</th></tr></thead>
     <tbody>{{range .Members}}<tr><td>{{.Username}}</td><td><span class="badge">{{roleLabel $s .Role}}</span></td><td>{{.CreatedAt.Format "2006-01-02"}}</td></tr>{{end}}</tbody></table>
   </div>
-  <form method="post" action="/admin/members" class="card stack">
+  <form method="post" action="/admin/members" class="card stack" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <h2>{{t $s "members.add"}}</h2>
     <label>{{t $s "members.username"}}<input name="username" required autocomplete="off"></label>

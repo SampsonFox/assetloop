@@ -4,17 +4,18 @@
 <section class="card">
   <p>{{t $s "correct.help"}}</p>
   <p class="muted">{{t $s "correct.original_amount"}}：{{money $event.BaseAmountMinor $event.BaseCurrency}} · {{$event.Notes}}</p>
-  <form class="form-grid section-gap" action="/events/{{$event.ID}}/correct" method="post">
+  {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
+  <form class="form-grid section-gap" action="/events/{{$event.ID}}/correct" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label>{{t $s "correct.amount"}}<input name="amount" inputmode="decimal" required></label>
-    <label>{{t $s "asset.original_currency"}}<select name="currency" required data-currency-select data-base-currency="{{.BaseCurrency}}"><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
-    <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{dateTimeInput $event.OccurredAt}}" required></label>
-    <label data-fx-field hidden>{{t $s "correct.fx_rate"}}<input name="fx_rate" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
-    <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" data-fx-required></label>
-    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" data-fx-required></label>
-    <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required>{{t $s "correct.fx_confirm"}}</label>
-    <label>{{t $s "correct.source"}}<input name="source" value="manual-correction"></label>
-    <label class="wide">{{t $s "correct.notes"}}<textarea name="notes" required maxlength="2000" rows="3"></textarea></label>
+    <label>{{t $s "correct.amount"}}<input name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required></label>
+    <label>{{t $s "asset.original_currency"}}<select name="currency" required data-currency-select data-base-currency="{{.BaseCurrency}}"><option {{if eq .EventForm.Currency .BaseCurrency}}selected{{end}}>{{.BaseCurrency}}</option><option {{if eq .EventForm.Currency "USD"}}selected{{end}}>USD</option><option {{if eq .EventForm.Currency "EUR"}}selected{{end}}>EUR</option><option {{if eq .EventForm.Currency "GBP"}}selected{{end}}>GBP</option><option {{if eq .EventForm.Currency "HKD"}}selected{{end}}>HKD</option><option {{if eq .EventForm.Currency "AUD"}}selected{{end}}>AUD</option><option {{if eq .EventForm.Currency "CAD"}}selected{{end}}>CAD</option><option {{if eq .EventForm.Currency "SGD"}}selected{{end}}>SGD</option><option {{if eq .EventForm.Currency "TWD"}}selected{{end}}>TWD</option><option {{if eq .EventForm.Currency "JPY"}}selected{{end}}>JPY</option><option {{if eq .EventForm.Currency "KRW"}}selected{{end}}>KRW</option></select></label>
+    <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
+    <label data-fx-field hidden>{{t $s "correct.fx_rate"}}<input name="fx_rate" value="{{.EventForm.FXRate}}" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" value="{{.EventForm.FXRateDate}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" value="{{.EventForm.FXRateSource}}" data-fx-required></label>
+    <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required {{if .EventForm.FXConfirmed}}checked{{end}}>{{t $s "correct.fx_confirm"}}</label>
+    <label>{{t $s "correct.source"}}<input name="source" value="{{.EventForm.Source}}"></label>
+    <label class="wide">{{t $s "correct.notes"}}<textarea name="notes" required maxlength="2000" rows="3">{{.EventForm.Notes}}</textarea></label>
     <button type="submit">{{t $s "correct.submit"}}</button>
   </form>
 </section>

@@ -3,7 +3,7 @@
   <p class="eyebrow">{{t $s "setup.eyebrow"}}</p>
   <h1>{{t $s "setup.heading"}}</h1>
   <p class="muted">{{t $s "setup.help"}}</p>
-  {{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
+  {{if .Error}}<div class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</div>{{end}}
   <form method="post" action="/setup" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>{{t $s "setup.tenant_name"}}<input name="tenant_name" required autocomplete="organization" value="{{t $s "setup.tenant_default"}}"></label>

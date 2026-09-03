@@ -2,11 +2,11 @@
 <div class="page-heading">
   <div><p class="eyebrow">{{.Principal.TenantName}}</p><h1>{{t $s "title.assets"}}</h1><p class="muted">{{.AssetTotal}} {{t $s "assets.count_suffix"}}</p></div>
   <div class="heading-actions">
-    <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="{{.AssetListURL}}" class="{{if eq .AssetView "list"}}is-active{{end}}">{{t $s "assets.list"}}</a><a href="{{.AssetGridURL}}" class="{{if eq .AssetView "grid"}}is-active{{end}}">{{t $s "assets.grid"}}</a></div>
+    <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="{{.AssetListURL}}" class="{{if eq .AssetView "list"}}is-active{{end}}" {{if eq .AssetView "list"}}aria-current="page"{{end}}>{{t $s "assets.list"}}</a><a href="{{.AssetGridURL}}" class="{{if eq .AssetView "grid"}}is-active{{end}}" {{if eq .AssetView "grid"}}aria-current="page"{{end}}>{{t $s "assets.grid"}}</a></div>
     {{if .CanManageCatalog}}<a class="button auto" href="/assets/new">{{t $s "assets.create"}}</a>{{end}}
   </div>
 </div>
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
 
 <form class="asset-filters" method="get" action="/">
   {{if eq .AssetView "grid"}}<input type="hidden" name="view" value="grid">{{end}}
@@ -29,8 +29,8 @@
   {{end}}</section>
   {{else}}
   <section class="card table-card"><table class="asset-table"><thead><tr><th>{{t $s "assets.item"}}</th><th>{{t $s "assets.taxonomy"}}</th><th>{{t $s "assets.status"}}</th><th>{{t $s "assets.net_settlement"}}</th><th>{{t $s "assets.cost"}}</th><th>{{t $s "assets.serial_number"}}</th>{{if .CanManageLifecycle}}<th></th>{{end}}</tr></thead><tbody>{{range .Assets}}{{$summary := index $.AssetSummaries .ID}}<tr>
-    <td><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td><td>{{.Category}} / {{.Model}} / {{.Variant}}</td><td><span class="status-badge status-{{$summary.Status}}">{{statusLabel $s $summary.Status}}</span></td><td><strong class="net-value {{if gt $summary.NetCashflowMinor 0}}is-positive{{else if lt $summary.NetCashflowMinor 0}}is-negative{{end}}">{{money $summary.NetCashflowMinor $summary.BaseCurrency}}</strong></td><td>{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}<span class="muted">{{t $s "assets.no_cost"}}</span>{{end}}</td><td>{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td>
-    {{if $.CanManageLifecycle}}<td><div class="row-actions"><a href="/assets/{{.ID}}#add-event">{{t $s "assets.add_event"}}</a></div></td>{{end}}
+    <td data-label="{{t $s "assets.item"}}"><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td><td data-label="{{t $s "assets.taxonomy"}}">{{.Category}} / {{.Model}} / {{.Variant}}</td><td data-label="{{t $s "assets.status"}}"><span class="status-badge status-{{$summary.Status}}">{{statusLabel $s $summary.Status}}</span></td><td data-label="{{t $s "assets.net_settlement"}}"><strong class="net-value {{if gt $summary.NetCashflowMinor 0}}is-positive{{else if lt $summary.NetCashflowMinor 0}}is-negative{{end}}">{{money $summary.NetCashflowMinor $summary.BaseCurrency}}</strong></td><td data-label="{{t $s "assets.cost"}}">{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}<span class="muted">{{t $s "assets.no_cost"}}</span>{{end}}</td><td data-label="{{t $s "assets.serial_number"}}">{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td>
+    {{if $.CanManageLifecycle}}<td data-label="{{t $s "common.actions"}}"><div class="row-actions"><a href="/assets/{{.ID}}#add-event">{{t $s "assets.add_event"}}</a></div></td>{{end}}
   </tr>{{end}}</tbody></table></section>
   {{end}}
   {{if gt .AssetTotalPages 1}}<nav class="pagination" aria-label="{{t $s "assets.pagination"}}">
