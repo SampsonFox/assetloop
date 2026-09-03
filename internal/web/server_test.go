@@ -564,6 +564,21 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if detailBeforeEdit.Code != http.StatusOK || !strings.Contains(detailBeforeEdit.Body.String(), `href="/assets/`+match[1]+`/edit"`) {
 		t.Fatalf("asset detail must expose the edit entry: status=%d body=%s", detailBeforeEdit.Code, detailBeforeEdit.Body.String())
 	}
+	detailHeading := strings.Split(detailBeforeEdit.Body.String(), `<section class="card asset-profile">`)[0]
+	for _, want := range []string{
+		`class="heading-actions asset-detail-actions"`,
+		`class="icon-button" href="/" aria-label="返回物品列表" title="返回物品列表"`,
+		`class="icon-button" href="/assets/` + match[1] + `/edit" aria-label="编辑物品" title="编辑物品"`,
+	} {
+		if !strings.Contains(detailHeading, want) {
+			t.Fatalf("asset detail heading action missing %q: %s", want, detailHeading)
+		}
+	}
+	for _, unwanted := range []string{`>返回物品列表</a>`, `>编辑物品</a>`} {
+		if strings.Contains(detailHeading, unwanted) {
+			t.Fatalf("asset detail heading action must be icon-only %q: %s", unwanted, detailHeading)
+		}
+	}
 	editPage := request(t, handler, http.MethodGet, "/assets/"+match[1]+"/edit", nil, []*http.Cookie{ownerSession, csrf})
 	for _, want := range []string{`class="card asset-profile asset-editor-profile"`, `id="asset-form"`, `action="/assets/` + match[1] + `"`, `value="我的主力手机"`, `value="WEB-SERIAL-001"`} {
 		if editPage.Code != http.StatusOK || !strings.Contains(editPage.Body.String(), want) {

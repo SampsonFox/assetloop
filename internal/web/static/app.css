@@ -225,7 +225,9 @@ dialog.drawer::backdrop { background:var(--backdrop); }
 .drawer-panel { width:min(480px,100%); min-height:100%; margin-left:auto; padding:30px; overflow:auto; background:var(--card); box-shadow:-20px 0 60px var(--drawer-shadow); }
 .drawer-heading { padding-bottom:10px; border-bottom:1px solid var(--line); }
 .drawer-heading h2 { margin-bottom:0; font-size:26px; }
-.icon-button { width:42px; height:42px; padding:0; border-color:var(--line); background:var(--field); color:var(--ink); font-size:26px; }
+.icon-button { display:inline-grid; flex:0 0 auto; width:42px; height:42px; padding:0; place-items:center; border:1px solid var(--line); border-radius:10px; background:var(--field); color:var(--ink); font-size:26px; line-height:1; cursor:pointer; }
+.icon-button svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.asset-detail-actions { gap:8px; }
 .drawer-actions { justify-content:flex-end; padding-top:8px; }
 .event-drawer-panel { display:flex; flex-direction:column; width:min(560px,100%); height:100%; padding:0; overflow:hidden; }
 .event-drawer-panel > .drawer-heading { flex:0 0 auto; padding:20px 24px; }
