@@ -5,12 +5,6 @@
     categoryId: "category_id",
     modelId: "model_id",
     returnModelId: "return_model_id",
-    variantId: "variant_id",
-    displayName: "display_name",
-    serialNumber: "serial_number",
-    color: "color",
-    purchaseChannel: "purchase_channel",
-    notes: "notes",
   };
 
   const syncFXFields = (select) => {
@@ -23,6 +17,10 @@
 	for (const menu of document.querySelectorAll(".account-menu[open]")) {
 	  if (!menu.contains(event.target)) menu.removeAttribute("open");
 	}
+    if (event.target.matches("dialog.drawer")) {
+      event.target.close();
+      return;
+    }
     const opener = event.target.closest("[data-dialog-open]");
     if (opener) {
       const dialog = document.getElementById(opener.dataset.dialogOpen);

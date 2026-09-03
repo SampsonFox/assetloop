@@ -1,7 +1,7 @@
 {{define "content"}}{{$s := .Strings}}
 <div class="page-heading">
   <div><p class="eyebrow">{{t $s "assets.concrete"}}</p><h1>{{.Asset.DisplayName}}</h1></div>
-	<a href="/">{{t $s "common.back_assets"}}</a>
+	<div class="heading-actions"><a href="/">{{t $s "common.back_assets"}}</a>{{if .CanManageCatalog}}<a class="button secondary auto" href="/assets/{{.Asset.ID}}/edit">{{t $s "assets.edit"}}</a>{{end}}</div>
 </div>
 <section class="card asset-profile">
   <figure class="asset-product-visual">

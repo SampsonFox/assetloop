@@ -80,6 +80,8 @@ type pageData struct {
 	AssetView          string
 	CategoryIcons      []application.CategoryIconOption
 	CatalogFlow        string
+	AssetFormAction    string
+	AssetFormEditing   bool
 }
 
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
@@ -110,7 +112,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"date":          func(value time.Time) string { return value.Format("2006-01-02") },
 		"rate":          formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "event_correct", "error"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -143,7 +145,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/catalog/variants", s.createVariant)
 	mux.HandleFunc("POST /admin/catalog/variants/{id}", s.updateVariant)
 	mux.HandleFunc("POST /admin/catalog/variants/{id}/delete", s.deleteVariant)
+	mux.HandleFunc("GET /assets/new", s.newAssetForm)
 	mux.HandleFunc("POST /assets", s.createAsset)
+	mux.HandleFunc("GET /assets/{id}/edit", s.editAssetForm)
 	mux.HandleFunc("POST /assets/{id}", s.updateAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
@@ -256,7 +260,8 @@ func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.FormValue("flow") == "asset" {
-		s.redirectAfterCatalogCreate(w, r, "asset-drawer", "variant_id", variant.ID)
+		query := url.Values{"variant_id": {variant.ID}}
+		http.Redirect(w, r, "/assets/new?"+query.Encode(), http.StatusSeeOther)
 		return
 	}
 	s.redirectToModelEditor(w, r, variant.ModelID)
@@ -305,16 +310,45 @@ func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := s.catalog.CreateAsset(r.Context(), principal, application.CreateCatalogAsset{
+	created, err := s.catalog.CreateAsset(r.Context(), principal, application.CreateCatalogAsset{
 		VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
 		SerialNumber: r.FormValue("serial_number"), Color: r.FormValue("color"),
 		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	})
 	if err != nil {
-		s.renderAssetsError(w, r, principal, err)
+		s.renderAssetMutationError(w, r, principal, assetFromForm(r, ""), err)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/assets/"+created.ID, http.StatusSeeOther)
+}
+
+func (s *Server) newAssetForm(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	if !principal.Can(application.CapabilityManageCatalog) {
+		s.renderForbidden(w, principal, "error.forbidden_asset")
+		return
+	}
+	s.renderAssetForm(w, r, http.StatusOK, principal, domain.Asset{VariantID: strings.TrimSpace(r.URL.Query().Get("variant_id"))}, "")
+}
+
+func (s *Server) editAssetForm(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	if !principal.Can(application.CapabilityManageCatalog) {
+		s.renderForbidden(w, principal, "error.forbidden_asset")
+		return
+	}
+	asset, err := s.catalog.GetAsset(r.Context(), principal, r.PathValue("id"))
+	if err != nil {
+		s.renderNotFound(w, principal, "error.not_found_asset")
+		return
+	}
+	s.renderAssetForm(w, r, http.StatusOK, principal, asset, "")
 }
 
 func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) {
@@ -331,10 +365,10 @@ func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) {
 		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	})
 	if err != nil {
-		s.renderAssetsError(w, r, principal, err)
+		s.renderAssetMutationError(w, r, principal, assetFromForm(r, r.PathValue("id")), err)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/assets/"+r.PathValue("id"), http.StatusSeeOther)
 }
 
 func (s *Server) assetDetail(w http.ResponseWriter, r *http.Request) {
@@ -493,7 +527,7 @@ func (s *Server) renderCatalogError(w http.ResponseWriter, r *http.Request, prin
 
 func (s *Server) renderCatalogMutationError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
 	if r.FormValue("flow") == "asset" {
-		s.renderAssetsError(w, r, principal, err)
+		s.renderAssetMutationError(w, r, principal, domain.Asset{}, err)
 		return
 	}
 	s.renderCatalogError(w, r, principal, err)
@@ -505,7 +539,7 @@ func (s *Server) redirectAfterCatalogCreate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	query := url.Values{"dialog": {dialog}, idKey: {id}}
-	http.Redirect(w, r, "/?"+query.Encode(), http.StatusSeeOther)
+	http.Redirect(w, r, "/assets/new?"+query.Encode(), http.StatusSeeOther)
 }
 
 func (s *Server) redirectToModelEditor(w http.ResponseWriter, r *http.Request, modelID string) {
@@ -513,12 +547,57 @@ func (s *Server) redirectToModelEditor(w http.ResponseWriter, r *http.Request, m
 	http.Redirect(w, r, "/admin/catalog?"+query.Encode(), http.StatusSeeOther)
 }
 
-func (s *Server) renderAssetsError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {
+func (s *Server) renderAssetMutationError(w http.ResponseWriter, r *http.Request, principal application.Principal, asset domain.Asset, err error) {
 	if errors.Is(err, application.ErrForbidden) {
 		s.renderForbidden(w, principal, "error.forbidden_asset")
 		return
 	}
-	s.renderAssets(w, r, http.StatusUnprocessableEntity, principal, s.userError(principal.Locale, err))
+	s.renderAssetForm(w, r, http.StatusUnprocessableEntity, principal, asset, s.userError(principal.Locale, err))
+}
+
+func assetFromForm(r *http.Request, id string) domain.Asset {
+	return domain.Asset{
+		ID: id, VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
+		SerialNumber: r.FormValue("serial_number"), Color: r.FormValue("color"),
+		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
+	}
+}
+
+func (s *Server) renderAssetForm(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, asset domain.Asset, message string) {
+	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	for _, variant := range snapshot.Variants {
+		if variant.ID == asset.VariantID {
+			asset.Category = variant.CategoryName
+			asset.CategoryIcon = variant.CategoryIcon
+			asset.Model = variant.ModelName
+			asset.Variant = variant.Name
+			break
+		}
+	}
+	editing := asset.ID != ""
+	titleKey := "assets.create"
+	action := "/assets"
+	if editing {
+		titleKey = "assets.edit"
+		action = "/assets/" + asset.ID
+	}
+	returnTo := "/assets/new"
+	if editing {
+		returnTo = "/assets/" + asset.ID + "/edit"
+	}
+	if r.Method == http.MethodGet {
+		returnTo = r.URL.RequestURI()
+	}
+	s.render(w, status, "asset_form", pageData{
+		Title: textFor(principal.Locale, titleKey), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: returnTo,
+		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants, Asset: &asset,
+		CanManageCatalog: true, CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
+		AssetFormAction: action, AssetFormEditing: editing,
+	})
 }
 
 func (s *Server) assetsPage(w http.ResponseWriter, r *http.Request) {

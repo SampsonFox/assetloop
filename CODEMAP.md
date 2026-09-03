@@ -19,7 +19,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport; asset-list-first SSR UI, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, lifecycle, and FX confirmation screens |
+| `internal/web/` | HTTP transport; asset-list-first SSR UI, detail-style asset create/edit pages, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, lifecycle, and FX confirmation screens |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |

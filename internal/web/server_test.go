@@ -230,7 +230,7 @@ func TestLifecycleFormUsesResponsiveDrawerInteraction(t *testing.T) {
 		}
 	}
 	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
-	for _, want := range []string{`window.location.hash === "#add-event"`, `document.querySelector("#event-drawer .error")`, `document.querySelector('[data-dialog-open="event-drawer"]')`} {
+	for _, want := range []string{`window.location.hash === "#add-event"`, `document.querySelector("#event-drawer .error")`, `document.querySelector('[data-dialog-open="event-drawer"]')`, `event.target.matches("dialog.drawer")`, `event.target.close()`} {
 		if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
 			t.Fatalf("lifecycle drawer interaction missing %q: status=%d body=%s", want, script.Code, script.Body.String())
 		}
@@ -258,7 +258,7 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	session := responseCookie(t, setup, sessionCookie)
 
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `data-title="录入第一个物品"`, "当前还没有物品类型", `id="asset-form"`} {
+	for _, want := range []string{"我的物品", "还没有物品", "录入第一个物品", `href="/assets/new"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset-first empty state missing %q: status=%d body=%s", want, home.Code, home.Body.String())
 		}
@@ -266,8 +266,22 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	if strings.Contains(home.Body.String(), `>前往物品配置</a>`) {
 		t.Fatalf("asset-list empty state must not replace the primary create action with catalog configuration: %s", home.Body.String())
 	}
-	if strings.Count(home.Body.String(), `id="asset-form"`) != 1 {
-		t.Fatalf("create/edit must share one asset form: %s", home.Body.String())
+	for _, unwanted := range []string{`id="asset-form"`, `id="asset-drawer"`, `data-dialog-open="asset-drawer"`} {
+		if strings.Contains(home.Body.String(), unwanted) {
+			t.Fatalf("asset list must not embed the asset editor %q: %s", unwanted, home.Body.String())
+		}
+	}
+	newPage := request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
+	for _, want := range []string{`class="card asset-profile asset-editor-profile"`, `data-dialog-open="variant-drawer"`, `href="/"`} {
+		if newPage.Code != http.StatusOK || !strings.Contains(newPage.Body.String(), want) {
+			t.Fatalf("dedicated asset create page missing %q: status=%d body=%s", want, newPage.Code, newPage.Body.String())
+		}
+	}
+	invalidCreate := request(t, handler, http.MethodPost, "/assets", url.Values{
+		"csrf_token": {csrf.Value}, "display_name": {"未完成物品"},
+	}, []*http.Cookie{session, csrf})
+	if invalidCreate.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidCreate.Body.String(), `class="card asset-profile asset-editor-profile"`) || strings.Contains(invalidCreate.Body.String(), `<h1>我的物品</h1>`) {
+		t.Fatalf("invalid asset create must stay in the dedicated editor: status=%d body=%s", invalidCreate.Code, invalidCreate.Body.String())
 	}
 
 	grid := request(t, handler, http.MethodGet, "/?view=grid", nil, []*http.Cookie{session, csrf})
@@ -295,7 +309,7 @@ func TestPendingImportRoutesDoNotExist(t *testing.T) {
 	}
 }
 
-func TestAssetDrawerCreatesMissingTypeWithoutLeavingAssetList(t *testing.T) {
+func TestAssetEditorCreatesMissingTypeWithoutLeavingEditor(t *testing.T) {
 	handler := newTestHandler(t)
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
 	csrf := responseCookie(t, setupPage, csrfCookie)
@@ -305,7 +319,7 @@ func TestAssetDrawerCreatesMissingTypeWithoutLeavingAssetList(t *testing.T) {
 	}, []*http.Cookie{csrf})
 	session := responseCookie(t, setup, sessionCookie)
 
-	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
+	home := request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
 	for _, want := range []string{`data-dialog-open="variant-drawer"`, `data-title="新增物品类型"`, `id="category-form"`, `id="model-form"`, `id="variant-form"`, `name="flow" value="asset"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset drawer shared type component missing %q: status=%d body=%s", want, home.Code, home.Body.String())
@@ -324,7 +338,7 @@ func TestAssetDrawerCreatesMissingTypeWithoutLeavingAssetList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if location.Path != "/" || location.Query().Get("dialog") != wantDialog || location.Query().Get(idKey) == "" {
+		if location.Path != "/assets/new" || location.Query().Get("dialog") != wantDialog || location.Query().Get(idKey) == "" {
 			t.Fatalf("inline type redirect: location=%q", location.String())
 		}
 		return location.Query().Get(idKey)
@@ -343,11 +357,24 @@ func TestAssetDrawerCreatesMissingTypeWithoutLeavingAssetList(t *testing.T) {
 	variant := request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{
 		"csrf_token": {csrf.Value}, "flow": {"asset"}, "model_id": {modelID}, "name": {"256GB"},
 	}, []*http.Cookie{session, csrf})
-	variantID := redirect(variant, "asset-drawer", "variant_id")
+	if variant.Code != http.StatusSeeOther {
+		t.Fatalf("inline type final step: status=%d body=%s", variant.Code, variant.Body.String())
+	}
+	variantLocation, err := url.Parse(variant.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	variantID := variantLocation.Query().Get("variant_id")
+	if variantLocation.Path != "/assets/new" || variantLocation.Query().Get("dialog") != "" || variantID == "" {
+		t.Fatalf("inline type final redirect: location=%q", variantLocation.String())
+	}
 
 	reopened := request(t, handler, http.MethodGet, variant.Header().Get("Location"), nil, []*http.Cookie{session, csrf})
-	if reopened.Code != http.StatusOK || !strings.Contains(reopened.Body.String(), `<option value="`+variantID+`">手机 / iPhone 17 Pro / 256GB</option>`) {
+	if reopened.Code != http.StatusOK || !strings.Contains(reopened.Body.String(), `>手机 / iPhone 17 Pro / 256GB</option>`) {
 		t.Fatalf("new type was not available to the reopened asset form: status=%d body=%s", reopened.Code, reopened.Body.String())
+	}
+	if !strings.Contains(reopened.Body.String(), `<option value="`+variantID+`" selected>`) {
+		t.Fatalf("new specification was not selected in the asset editor: %s", reopened.Body.String())
 	}
 }
 
@@ -441,7 +468,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if strings.Contains(catalog.Body.String(), "512GB") {
 		t.Fatalf("deleted specification remained in catalog: %s", catalog.Body.String())
 	}
-	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
+	catalog = request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{ownerSession, csrf})
 	variantID := optionID(t, catalog.Body.String(), "手机 / iPhone 17 Pro / 256GB")
 
 	created = request(t, handler, http.MethodPost, "/assets", url.Values{
@@ -451,6 +478,9 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}, []*http.Cookie{ownerSession, csrf})
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create asset: status=%d body=%s", created.Code, created.Body.String())
+	}
+	if !regexp.MustCompile(`^/assets/[0-9a-f-]{36}$`).MatchString(created.Header().Get("Location")) {
+		t.Fatalf("created asset must open its detail page: location=%q", created.Header().Get("Location"))
 	}
 	blockedDelete := request(t, handler, http.MethodPost, "/admin/catalog/variants/"+variantID+"/delete", url.Values{
 		"csrf_token": {csrf.Value}, "return_model_id": {modelID},
@@ -471,6 +501,21 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 			t.Fatalf("asset list missing lifecycle summary or entry %q: %s", want, catalog.Body.String())
 		}
 	}
+	for _, unwanted := range []string{`href="/assets/` + match[1] + `/edit"`, `data-dialog-open="asset-drawer"`, `id="asset-drawer"`} {
+		if strings.Contains(catalog.Body.String(), unwanted) {
+			t.Fatalf("asset list must not expose record editing %q: %s", unwanted, catalog.Body.String())
+		}
+	}
+	detailBeforeEdit := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
+	if detailBeforeEdit.Code != http.StatusOK || !strings.Contains(detailBeforeEdit.Body.String(), `href="/assets/`+match[1]+`/edit"`) {
+		t.Fatalf("asset detail must expose the edit entry: status=%d body=%s", detailBeforeEdit.Code, detailBeforeEdit.Body.String())
+	}
+	editPage := request(t, handler, http.MethodGet, "/assets/"+match[1]+"/edit", nil, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{`class="card asset-profile asset-editor-profile"`, `id="asset-form"`, `action="/assets/` + match[1] + `"`, `value="我的主力手机"`, `value="WEB-SERIAL-001"`} {
+		if editPage.Code != http.StatusOK || !strings.Contains(editPage.Body.String(), want) {
+			t.Fatalf("dedicated asset edit page missing %q: status=%d body=%s", want, editPage.Code, editPage.Body.String())
+		}
+	}
 	updates := []struct {
 		path string
 		form url.Values
@@ -485,6 +530,9 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		response := request(t, handler, http.MethodPost, update.path, update.form, []*http.Cookie{ownerSession, csrf})
 		if response.Code != http.StatusSeeOther {
 			t.Fatalf("update %s: status=%d body=%s", update.path, response.Code, response.Body.String())
+		}
+		if update.path == "/assets/"+match[1] && response.Header().Get("Location") != update.path {
+			t.Fatalf("updated asset must return to its detail page: location=%q", response.Header().Get("Location"))
 		}
 	}
 	updatedList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
@@ -603,6 +651,14 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}
 	if strings.Contains(visible.Body.String(), `id="asset-form"`) || strings.Contains(visible.Body.String(), `href="/admin/catalog"`) {
 		t.Fatalf("viewer should not receive catalog management controls: %s", visible.Body.String())
+	}
+	viewerEditDenied := request(t, handler, http.MethodGet, "/assets/"+match[1]+"/edit", nil, []*http.Cookie{viewerSession, csrf})
+	if viewerEditDenied.Code != http.StatusForbidden {
+		t.Fatalf("viewer asset edit page: got %d, want %d", viewerEditDenied.Code, http.StatusForbidden)
+	}
+	viewerCreateDenied := request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{viewerSession, csrf})
+	if viewerCreateDenied.Code != http.StatusForbidden {
+		t.Fatalf("viewer asset create page: got %d, want %d", viewerCreateDenied.Code, http.StatusForbidden)
 	}
 	if strings.Contains(visible.Body.String(), `#add-event`) {
 		t.Fatalf("viewer should not receive lifecycle write controls: %s", visible.Body.String())
