@@ -3,19 +3,17 @@
   <div><p class="eyebrow">{{t $s "assets.concrete"}}</p><h1>{{.Asset.DisplayName}}</h1></div>
 	<a href="/">{{t $s "common.back_assets"}}</a>
 </div>
-<section class="two-column">
-  <article class="card">
-    <h2>{{t $s "asset.taxonomy"}}</h2>
-    <dl class="details">
-      <dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd>
-      <dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd>
-      <dt>{{t $s "asset.variant"}}</dt><dd>{{.Asset.Variant}}</dd>
-      <dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd>
-      <dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd>
-      <dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd>
-    </dl>
-  </article>
-  <article class="card"><h2>{{t $s "common.notes"}}</h2><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></article>
+<section class="card asset-profile">
+  <h2>{{t $s "asset.taxonomy"}}</h2>
+  <dl class="asset-details-grid">
+    <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd></div>
+    <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
+    <div class="asset-detail"><dt>{{t $s "asset.variant"}}</dt><dd>{{.Asset.Variant}}</dd></div>
+    <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
+    <div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>
+    <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
+  </dl>
+  <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
 </section>
 <section class="grid section-gap">
   <article class="card"><span class="metric">{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</span><h2>{{t $s "overview.expense"}}</h2><p>{{t $s "overview.expense_help"}}</p></article>

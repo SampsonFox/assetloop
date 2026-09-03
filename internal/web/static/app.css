@@ -99,9 +99,13 @@ table { width:100%; border-collapse:collapse; } th,td { padding:12px 10px; borde
 .section-gap { margin-top:24px; }
 .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:start; }
 .plain-list { margin:0; padding-left:20px; }
-.details { display:grid; grid-template-columns:110px 1fr; gap:10px 16px; margin:0; }
-.details dt { color:var(--muted); }
-.details dd { margin:0; font-weight:700; }
+.asset-details-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:18px 16px; margin:0; }
+.asset-detail { min-width:0; }
+.asset-detail dt { color:var(--muted); font-size:13px; }
+.asset-detail dd { margin:4px 0 0; overflow-wrap:anywhere; font-weight:700; }
+.asset-notes { margin-top:22px; padding-top:18px; border-top:1px solid var(--line); }
+.asset-notes h3,.asset-notes p { margin:0; }
+.asset-notes h3 { margin-bottom:6px; color:var(--muted); font-size:13px; }
 .wide { grid-column:1/-1; }
 .check { grid-template-columns:auto 1fr; align-items:center; }
 .check input { width:auto; }

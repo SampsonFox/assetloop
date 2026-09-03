@@ -237,6 +237,16 @@ func TestLifecycleFormUsesResponsiveDrawerInteraction(t *testing.T) {
 	}
 }
 
+func TestAssetDetailsUseResponsiveGrid(t *testing.T) {
+	handler := newTestHandler(t)
+	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
+	for _, want := range []string{`.asset-details-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));`, `.asset-notes {`} {
+		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
+			t.Fatalf("responsive asset details style missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
+		}
+	}
+}
+
 func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	handler := newTestHandler(t)
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
@@ -498,10 +508,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="timeline-heading"`, `id="add-event"`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-heading"`, `id="add-event"`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
+	}
+	if strings.Contains(detail.Body.String(), `class="two-column"`) {
+		t.Fatalf("asset notes must remain inside the responsive details card: %s", detail.Body.String())
 	}
 	visibleDetail := strings.Split(detail.Body.String(), `<dialog class="drawer" id="event-drawer"`)[0]
 	if regexp.MustCompile(`<form[^>]+action="/assets/` + regexp.QuoteMeta(match[1]) + `/events"`).MatchString(visibleDetail) {
