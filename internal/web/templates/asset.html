@@ -22,14 +22,13 @@
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>
 </section>
-<section class="card cashflow-strip section-gap">
-  <article class="cashflow-stat"><div><h2>{{t $s "overview.expense"}}</h2><p>{{t $s "overview.expense_help"}}</p></div><span class="metric">{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</span></article>
-  <article class="cashflow-stat"><div><h2>{{t $s "asset.income"}}</h2><p>{{t $s "asset.income_help"}}</p></div><span class="metric">{{money .Summary.IncomeMinor .Summary.BaseCurrency}}</span></article>
-  <article class="cashflow-stat"><div><h2>{{t $s "overview.net"}} · {{statusLabel $s .Summary.Status}}</h2><p>{{if .BaseCurrencyLocked}}{{t $s "asset.base_locked"}}{{else}}{{t $s "asset.base_locks_after_first"}}{{end}}</p></div><span class="metric">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</span></article>
-</section>
-
 <section class="card section-gap" id="lifecycle-timeline">
   <header class="timeline-heading"><h2>{{t $s "asset.timeline"}}</h2>{{if .CanManageLifecycle}}<button class="button auto" id="add-event" type="button" data-dialog-open="event-drawer" data-title="{{t $s "asset.add_event"}}" data-action="/assets/{{.Asset.ID}}/events" aria-controls="event-drawer"><span aria-hidden="true">＋</span>{{t $s "asset.add_event_short"}}</button>{{end}}</header>
+  <dl class="timeline-summary" aria-label="{{t $s "asset.cashflow_summary"}}">
+    <div class="timeline-summary-item"><dt>{{t $s "overview.expense"}}</dt><dd>{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</dd></div>
+    <div class="timeline-summary-item"><dt>{{t $s "asset.income"}}</dt><dd>{{money .Summary.IncomeMinor .Summary.BaseCurrency}}</dd></div>
+    <div class="timeline-summary-item"><dt>{{t $s "overview.net"}} · {{statusLabel $s .Summary.Status}}</dt><dd class="net-value {{if gt .Summary.NetCashflowMinor 0}}is-positive{{else if lt .Summary.NetCashflowMinor 0}}is-negative{{end}}">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</dd></div>
+  </dl>
   <form class="timeline-filters" method="get" action="/assets/{{.Asset.ID}}#lifecycle-timeline">
     <label><span>{{t $s "asset.search_events"}}</span><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "asset.search_events_placeholder"}}"></label>
     <label><span>{{t $s "asset.event_type"}}</span><select name="event_type"><option value="">{{t $s "asset.all_event_types"}}</option><option value="purchase" {{if eq .TableFilter "purchase"}}selected{{end}}>{{t $s "event.purchase"}}</option><option value="repair" {{if eq .TableFilter "repair"}}selected{{end}}>{{t $s "event.repair"}}</option><option value="sale" {{if eq .TableFilter "sale"}}selected{{end}}>{{t $s "event.sale"}}</option><option value="void" {{if eq .TableFilter "void"}}selected{{end}}>{{t $s "event.void"}}</option></select></label>

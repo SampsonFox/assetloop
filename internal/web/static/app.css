@@ -93,12 +93,6 @@ button:disabled { cursor:not-allowed; opacity:.45; }
 .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
 .card { padding:24px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
 .metric { display:block; margin-bottom:12px; color:var(--accent); font-size:34px; font-weight:850; }
-.cashflow-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:0; overflow:hidden; }
-.cashflow-stat { min-width:0; padding:16px 20px; }
-.cashflow-stat + .cashflow-stat { border-left:1px solid var(--line); }
-.cashflow-stat h2 { margin:0; font-size:14px; }
-.cashflow-stat p { margin:3px 0 0; color:var(--muted); font-size:12px; }
-.cashflow-stat .metric { margin:10px 0 0; font-size:22px; line-height:1.2; }
 .page-heading { display:flex; justify-content:space-between; margin-bottom:28px; }
 .page-heading h1 { font-size:38px; }
 .two-column { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); gap:20px; align-items:start; }
@@ -180,6 +174,11 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .timeline-heading { margin-bottom:16px; }
 .timeline-heading h2 { margin:0; }
 .timeline-heading .button { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.timeline-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 0 14px; padding:10px 0; border-block:1px solid var(--line); }
+.timeline-summary-item { min-width:0; padding:2px 16px; }
+.timeline-summary-item + .timeline-summary-item { border-left:1px solid var(--line); }
+.timeline-summary dt { color:var(--muted); font-size:12px; line-height:1.35; }
+.timeline-summary dd { margin:4px 0 0; font-size:18px; font-weight:750; line-height:1.25; white-space:nowrap; }
 .timeline-list { display:grid; margin:0; padding:0; list-style:none; }
 .timeline-item { position:relative; display:grid; grid-template-columns:20px minmax(0,1fr); gap:14px; padding-bottom:18px; }
 .timeline-item:not(:last-child)::before { content:""; position:absolute; top:18px; bottom:0; left:7px; width:2px; background:var(--line); }
@@ -236,7 +235,7 @@ dialog.drawer::backdrop { background:var(--backdrop); }
 .event-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-content:start; }
 .drawer-footer { flex:0 0 auto; justify-content:flex-end; padding:14px 24px; border-top:1px solid var(--line); background:var(--card); }
 @media (max-width:900px) { .asset-filters,.timeline-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .asset-filters .asset-search,.timeline-filters label:first-child { grid-column:1/-1; } .asset-filters .button { justify-self:start; } .asset-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .asset-table th:nth-child(5),.asset-table td:nth-child(5),.asset-table th:nth-child(6),.asset-table td:nth-child(6) { display:none; } }
-@media (max-width:760px) { .page-heading { align-items:flex-start; flex-direction:column; } .heading-actions { align-self:stretch; align-items:center; justify-content:flex-start; flex-wrap:wrap; } .asset-filters,.timeline-filters { grid-template-columns:1fr; } .asset-filters .asset-search,.timeline-filters label:first-child { grid-column:auto; } .asset-filters .button { grid-column:auto; } .asset-profile { grid-template-columns:1fr; gap:0; } .asset-product-visual { min-height:300px; } .asset-profile-content { padding:24px; } .asset-editor-fields { grid-template-columns:1fr; } .cashflow-strip { grid-template-columns:1fr; } .cashflow-stat { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 16px; align-items:center; padding:12px 16px; } .cashflow-stat + .cashflow-stat { border-top:1px solid var(--line); border-left:0; } .cashflow-stat .metric { grid-column:2; grid-row:1 / span 2; margin:0; font-size:18px; } .asset-grid { grid-template-columns:1fr; } .asset-table th:nth-child(2),.asset-table td:nth-child(2),.asset-table th:nth-child(5),.asset-table td:nth-child(5),.asset-table th:nth-child(6),.asset-table td:nth-child(6) { display:none; } .pagination { align-items:flex-start; flex-direction:column; } .catalog-table th,.catalog-table td { padding:10px 7px; } .catalog-table th:first-child,.catalog-table td:first-child { padding-left:14px; } .catalog-table th:last-child,.catalog-table td:last-child { padding-right:14px; } .catalog-category .category-icon { display:none; } .timeline-entry-heading { align-items:flex-start; flex-direction:column; } .drawer-panel { padding:22px; } .event-drawer-panel { padding:0; } .event-form-grid { grid-template-columns:1fr; } .event-form-grid .wide { grid-column:auto; } }
+@media (max-width:760px) { .page-heading { align-items:flex-start; flex-direction:column; } .heading-actions { align-self:stretch; align-items:center; justify-content:flex-start; flex-wrap:wrap; } .asset-filters,.timeline-filters { grid-template-columns:1fr; } .asset-filters .asset-search,.timeline-filters label:first-child { grid-column:auto; } .asset-filters .button { grid-column:auto; } .asset-profile { grid-template-columns:1fr; gap:0; } .asset-product-visual { min-height:300px; } .asset-profile-content { padding:24px; } .asset-editor-fields { grid-template-columns:1fr; } .timeline-summary-item { padding-inline:8px; } .timeline-summary dd { font-size:clamp(12px,3.4vw,17px); } .asset-grid { grid-template-columns:1fr; } .asset-table th:nth-child(2),.asset-table td:nth-child(2),.asset-table th:nth-child(5),.asset-table td:nth-child(5),.asset-table th:nth-child(6),.asset-table td:nth-child(6) { display:none; } .pagination { align-items:flex-start; flex-direction:column; } .catalog-table th,.catalog-table td { padding:10px 7px; } .catalog-table th:first-child,.catalog-table td:first-child { padding-left:14px; } .catalog-table th:last-child,.catalog-table td:last-child { padding-right:14px; } .catalog-category .category-icon { display:none; } .timeline-entry-heading { align-items:flex-start; flex-direction:column; } .drawer-panel { padding:22px; } .event-drawer-panel { padding:0; } .event-form-grid { grid-template-columns:1fr; } .event-form-grid .wide { grid-column:auto; } }
 
 /* Interaction, accessibility, and narrow-layout quality floor. */
 html { color-scheme:light; }
