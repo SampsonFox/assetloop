@@ -219,6 +219,23 @@ func (s *CatalogService) UpdateVariant(ctx context.Context, actor Principal, cmd
 	return variant, nil
 }
 
+func (s *CatalogService) DeleteVariant(ctx context.Context, actor Principal, variantID string) error {
+	if err := actor.Require(CapabilityManageCatalog); err != nil {
+		return err
+	}
+	if err := validID("variant ID", variantID); err != nil {
+		return err
+	}
+	deleted, err := s.store.DeleteVariant(ctx, actor.TenantID, variantID)
+	if err != nil {
+		return fmt.Errorf("delete variant: %w", err)
+	}
+	if !deleted {
+		return NewInputError("validation.variant_in_use")
+	}
+	return nil
+}
+
 func (s *CatalogService) CreateAsset(ctx context.Context, actor Principal, cmd CreateCatalogAsset) (domain.Asset, error) {
 	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return domain.Asset{}, err

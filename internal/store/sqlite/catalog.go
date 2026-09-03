@@ -43,6 +43,11 @@ func (s *Store) UpdateVariant(ctx context.Context, variant domain.ProductVariant
 	return updatedRow(count, err)
 }
 
+func (s *Store) DeleteVariant(ctx context.Context, tenantID, variantID string) (bool, error) {
+	count, err := sqlitedb.New(s.db).DeleteVariant(ctx, sqlitedb.DeleteVariantParams{TenantID: tenantID, ID: variantID})
+	return count > 0, err
+}
+
 func (s *Store) CreateCatalogAsset(ctx context.Context, asset domain.Asset) error {
 	return sqlitedb.New(s.db).CreateCatalogAsset(ctx, sqlitedb.CreateCatalogAssetParams{
 		ID: asset.ID, TenantID: asset.TenantID, VariantID: asset.VariantID,

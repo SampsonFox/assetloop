@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/catalog/models/{id}", s.updateModel)
 	mux.HandleFunc("POST /admin/catalog/variants", s.createVariant)
 	mux.HandleFunc("POST /admin/catalog/variants/{id}", s.updateVariant)
+	mux.HandleFunc("POST /admin/catalog/variants/{id}/delete", s.deleteVariant)
 	mux.HandleFunc("POST /assets", s.createAsset)
 	mux.HandleFunc("POST /assets/{id}", s.updateAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
@@ -216,7 +217,11 @@ func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalogMutationError(w, r, principal, err)
 		return
 	}
-	s.redirectAfterCatalogCreate(w, r, "variant-drawer", "model_id", model.ID)
+	if r.FormValue("flow") == "asset" {
+		s.redirectAfterCatalogCreate(w, r, "variant-drawer", "model_id", model.ID)
+		return
+	}
+	s.redirectToModelEditor(w, r, model.ID)
 }
 
 func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
@@ -232,7 +237,7 @@ func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalogError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+	s.redirectToModelEditor(w, r, r.PathValue("id"))
 }
 
 func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +255,11 @@ func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalogMutationError(w, r, principal, err)
 		return
 	}
-	s.redirectAfterCatalogCreate(w, r, "asset-drawer", "variant_id", variant.ID)
+	if r.FormValue("flow") == "asset" {
+		s.redirectAfterCatalogCreate(w, r, "asset-drawer", "variant_id", variant.ID)
+		return
+	}
+	s.redirectToModelEditor(w, r, variant.ModelID)
 }
 
 func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
@@ -261,12 +270,31 @@ func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := s.catalog.UpdateVariant(r.Context(), principal, application.UpdateVariant{ID: r.PathValue("id"), ModelID: r.FormValue("model_id"), Name: r.FormValue("name")})
+	variant, err := s.catalog.UpdateVariant(r.Context(), principal, application.UpdateVariant{ID: r.PathValue("id"), ModelID: r.FormValue("model_id"), Name: r.FormValue("name")})
 	if err != nil {
 		s.renderCatalogError(w, r, principal, err)
 		return
 	}
-	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+	modelID := r.FormValue("return_model_id")
+	if modelID == "" {
+		modelID = variant.ModelID
+	}
+	s.redirectToModelEditor(w, r, modelID)
+}
+
+func (s *Server) deleteVariant(w http.ResponseWriter, r *http.Request) {
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	if err := s.catalog.DeleteVariant(r.Context(), principal, r.PathValue("id")); err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	s.redirectToModelEditor(w, r, r.FormValue("return_model_id"))
 }
 
 func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
@@ -478,6 +506,11 @@ func (s *Server) redirectAfterCatalogCreate(w http.ResponseWriter, r *http.Reque
 	}
 	query := url.Values{"dialog": {dialog}, idKey: {id}}
 	http.Redirect(w, r, "/?"+query.Encode(), http.StatusSeeOther)
+}
+
+func (s *Server) redirectToModelEditor(w http.ResponseWriter, r *http.Request, modelID string) {
+	query := url.Values{"dialog": {"model-drawer"}, "edit_model_id": {modelID}}
+	http.Redirect(w, r, "/admin/catalog?"+query.Encode(), http.StatusSeeOther)
 }
 
 func (s *Server) renderAssetsError(w http.ResponseWriter, r *http.Request, principal application.Principal, err error) {

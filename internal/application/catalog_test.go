@@ -41,6 +41,7 @@ func TestCatalogServiceValidatesRoleTenantAndNames(t *testing.T) {
 
 type catalogSpy struct {
 	createdCategory domain.ItemCategory
+	deleteAllowed   bool
 }
 
 func (s *catalogSpy) CreateCategory(_ context.Context, value domain.ItemCategory) error {
@@ -52,8 +53,11 @@ func (*catalogSpy) CreateModel(context.Context, domain.ProductModel) error     {
 func (*catalogSpy) UpdateModel(context.Context, domain.ProductModel) error     { return nil }
 func (*catalogSpy) CreateVariant(context.Context, domain.ProductVariant) error { return nil }
 func (*catalogSpy) UpdateVariant(context.Context, domain.ProductVariant) error { return nil }
-func (*catalogSpy) CreateCatalogAsset(context.Context, domain.Asset) error     { return nil }
-func (*catalogSpy) UpdateCatalogAsset(context.Context, domain.Asset) error     { return nil }
+func (s *catalogSpy) DeleteVariant(context.Context, string, string) (bool, error) {
+	return s.deleteAllowed, nil
+}
+func (*catalogSpy) CreateCatalogAsset(context.Context, domain.Asset) error { return nil }
+func (*catalogSpy) UpdateCatalogAsset(context.Context, domain.Asset) error { return nil }
 func (*catalogSpy) ListCategories(context.Context, string) ([]domain.ItemCategory, error) {
 	return nil, nil
 }

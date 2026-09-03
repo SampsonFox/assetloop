@@ -4,6 +4,7 @@
     iconKey: "icon_key",
     categoryId: "category_id",
     modelId: "model_id",
+    returnModelId: "return_model_id",
     variantId: "variant_id",
     displayName: "display_name",
     serialNumber: "serial_number",
@@ -37,6 +38,14 @@
         const field = form.elements.namedItem(fieldName);
         if (field) field.value = opener.dataset[dataKey] || "";
       }
+      if (dialog.id === "model-drawer") {
+        const modelId = opener.dataset.editModelId || "";
+        const manager = dialog.querySelector("[data-model-variants]");
+        if (manager) manager.hidden = !modelId;
+        for (const group of dialog.querySelectorAll("[data-variant-group]")) {
+          group.hidden = group.dataset.variantGroup !== modelId;
+        }
+      }
       dialog.showModal();
       return;
     }
@@ -59,12 +68,19 @@
     form.requestSubmit();
   });
 
+  document.addEventListener("submit", (event) => {
+    const message = event.target.dataset.confirm;
+    if (message && !window.confirm(message)) event.preventDefault();
+  });
+
   for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
 
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");
+  const initialModelId = params.get("edit_model_id");
   const opener = [...document.querySelectorAll("[data-dialog-open]")].find(
-    (candidate) => candidate.dataset.dialogOpen === initialDialog,
+    (candidate) => candidate.dataset.dialogOpen === initialDialog
+      && (!initialModelId || candidate.dataset.editModelId === initialModelId),
   );
   if (opener) {
     for (const [dataKey, fieldName] of Object.entries(fields)) {

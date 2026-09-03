@@ -1,20 +1,23 @@
 {{define "content"}}{{$s := .Strings}}
-<div class="page-heading">
+<section class="page-heading">
   <div><p class="eyebrow">{{t $s "catalog.eyebrow"}}</p><h1>{{t $s "title.catalog"}}</h1><p class="muted">{{t $s "catalog.help"}}</p></div>
   <div class="heading-actions"><a href="/">{{t $s "common.back_assets"}}</a><button class="button auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_model"}}</button></div>
-</div>
+</section>
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
-
-{{if .Models}}<div class="model-list">{{range $model := .Models}}
-<article class="model-card" data-model-id="{{$model.ID}}">
-  <header class="model-card-heading"><div class="model-identity"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{$model.CategoryIcon}}"></use></svg><div><button class="model-category" type="button" data-dialog-open="category-drawer" data-title="{{t $s "catalog.edit_category"}}" data-action="/admin/catalog/categories/{{$model.CategoryID}}" data-name="{{$model.CategoryName}}" data-icon-key="{{$model.CategoryIcon}}">{{$model.CategoryName}}</button><h2>{{$model.Name}}</h2></div></div><button class="secondary auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.edit_model"}}" data-action="/admin/catalog/models/{{$model.ID}}" data-category-id="{{$model.CategoryID}}" data-name="{{$model.Name}}">{{t $s "catalog.edit_model"}}</button></header>
-  <section class="model-variants"><header class="variant-heading"><div><h3>{{t $s "catalog.variant"}}</h3><p class="muted">{{t $s "catalog.variant_help"}}</p></div><button class="secondary auto" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "catalog.add_variant"}}" data-action="/admin/catalog/variants" data-model-id="{{$model.ID}}">{{t $s "catalog.add_variant"}}</button></header>
-    <div class="variant-list">{{range $variant := $.Variants}}{{if eq $variant.ModelID $model.ID}}<div class="variant-row"><strong>{{$variant.Name}}</strong><button class="secondary auto" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "catalog.edit_variant"}}" data-action="/admin/catalog/variants/{{$variant.ID}}" data-model-id="{{$variant.ModelID}}" data-name="{{$variant.Name}}">{{t $s "common.edit"}}</button></div>{{end}}{{end}}</div>
-  </section>
-</article>
-{{end}}</div>{{else}}
+{{if .Models}}
+<section class="card table-card catalog-table-card">
+  <table class="catalog-table">
+    <thead><tr><th>{{t $s "catalog.model_category"}}</th><th>{{t $s "catalog.model_name"}}</th><th>{{t $s "catalog.variant"}}</th><th>{{t $s "common.actions"}}</th></tr></thead>
+    <tbody>{{range $model := .Models}}<tr>
+      <td><span class="catalog-category"><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{$model.CategoryIcon}}"></use></svg><span>{{$model.CategoryName}}</span></span></td>
+      <td><strong>{{$model.Name}}</strong></td>
+      <td><div class="variant-tags">{{$hasVariants := false}}{{range $variant := $.Variants}}{{if eq $variant.ModelID $model.ID}}{{$hasVariants = true}}<span class="variant-tag">{{$variant.Name}}</span>{{end}}{{end}}{{if not $hasVariants}}<span class="muted">{{t $s "catalog.variant_empty"}}</span>{{end}}</div></td>
+      <td class="row-actions"><button class="secondary auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.edit_model"}}" data-action="/admin/catalog/models/{{$model.ID}}" data-edit-model-id="{{$model.ID}}" data-category-id="{{$model.CategoryID}}" data-name="{{$model.Name}}">{{t $s "catalog.edit_model"}}</button></td>
+    </tr>{{end}}</tbody>
+  </table>
+</section>
+{{else}}
 <section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "catalog.empty_heading"}}</h2><p class="muted">{{t $s "catalog.empty_help"}}</p><button class="button auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_first_model"}}</button></section>
 {{end}}
-
 {{template "catalog-drawers" .}}
 {{end}}

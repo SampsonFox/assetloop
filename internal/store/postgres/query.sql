@@ -59,6 +59,15 @@ UPDATE product_variants
 SET model_id = $1, name = $2
 WHERE tenant_id = $3 AND id = $4;
 
+-- name: DeleteVariant :execrows
+DELETE FROM product_variants AS variant
+WHERE variant.tenant_id = $1 AND variant.id = $2
+  AND NOT EXISTS (
+    SELECT 1 FROM assets
+    WHERE assets.tenant_id = variant.tenant_id
+      AND assets.variant_id = variant.id
+  );
+
 -- name: CreateCatalogAsset :exec
 INSERT INTO assets
     (id, tenant_id, variant_id, display_name, serial_number, color, purchase_channel, notes, created_at)

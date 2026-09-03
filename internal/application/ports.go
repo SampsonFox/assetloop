@@ -33,6 +33,7 @@ type CatalogStore interface {
 	UpdateModel(context.Context, domain.ProductModel) error
 	CreateVariant(context.Context, domain.ProductVariant) error
 	UpdateVariant(context.Context, domain.ProductVariant) error
+	DeleteVariant(context.Context, string, string) (bool, error)
 	CreateCatalogAsset(context.Context, domain.Asset) error
 	UpdateCatalogAsset(context.Context, domain.Asset) error
 	ListCategories(context.Context, string) ([]domain.ItemCategory, error)

@@ -367,6 +367,29 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash string) error {
 	return err
 }
 
+const deleteVariant = `-- name: DeleteVariant :execrows
+DELETE FROM product_variants AS variant
+WHERE variant.tenant_id = ? AND variant.id = ?
+  AND NOT EXISTS (
+    SELECT 1 FROM assets
+    WHERE assets.tenant_id = variant.tenant_id
+      AND assets.variant_id = variant.id
+  )
+`
+
+type DeleteVariantParams struct {
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) DeleteVariant(ctx context.Context, arg DeleteVariantParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteVariant, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const ensureCategory = `-- name: EnsureCategory :one
 INSERT INTO item_categories (id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)
 ON CONFLICT (tenant_id, name) DO UPDATE SET name = excluded.name

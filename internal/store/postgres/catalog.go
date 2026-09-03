@@ -83,6 +83,15 @@ func (s *Store) UpdateVariant(ctx context.Context, variant domain.ProductVariant
 	return updatedRow(count, err)
 }
 
+func (s *Store) DeleteVariant(ctx context.Context, tenantID, variantID string) (bool, error) {
+	id, parsedTenantID, err := catalogIDs(variantID, tenantID)
+	if err != nil {
+		return false, err
+	}
+	count, err := postgresdb.New(s.db).DeleteVariant(ctx, postgresdb.DeleteVariantParams{TenantID: parsedTenantID, ID: id})
+	return count > 0, err
+}
+
 func (s *Store) CreateCatalogAsset(ctx context.Context, asset domain.Asset) error {
 	id, tenantID, err := catalogIDs(asset.ID, asset.TenantID)
 	if err != nil {

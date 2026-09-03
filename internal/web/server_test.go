@@ -192,14 +192,13 @@ func TestThemeStylesUseSemanticSurfaces(t *testing.T) {
 	}
 }
 
-func TestCatalogVariantPanelBorderIsContained(t *testing.T) {
+func TestCatalogManagementListUsesTagsAndContainedDrawer(t *testing.T) {
 	handler := newTestHandler(t)
 	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
-	if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), `.model-variants { margin:20px 0 0 58px; padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }`) {
-		t.Fatalf("catalog variant panel must use a contained border: status=%d body=%s", stylesheet.Code, stylesheet.Body.String())
-	}
-	if strings.Contains(stylesheet.Body.String(), `border-left:2px solid var(--accent-soft)`) {
-		t.Fatalf("catalog variant panel must not use an overhanging connector border: %s", stylesheet.Body.String())
+	for _, want := range []string{`.catalog-table-card { padding:0; }`, `.variant-tags { display:flex; flex-wrap:wrap;`, `.variant-manager { padding-top:22px; border-top:1px solid var(--line); }`} {
+		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
+			t.Fatalf("catalog management styles missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
+		}
 	}
 }
 
@@ -374,8 +373,14 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create variant: status=%d body=%s", created.Code, created.Body.String())
 	}
+	created = request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{
+		"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"512GB"},
+	}, []*http.Cookie{ownerSession, csrf})
+	if created.Code != http.StatusSeeOther {
+		t.Fatalf("create second variant: status=%d body=%s", created.Code, created.Body.String())
+	}
 	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"物品类型配置", `class="model-list"`, `class="model-card"`, `class="model-category"`, `class="variant-list"`, "新增型号", "新增类别", "新增规格", "256GB"} {
+	for _, want := range []string{"物品类型配置", `class="catalog-table"`, `class="catalog-category"`, `class="variant-tags"`, `class="variant-tag">256GB`, `class="variant-tag">512GB`, `data-model-variants`, "新增型号", "新增类别", "新增规格"} {
 		if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), want) {
 			t.Fatalf("model-first type configuration missing %q: status=%d body=%s", want, catalog.Code, catalog.Body.String())
 		}
@@ -391,9 +396,24 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if len(modelForm) != 2 || !strings.Contains(modelForm[1], "新增类别") {
 		t.Fatalf("category creation must remain available inside the model form: %s", catalog.Body.String())
 	}
-	modelCard := regexp.MustCompile(`(?s)<article class="model-card"[^>]*>.*?手机.*?iPhone 17 Pro.*?<div class="variant-list">.*?256GB.*?</article>`)
-	if !modelCard.MatchString(catalog.Body.String()) {
-		t.Fatalf("specification must be nested under its model card: %s", catalog.Body.String())
+	listMarkup := strings.Split(catalog.Body.String(), `<dialog class="drawer"`)[0]
+	if strings.Count(listMarkup, `data-title="编辑型号"`) != 1 || strings.Contains(listMarkup, `data-title="编辑规格"`) || strings.Contains(listMarkup, `data-title="新增规格"`) {
+		t.Fatalf("catalog row must expose only model editing; specification actions belong in the drawer: %s", listMarkup)
+	}
+	variant512Match := regexp.MustCompile(`data-action="/admin/catalog/variants/([0-9a-f-]{36})"[^>]+data-name="512GB"`).FindStringSubmatch(catalog.Body.String())
+	if len(variant512Match) != 2 {
+		t.Fatalf("512GB edit action not found: %s", catalog.Body.String())
+	}
+	variant512ID := variant512Match[1]
+	deleted := request(t, handler, http.MethodPost, "/admin/catalog/variants/"+variant512ID+"/delete", url.Values{
+		"csrf_token": {csrf.Value}, "return_model_id": {modelID},
+	}, []*http.Cookie{ownerSession, csrf})
+	if deleted.Code != http.StatusSeeOther || deleted.Header().Get("Location") != "/admin/catalog?dialog=model-drawer&edit_model_id="+modelID {
+		t.Fatalf("delete unused specification: status=%d location=%q body=%s", deleted.Code, deleted.Header().Get("Location"), deleted.Body.String())
+	}
+	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	if strings.Contains(catalog.Body.String(), "512GB") {
+		t.Fatalf("deleted specification remained in catalog: %s", catalog.Body.String())
 	}
 	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
 	variantID := optionID(t, catalog.Body.String(), "手机 / iPhone 17 Pro / 256GB")
@@ -405,6 +425,12 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}, []*http.Cookie{ownerSession, csrf})
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create asset: status=%d body=%s", created.Code, created.Body.String())
+	}
+	blockedDelete := request(t, handler, http.MethodPost, "/admin/catalog/variants/"+variantID+"/delete", url.Values{
+		"csrf_token": {csrf.Value}, "return_model_id": {modelID},
+	}, []*http.Cookie{ownerSession, csrf})
+	if blockedDelete.Code != http.StatusUnprocessableEntity || !strings.Contains(blockedDelete.Body.String(), "该规格已被具体物品使用，不能删除。") {
+		t.Fatalf("used specification deletion must be blocked: status=%d body=%s", blockedDelete.Code, blockedDelete.Body.String())
 	}
 	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
 	if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), "我的主力手机") || !strings.Contains(catalog.Body.String(), "WEB-SERIAL-001") {

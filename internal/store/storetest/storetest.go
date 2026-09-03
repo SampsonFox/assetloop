@@ -166,7 +166,8 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("create 256GB variant: %v", err)
 	}
-	if _, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"}); err != nil {
+	variant512, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"})
+	if err != nil {
 		t.Fatalf("create 512GB variant: %v", err)
 	}
 	asset, err := service.CreateAsset(ctx, owner, application.CreateCatalogAsset{
@@ -192,17 +193,26 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil || updatedAsset.DisplayName != "Updated Phone" || updatedAsset.CategoryIcon != "tablet" || updatedAsset.Category != "Phones" || updatedAsset.Model != "Example Ultra" || updatedAsset.Variant != "256 GB" {
 		t.Fatalf("updated catalog hierarchy mismatch: asset=%+v err=%v", updatedAsset, err)
 	}
+	if err := service.DeleteVariant(ctx, owner, variant512.ID); err != nil {
+		t.Fatalf("delete unused variant: %v", err)
+	}
+	if err := service.DeleteVariant(ctx, owner, variant256.ID); err == nil {
+		t.Fatal("variant used by an asset must not be deleted")
+	}
 	snapshot, err := service.Snapshot(ctx, owner)
 	if err != nil {
 		t.Fatalf("catalog snapshot: %v", err)
 	}
-	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 2 || len(snapshot.Assets) != 1 {
+	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 1 || len(snapshot.Assets) != 1 {
 		t.Fatalf("unexpected catalog counts: categories=%d models=%d variants=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Variants), len(snapshot.Assets))
 	}
 	viewer := owner
 	viewer.Role = application.RoleViewer
 	if _, err := service.CreateCategory(ctx, viewer, application.CreateCategory{Name: "Forbidden"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer catalog write should be forbidden, got %v", err)
+	}
+	if err := service.DeleteVariant(ctx, viewer, variant256.ID); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer variant delete should be forbidden, got %v", err)
 	}
 	if _, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: "99999999-9999-4999-8999-999999999999", Name: "Cross tenant"}); err == nil {
 		t.Fatal("model with unavailable category should fail")
