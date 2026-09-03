@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite/sqlitedb"
 )
@@ -135,6 +136,42 @@ func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset
 			ModelID: row.ModelID, Model: row.ModelName, VariantID: row.VariantID, Variant: row.VariantName,
 			DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
 			PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
+		})
+	}
+	return result, nil
+}
+
+func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts application.AssetListOptions) (application.AssetListResult, error) {
+	queries := sqlitedb.New(s.db)
+	filter := sqlitedb.CountAssetsWithSummaryParams{TenantID: tenantID, SearchQuery: opts.Query, StatusFilter: opts.Status}
+	total, err := queries.CountAssetsWithSummary(ctx, filter)
+	if err != nil || total == 0 {
+		return application.AssetListResult{Total: int(total)}, err
+	}
+	rows, err := queries.ListAssetsWithSummary(ctx, sqlitedb.ListAssetsWithSummaryParams{
+		TenantID: tenantID, SearchQuery: opts.Query, StatusFilter: opts.Status,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
+	if err != nil {
+		return application.AssetListResult{}, err
+	}
+	result := application.AssetListResult{Assets: make([]application.AssetWithSummary, 0, len(rows)), Total: int(total)}
+	for _, row := range rows {
+		createdAt, err := parseCatalogTime(row.CreatedAt)
+		if err != nil {
+			return application.AssetListResult{}, err
+		}
+		result.Assets = append(result.Assets, application.AssetWithSummary{
+			Asset: domain.Asset{
+				ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
+				ModelID: row.ModelID, Model: row.ModelName, VariantID: row.VariantID, Variant: row.VariantName,
+				DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+				PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
+			},
+			Summary: domain.AssetSummary{
+				BaseCurrency: row.BaseCurrency, ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+				NetCashflowMinor: row.NetMinor, Status: row.Status,
+			},
 		})
 	}
 	return result, nil

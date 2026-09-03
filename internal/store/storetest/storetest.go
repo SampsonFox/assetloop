@@ -72,6 +72,10 @@ func runLifecycle(t *testing.T, store Store) {
 	if replacement.ReplacesEventID != repair.ID || replacement.BaseAmountMinor != -15_000 {
 		t.Fatalf("replacement mismatch: %+v", replacement)
 	}
+	repairingList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Status: "repairing", Page: 1, PageSize: 25})
+	if err != nil || repairingList.Total != 1 || len(repairingList.Assets) != 1 || repairingList.Assets[0].Summary.Status != "repairing" || repairingList.Assets[0].Summary.NetCashflowMinor != -86_000 {
+		t.Fatalf("repairing asset list mismatch: result=%+v err=%v", repairingList, err)
+	}
 	sale, err := service.Record(ctx, owner, application.RecordEvent{
 		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: 800_000, Currency: "CNY",
 		OccurredAt: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), Source: "ai-harness",
@@ -93,6 +97,14 @@ func runLifecycle(t *testing.T, store Store) {
 	if events[len(events)-1].FX != nil {
 		t.Fatalf("base-currency sale should keep original-currency evidence nullable: %+v", events[len(events)-1])
 	}
+	soldList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Query: "Example Ultra", Status: "sold", Page: 1, PageSize: 1})
+	if err != nil || soldList.Total != 1 || len(soldList.Assets) != 1 || soldList.Assets[0].Summary.NetCashflowMinor != 714_000 {
+		t.Fatalf("sold asset search mismatch: result=%+v err=%v", soldList, err)
+	}
+	missingList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Query: "does-not-exist", Page: 1, PageSize: 1})
+	if err != nil || missingList.Total != 0 || len(missingList.Assets) != 0 {
+		t.Fatalf("empty asset search mismatch: result=%+v err=%v", missingList, err)
+	}
 	originalRepair, err := store.GetAssetEvent(ctx, owner.TenantID, repair.ID)
 	if err != nil || !originalRepair.IsVoided || originalRepair.Notes != "screen repair" {
 		t.Fatalf("original repair should remain unchanged and voided: %+v err=%v", originalRepair, err)
@@ -107,6 +119,18 @@ func runLifecycle(t *testing.T, store Store) {
 	}
 	if _, err := service.Record(ctx, viewer, application.RecordEvent{}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer lifecycle write should be forbidden, got %v", err)
+	}
+	secondAsset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: snapshot.Variants[0].ID, DisplayName: "Pagination Phone", SerialNumber: "SERIAL-002"})
+	if err != nil {
+		t.Fatalf("create pagination asset: %v", err)
+	}
+	pageOne, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Page: 1, PageSize: 1})
+	if err != nil || pageOne.Total != 2 || len(pageOne.Assets) != 1 || pageOne.Assets[0].Asset.ID != secondAsset.ID {
+		t.Fatalf("first asset page mismatch: result=%+v err=%v", pageOne, err)
+	}
+	pageTwo, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Page: 2, PageSize: 1})
+	if err != nil || pageTwo.Total != 2 || len(pageTwo.Assets) != 1 || pageTwo.Assets[0].Asset.ID == secondAsset.ID {
+		t.Fatalf("second asset page mismatch: result=%+v err=%v", pageTwo, err)
 	}
 }
 

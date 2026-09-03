@@ -1,24 +1,44 @@
 {{define "content"}}{{$s := .Strings}}
 <div class="page-heading">
-  <div><p class="eyebrow">{{.Principal.TenantName}}</p><h1>{{t $s "title.assets"}}</h1><p class="muted">{{len .Assets}} {{t $s "assets.count_suffix"}}</p></div>
+  <div><p class="eyebrow">{{.Principal.TenantName}}</p><h1>{{t $s "title.assets"}}</h1><p class="muted">{{.AssetTotal}} {{t $s "assets.count_suffix"}}</p></div>
   <div class="heading-actions">
-    <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="/?view=list" class="{{if eq .AssetView "list"}}is-active{{end}}">{{t $s "assets.list"}}</a><a href="/?view=grid" class="{{if eq .AssetView "grid"}}is-active{{end}}">{{t $s "assets.grid"}}</a></div>
+    <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="{{.AssetListURL}}" class="{{if eq .AssetView "list"}}is-active{{end}}">{{t $s "assets.list"}}</a><a href="{{.AssetGridURL}}" class="{{if eq .AssetView "grid"}}is-active{{end}}">{{t $s "assets.grid"}}</a></div>
     {{if .CanManageCatalog}}<a class="button auto" href="/assets/new">{{t $s "assets.create"}}</a>{{end}}
   </div>
 </div>
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
 
+<form class="asset-filters" method="get" action="/">
+  {{if eq .AssetView "grid"}}<input type="hidden" name="view" value="grid">{{end}}
+  <label class="asset-search"><span>{{t $s "assets.search"}}</span><input type="search" name="q" value="{{.AssetQuery}}" placeholder="{{t $s "assets.search_placeholder"}}"></label>
+  <label><span>{{t $s "assets.status"}}</span><select name="status">
+    <option value="" {{if eq .AssetStatus ""}}selected{{end}}>{{t $s "assets.all_statuses"}}</option>
+    <option value="active" {{if eq .AssetStatus "active"}}selected{{end}}>{{t $s "status.active"}}</option>
+    <option value="repairing" {{if eq .AssetStatus "repairing"}}selected{{end}}>{{t $s "status.repairing"}}</option>
+    <option value="sold" {{if eq .AssetStatus "sold"}}selected{{end}}>{{t $s "status.sold"}}</option>
+    <option value="unacquired" {{if eq .AssetStatus "unacquired"}}selected{{end}}>{{t $s "status.unacquired"}}</option>
+  </select></label>
+  <button class="auto" type="submit">{{t $s "assets.filter"}}</button>
+  {{if .AssetHasFilters}}<a class="button secondary" href="{{.AssetClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
+</form>
+
 {{if .Assets}}
   {{if eq .AssetView "grid"}}
   <section class="asset-grid" aria-label="{{t $s "assets.cards_label"}}">{{range .Assets}}
-    {{$summary := index $.AssetSummaries .ID}}<article class="asset-card"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><div class="asset-card-body"><p class="eyebrow">{{.Category}} · {{.Model}} · {{.Variant}}</p><h2><a href="/assets/{{.ID}}">{{.DisplayName}}</a></h2><p class="asset-cost"><span>{{t $s "assets.cost"}}</span><strong>{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}{{t $s "assets.no_cost"}}{{end}}</strong></p><p class="muted">{{if .SerialNumber}}{{t $s "assets.serial_number"}} {{.SerialNumber}}{{else}}{{t $s "assets.serial_missing"}}{{end}}</p></div>{{if $.CanManageLifecycle}}<div class="asset-card-actions"><a href="/assets/{{.ID}}#add-event">{{t $s "assets.add_event"}}</a></div>{{end}}</article>
+    {{$summary := index $.AssetSummaries .ID}}<article class="asset-card"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><div class="asset-card-body"><p class="eyebrow">{{.Category}} · {{.Model}} · {{.Variant}}</p><div class="asset-card-title"><h2><a href="/assets/{{.ID}}">{{.DisplayName}}</a></h2><span class="status-badge status-{{$summary.Status}}">{{statusLabel $s $summary.Status}}</span></div><div class="asset-card-values"><p><span>{{t $s "assets.net_settlement"}}</span><strong class="net-value {{if gt $summary.NetCashflowMinor 0}}is-positive{{else if lt $summary.NetCashflowMinor 0}}is-negative{{end}}">{{money $summary.NetCashflowMinor $summary.BaseCurrency}}</strong></p><p><span>{{t $s "assets.cost"}}</span><strong>{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}{{t $s "assets.no_cost"}}{{end}}</strong></p></div><p class="muted">{{if .SerialNumber}}{{t $s "assets.serial_number"}} {{.SerialNumber}}{{else}}{{t $s "assets.serial_missing"}}{{end}}</p></div>{{if $.CanManageLifecycle}}<div class="asset-card-actions"><a href="/assets/{{.ID}}#add-event">{{t $s "assets.add_event"}}</a></div>{{end}}</article>
   {{end}}</section>
   {{else}}
-  <section class="card table-card"><table class="asset-table"><thead><tr><th>{{t $s "assets.item"}}</th><th>{{t $s "assets.taxonomy"}}</th><th>{{t $s "assets.cost"}}</th><th>{{t $s "assets.serial_number"}}</th><th>{{t $s "assets.color"}}</th><th>{{t $s "assets.channel"}}</th>{{if .CanManageLifecycle}}<th></th>{{end}}</tr></thead><tbody>{{range .Assets}}{{$summary := index $.AssetSummaries .ID}}<tr>
-    <td><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td><td>{{.Category}} / {{.Model}} / {{.Variant}}</td><td>{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}<span class="muted">{{t $s "assets.no_cost"}}</span>{{end}}</td><td>{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td><td>{{if .Color}}{{.Color}}{{else}}—{{end}}</td><td>{{if .PurchaseChannel}}{{.PurchaseChannel}}{{else}}—{{end}}</td>
+  <section class="card table-card"><table class="asset-table"><thead><tr><th>{{t $s "assets.item"}}</th><th>{{t $s "assets.taxonomy"}}</th><th>{{t $s "assets.status"}}</th><th>{{t $s "assets.net_settlement"}}</th><th>{{t $s "assets.cost"}}</th><th>{{t $s "assets.serial_number"}}</th>{{if .CanManageLifecycle}}<th></th>{{end}}</tr></thead><tbody>{{range .Assets}}{{$summary := index $.AssetSummaries .ID}}<tr>
+    <td><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td><td>{{.Category}} / {{.Model}} / {{.Variant}}</td><td><span class="status-badge status-{{$summary.Status}}">{{statusLabel $s $summary.Status}}</span></td><td><strong class="net-value {{if gt $summary.NetCashflowMinor 0}}is-positive{{else if lt $summary.NetCashflowMinor 0}}is-negative{{end}}">{{money $summary.NetCashflowMinor $summary.BaseCurrency}}</strong></td><td>{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}<span class="muted">{{t $s "assets.no_cost"}}</span>{{end}}</td><td>{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td>
     {{if $.CanManageLifecycle}}<td><div class="row-actions"><a href="/assets/{{.ID}}#add-event">{{t $s "assets.add_event"}}</a></div></td>{{end}}
   </tr>{{end}}</tbody></table></section>
   {{end}}
+  {{if gt .AssetTotalPages 1}}<nav class="pagination" aria-label="{{t $s "assets.pagination"}}">
+    <span>{{t $s "assets.page"}} {{.AssetPage}} / {{.AssetTotalPages}}</span>
+    <div>{{if .AssetPreviousURL}}<a class="button secondary" href="{{.AssetPreviousURL}}">{{t $s "assets.previous"}}</a>{{end}}{{if .AssetNextURL}}<a class="button secondary" href="{{.AssetNextURL}}">{{t $s "assets.next"}}</a>{{end}}</div>
+  </nav>{{end}}
+{{else if .AssetHasFilters}}
+<section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "assets.no_results_heading"}}</h2><p class="muted">{{t $s "assets.no_results_help"}}</p><a class="button secondary" href="{{.AssetClearURL}}">{{t $s "assets.clear_filters"}}</a></section>
 {{else}}
 <section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "assets.empty_heading"}}</h2>
   {{if .CanManageCatalog}}<p class="muted">{{t $s "assets.empty_help_editor"}}</p><a class="button auto" href="/assets/new">{{t $s "assets.create_first"}}</a>{{else}}<p class="muted">{{t $s "assets.empty_help_viewer"}}</p>{{end}}

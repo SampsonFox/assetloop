@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,17 @@ type pageData struct {
 	TotalIncomeMinor   int64
 	TotalNetMinor      int64
 	AssetView          string
+	AssetQuery         string
+	AssetStatus        string
+	AssetTotal         int
+	AssetPage          int
+	AssetTotalPages    int
+	AssetPreviousURL   string
+	AssetNextURL       string
+	AssetListURL       string
+	AssetGridURL       string
+	AssetClearURL      string
+	AssetHasFilters    bool
 	CategoryIcons      []application.CategoryIconOption
 	CatalogFlow        string
 	AssetFormAction    string
@@ -609,33 +621,73 @@ func (s *Server) assetsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
-	snapshot, err := s.catalog.Snapshot(r.Context(), principal)
-	if err != nil {
-		s.renderError(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	summaries := make(map[string]domain.AssetSummary, len(snapshot.Assets))
-	for _, asset := range snapshot.Assets {
-		// ponytail: use the existing lifecycle query until list size justifies a batched summary port.
-		_, summary, timelineErr := s.lifecycle.Timeline(r.Context(), principal, asset.ID)
-		if timelineErr != nil {
-			s.renderError(w, r, http.StatusInternalServerError, timelineErr)
-			return
-		}
-		summaries[asset.ID] = summary
-	}
 	view := assetView(r)
 	if requested := strings.TrimSpace(r.URL.Query().Get("view")); requested == "list" || requested == "grid" {
 		view = requested
 		http.SetCookie(w, &http.Cookie{Name: assetViewCookie, Value: view, Path: "/", MaxAge: 365 * 24 * 60 * 60, HttpOnly: true, Secure: s.options.SecureCookies, SameSite: http.SameSiteLaxMode})
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	const pageSize = 25
+	result, err := s.catalog.ListAssetsWithSummary(r.Context(), principal, application.AssetListOptions{Query: query, Status: statusFilter, Page: page, PageSize: pageSize})
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	totalPages := 0
+	if result.Total > 0 {
+		totalPages = (result.Total + pageSize - 1) / pageSize
+	}
+	if totalPages > 0 && page > totalPages {
+		http.Redirect(w, r, assetsURL(view, query, statusFilter, totalPages), http.StatusFound)
+		return
+	}
+	assetRows := make([]domain.Asset, 0, len(result.Assets))
+	summaries := make(map[string]domain.AssetSummary, len(result.Assets))
+	for _, row := range result.Assets {
+		assetRows = append(assetRows, row.Asset)
+		summaries[row.Asset.ID] = row.Summary
+	}
+	previousURL, nextURL := "", ""
+	if page > 1 {
+		previousURL = assetsURL(view, query, statusFilter, page-1)
+	}
+	if page < totalPages {
+		nextURL = assetsURL(view, query, statusFilter, page+1)
+	}
 	s.render(w, status, "assets", pageData{
 		Title: textFor(principal.Locale, "title.assets"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
-		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants,
-		Assets: snapshot.Assets, AssetSummaries: summaries, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+		Assets: assetRows, AssetSummaries: summaries, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle), AssetView: view,
-		CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
+		AssetQuery: query, AssetStatus: statusFilter, AssetTotal: result.Total, AssetPage: page, AssetTotalPages: totalPages,
+		AssetPreviousURL: previousURL, AssetNextURL: nextURL,
+		AssetListURL: assetsURL("list", query, statusFilter, page), AssetGridURL: assetsURL("grid", query, statusFilter, page),
+		AssetClearURL: assetsURL(view, "", "", 1), AssetHasFilters: query != "" || (statusFilter != "" && statusFilter != "all"),
 	})
+}
+
+func assetsURL(view, query, status string, page int) string {
+	values := url.Values{}
+	if view == "grid" {
+		values.Set("view", view)
+	}
+	if query != "" {
+		values.Set("q", query)
+	}
+	if status != "" && status != "all" {
+		values.Set("status", status)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	if len(values) == 0 {
+		return "/"
+	}
+	return "/?" + values.Encode()
 }
 
 func assetView(r *http.Request) string {

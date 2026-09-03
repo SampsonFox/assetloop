@@ -625,8 +625,18 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	assetList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
-	if assetList.Code != http.StatusOK || !strings.Contains(assetList.Body.String(), "7270.00 CNY") {
-		t.Fatalf("asset list should show base-currency lifecycle cost: status=%d body=%s", assetList.Code, assetList.Body.String())
+	for _, want := range []string{"7270.00 CNY", "730.00 CNY", "最终结算", "已卖出", `name="q"`, `name="status"`} {
+		if assetList.Code != http.StatusOK || !strings.Contains(assetList.Body.String(), want) {
+			t.Fatalf("asset list should show server-filtered lifecycle summary %q: status=%d body=%s", want, assetList.Code, assetList.Body.String())
+		}
+	}
+	filteredAssetList := request(t, handler, http.MethodGet, "/?q=主力&status=sold", nil, []*http.Cookie{ownerSession, csrf})
+	if filteredAssetList.Code != http.StatusOK || !strings.Contains(filteredAssetList.Body.String(), "我的主力手机") {
+		t.Fatalf("asset list search should match asset data: status=%d body=%s", filteredAssetList.Code, filteredAssetList.Body.String())
+	}
+	emptyAssetList := request(t, handler, http.MethodGet, "/?q=不存在的物品", nil, []*http.Cookie{ownerSession, csrf})
+	if emptyAssetList.Code != http.StatusOK || !strings.Contains(emptyAssetList.Body.String(), "没有匹配的物品") {
+		t.Fatalf("asset list should distinguish an empty filter result: status=%d body=%s", emptyAssetList.Code, emptyAssetList.Body.String())
 	}
 	if strings.Contains(detail.Body.String(), "2026-07-31") {
 		t.Fatalf("FX rate date shifted to the prior day: %s", detail.Body.String())

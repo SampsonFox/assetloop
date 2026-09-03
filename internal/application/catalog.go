@@ -15,6 +15,8 @@ type CatalogService struct {
 	now   func() time.Time
 }
 
+const defaultAssetPageSize = 25
+
 type CatalogSnapshot struct {
 	Categories []domain.ItemCategory
 	Models     []domain.ProductModel
@@ -94,6 +96,15 @@ type UpdateCatalogAsset struct {
 	Color           string
 	PurchaseChannel string
 	Notes           string
+}
+
+var allowedAssetListStatuses = map[string]struct{}{
+	"":           {},
+	"all":        {},
+	"unacquired": {},
+	"active":     {},
+	"sold":       {},
+	"repairing":  {},
 }
 
 func NewCatalogService(store CatalogStore) *CatalogService {
@@ -335,6 +346,27 @@ func (s *CatalogService) Snapshot(ctx context.Context, actor Principal) (Catalog
 		return CatalogSnapshot{}, fmt.Errorf("list assets: %w", err)
 	}
 	return CatalogSnapshot{Categories: categories, Models: models, Variants: variants, Assets: assets}, nil
+}
+
+func (s *CatalogService) ListAssetsWithSummary(ctx context.Context, actor Principal, opts AssetListOptions) (AssetListResult, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return AssetListResult{}, err
+	}
+	if opts.Page <= 0 {
+		opts.Page = 1
+	}
+	if opts.PageSize <= 0 {
+		opts.PageSize = defaultAssetPageSize
+	}
+	if opts.PageSize > 200 {
+		opts.PageSize = 200
+	}
+	opts.Query = strings.TrimSpace(opts.Query)
+	opts.Status = strings.TrimSpace(opts.Status)
+	if _, allowed := allowedAssetListStatuses[opts.Status]; !allowed {
+		return AssetListResult{}, NewInputError("validation.filter_invalid")
+	}
+	return s.store.ListAssetsWithSummary(ctx, actor.TenantID, opts)
 }
 
 func (s *CatalogService) GetAsset(ctx context.Context, actor Principal, assetID string) (domain.Asset, error) {

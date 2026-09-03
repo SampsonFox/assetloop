@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	"github.com/SampsonFox/assetloop/internal/store/postgres/postgresdb"
 	"github.com/google/uuid"
@@ -196,6 +197,42 @@ func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset
 			ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID.String(), Variant: row.VariantName,
 			DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
 			PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: row.CreatedAt,
+		})
+	}
+	return result, nil
+}
+
+func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts application.AssetListOptions) (application.AssetListResult, error) {
+	tenantUUID, err := uuid.Parse(tenantID)
+	if err != nil {
+		return application.AssetListResult{}, fmt.Errorf("parse tenant ID: %w", err)
+	}
+	queries := postgresdb.New(s.db)
+	filter := postgresdb.CountAssetsWithSummaryParams{TenantID: tenantUUID, SearchQuery: opts.Query, StatusFilter: opts.Status}
+	total, err := queries.CountAssetsWithSummary(ctx, filter)
+	if err != nil || total == 0 {
+		return application.AssetListResult{Total: int(total)}, err
+	}
+	rows, err := queries.ListAssetsWithSummary(ctx, postgresdb.ListAssetsWithSummaryParams{
+		TenantID: tenantUUID, SearchQuery: opts.Query, StatusFilter: opts.Status,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
+	if err != nil {
+		return application.AssetListResult{}, err
+	}
+	result := application.AssetListResult{Assets: make([]application.AssetWithSummary, 0, len(rows)), Total: int(total)}
+	for _, row := range rows {
+		result.Assets = append(result.Assets, application.AssetWithSummary{
+			Asset: domain.Asset{
+				ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(), Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
+				ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID.String(), Variant: row.VariantName,
+				DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+				PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: row.CreatedAt,
+			},
+			Summary: domain.AssetSummary{
+				BaseCurrency: row.BaseCurrency, ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+				NetCashflowMinor: row.NetMinor, Status: row.Status,
+			},
 		})
 	}
 	return result, nil

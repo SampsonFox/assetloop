@@ -113,6 +113,136 @@ JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = $1
 ORDER BY a.created_at DESC, a.id;
 
+-- name: ListAssetsWithSummary :many
+WITH effective_events AS (
+SELECT e.*
+FROM asset_events e
+WHERE e.tenant_id = sqlc.arg(tenant_id)
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       SUM(CASE WHEN base_amount_minor < 0 THEN -base_amount_minor ELSE 0 END)::bigint AS expense_minor,
+       SUM(CASE WHEN base_amount_minor > 0 THEN base_amount_minor ELSE 0 END)::bigint AS income_minor,
+       SUM(base_amount_minor)::bigint AS net_minor,
+       BOOL_OR(event_type = 'purchase') AS has_purchase,
+       BOOL_OR(event_type = 'sale') AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+),
+asset_rows AS (
+SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
+       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
+       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       a.purchase_channel, a.notes, a.created_at,
+       COALESCE(er.expense_minor, 0)::bigint AS expense_minor,
+       COALESCE(er.income_minor, 0)::bigint AS income_minor,
+       COALESCE(er.net_minor, 0)::bigint AS net_minor,
+       COALESCE(er.has_purchase, FALSE) AS has_purchase,
+       COALESCE(er.has_sale, FALSE) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type,
+       t.base_currency::text AS base_currency
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+JOIN tenants t ON t.id = a.tenant_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = sqlc.arg(tenant_id)
+  AND (sqlc.arg(search_query)::text = '' OR (
+       a.display_name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.serial_number ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.color ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.purchase_channel ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       v.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       c.name ILIKE '%' || sqlc.arg(search_query)::text || '%'
+  ))
+)
+SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
+       variant_id, variant_name, display_name, serial_number, color, purchase_channel, notes, created_at,
+       expense_minor, income_minor, net_minor,
+       CASE
+           WHEN has_sale THEN 'sold'
+           WHEN has_purchase AND latest_event_type = 'repair' THEN 'repairing'
+           WHEN has_purchase THEN 'active'
+           ELSE 'unacquired'
+       END AS status,
+       base_currency
+FROM asset_rows
+WHERE sqlc.arg(status_filter)::text IN ('', 'all')
+   OR (sqlc.arg(status_filter)::text = 'sold' AND has_sale)
+   OR (sqlc.arg(status_filter)::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
+   OR (sqlc.arg(status_filter)::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
+   OR (sqlc.arg(status_filter)::text = 'unacquired' AND NOT has_sale AND NOT has_purchase)
+ORDER BY created_at DESC, id
+LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint;
+
+-- name: CountAssetsWithSummary :one
+WITH effective_events AS (
+SELECT e.*
+FROM asset_events e
+WHERE e.tenant_id = sqlc.arg(tenant_id)
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       BOOL_OR(event_type = 'purchase') AS has_purchase,
+       BOOL_OR(event_type = 'sale') AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+),
+asset_rows AS (
+SELECT a.id,
+       COALESCE(er.has_purchase, FALSE) AS has_purchase,
+       COALESCE(er.has_sale, FALSE) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = sqlc.arg(tenant_id)
+  AND (sqlc.arg(search_query)::text = '' OR (
+       a.display_name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.serial_number ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.color ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.purchase_channel ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       v.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       c.name ILIKE '%' || sqlc.arg(search_query)::text || '%'
+  ))
+)
+SELECT COUNT(*) FROM asset_rows
+WHERE sqlc.arg(status_filter)::text IN ('', 'all')
+   OR (sqlc.arg(status_filter)::text = 'sold' AND has_sale)
+   OR (sqlc.arg(status_filter)::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
+   OR (sqlc.arg(status_filter)::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
+   OR (sqlc.arg(status_filter)::text = 'unacquired' AND NOT has_sale AND NOT has_purchase);
+
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;
 

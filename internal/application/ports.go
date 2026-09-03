@@ -40,7 +40,25 @@ type CatalogStore interface {
 	ListModels(context.Context, string) ([]domain.ProductModel, error)
 	ListVariants(context.Context, string) ([]domain.ProductVariant, error)
 	ListAssets(context.Context, string) ([]domain.Asset, error)
+	ListAssetsWithSummary(context.Context, string, AssetListOptions) (AssetListResult, error)
 	GetAsset(context.Context, string, string) (domain.Asset, error)
+}
+
+type AssetListOptions struct {
+	Query    string
+	Status   string
+	Page     int
+	PageSize int
+}
+
+type AssetWithSummary struct {
+	Asset   domain.Asset
+	Summary domain.AssetSummary
+}
+
+type AssetListResult struct {
+	Assets []AssetWithSummary
+	Total  int
 }
 
 type LifecycleStore interface {

@@ -13,6 +13,73 @@ import (
 	"github.com/google/uuid"
 )
 
+const countAssetsWithSummary = `-- name: CountAssetsWithSummary :one
+WITH effective_events AS (
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+FROM asset_events e
+WHERE e.tenant_id = $2
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       BOOL_OR(event_type = 'purchase') AS has_purchase,
+       BOOL_OR(event_type = 'sale') AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+),
+asset_rows AS (
+SELECT a.id,
+       COALESCE(er.has_purchase, FALSE) AS has_purchase,
+       COALESCE(er.has_sale, FALSE) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = $2
+  AND ($3::text = '' OR (
+       a.display_name ILIKE '%' || $3::text || '%' OR
+       a.serial_number ILIKE '%' || $3::text || '%' OR
+       a.color ILIKE '%' || $3::text || '%' OR
+       a.purchase_channel ILIKE '%' || $3::text || '%' OR
+       a.notes ILIKE '%' || $3::text || '%' OR
+       m.name ILIKE '%' || $3::text || '%' OR
+       v.name ILIKE '%' || $3::text || '%' OR
+       c.name ILIKE '%' || $3::text || '%'
+  ))
+)
+SELECT COUNT(*) FROM asset_rows
+WHERE $1::text IN ('', 'all')
+   OR ($1::text = 'sold' AND has_sale)
+   OR ($1::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
+   OR ($1::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
+   OR ($1::text = 'unacquired' AND NOT has_sale AND NOT has_purchase)
+`
+
+type CountAssetsWithSummaryParams struct {
+	StatusFilter string
+	TenantID     uuid.UUID
+	SearchQuery  string
+}
+
+func (q *Queries) CountAssetsWithSummary(ctx context.Context, arg CountAssetsWithSummaryParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAssetsWithSummary, arg.StatusFilter, arg.TenantID, arg.SearchQuery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT COUNT(*) FROM users
 `
@@ -894,6 +961,165 @@ func (q *Queries) ListAssets(ctx context.Context, tenantID uuid.UUID) ([]ListAss
 			&i.PurchaseChannel,
 			&i.Notes,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssetsWithSummary = `-- name: ListAssetsWithSummary :many
+WITH effective_events AS (
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+FROM asset_events e
+WHERE e.tenant_id = $4
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       SUM(CASE WHEN base_amount_minor < 0 THEN -base_amount_minor ELSE 0 END)::bigint AS expense_minor,
+       SUM(CASE WHEN base_amount_minor > 0 THEN base_amount_minor ELSE 0 END)::bigint AS income_minor,
+       SUM(base_amount_minor)::bigint AS net_minor,
+       BOOL_OR(event_type = 'purchase') AS has_purchase,
+       BOOL_OR(event_type = 'sale') AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+),
+asset_rows AS (
+SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
+       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
+       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       a.purchase_channel, a.notes, a.created_at,
+       COALESCE(er.expense_minor, 0)::bigint AS expense_minor,
+       COALESCE(er.income_minor, 0)::bigint AS income_minor,
+       COALESCE(er.net_minor, 0)::bigint AS net_minor,
+       COALESCE(er.has_purchase, FALSE) AS has_purchase,
+       COALESCE(er.has_sale, FALSE) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type,
+       t.base_currency::text AS base_currency
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+JOIN tenants t ON t.id = a.tenant_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = $4
+  AND ($5::text = '' OR (
+       a.display_name ILIKE '%' || $5::text || '%' OR
+       a.serial_number ILIKE '%' || $5::text || '%' OR
+       a.color ILIKE '%' || $5::text || '%' OR
+       a.purchase_channel ILIKE '%' || $5::text || '%' OR
+       a.notes ILIKE '%' || $5::text || '%' OR
+       m.name ILIKE '%' || $5::text || '%' OR
+       v.name ILIKE '%' || $5::text || '%' OR
+       c.name ILIKE '%' || $5::text || '%'
+  ))
+)
+SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
+       variant_id, variant_name, display_name, serial_number, color, purchase_channel, notes, created_at,
+       expense_minor, income_minor, net_minor,
+       CASE
+           WHEN has_sale THEN 'sold'
+           WHEN has_purchase AND latest_event_type = 'repair' THEN 'repairing'
+           WHEN has_purchase THEN 'active'
+           ELSE 'unacquired'
+       END AS status,
+       base_currency
+FROM asset_rows
+WHERE $1::text IN ('', 'all')
+   OR ($1::text = 'sold' AND has_sale)
+   OR ($1::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
+   OR ($1::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
+   OR ($1::text = 'unacquired' AND NOT has_sale AND NOT has_purchase)
+ORDER BY created_at DESC, id
+LIMIT $3::bigint OFFSET $2::bigint
+`
+
+type ListAssetsWithSummaryParams struct {
+	StatusFilter string
+	PageOffset   int64
+	PageSize     int64
+	TenantID     uuid.UUID
+	SearchQuery  string
+}
+
+type ListAssetsWithSummaryRow struct {
+	ID              uuid.UUID
+	TenantID        uuid.UUID
+	CategoryID      uuid.UUID
+	CategoryName    string
+	CategoryIcon    string
+	ModelID         uuid.UUID
+	ModelName       string
+	VariantID       uuid.UUID
+	VariantName     string
+	DisplayName     string
+	SerialNumber    string
+	Color           string
+	PurchaseChannel string
+	Notes           string
+	CreatedAt       time.Time
+	ExpenseMinor    int64
+	IncomeMinor     int64
+	NetMinor        int64
+	Status          string
+	BaseCurrency    string
+}
+
+func (q *Queries) ListAssetsWithSummary(ctx context.Context, arg ListAssetsWithSummaryParams) ([]ListAssetsWithSummaryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetsWithSummary,
+		arg.StatusFilter,
+		arg.PageOffset,
+		arg.PageSize,
+		arg.TenantID,
+		arg.SearchQuery,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetsWithSummaryRow
+	for rows.Next() {
+		var i ListAssetsWithSummaryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryIcon,
+			&i.ModelID,
+			&i.ModelName,
+			&i.VariantID,
+			&i.VariantName,
+			&i.DisplayName,
+			&i.SerialNumber,
+			&i.Color,
+			&i.PurchaseChannel,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.ExpenseMinor,
+			&i.IncomeMinor,
+			&i.NetMinor,
+			&i.Status,
+			&i.BaseCurrency,
 		); err != nil {
 			return nil, err
 		}
