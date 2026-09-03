@@ -7,12 +7,12 @@
   <form class="form-grid section-gap" action="/events/{{$event.ID}}/correct" method="post">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>{{t $s "correct.amount"}}<input name="amount" inputmode="decimal" required></label>
-    <label>{{t $s "asset.original_currency"}}<select name="currency" required><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
+    <label>{{t $s "asset.original_currency"}}<select name="currency" required data-currency-select data-base-currency="{{.BaseCurrency}}"><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{dateTimeInput $event.OccurredAt}}" required></label>
-    <label>{{t $s "correct.fx_rate"}}<input name="fx_rate" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}"></label>
-    <label>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date"></label>
-    <label>{{t $s "asset.fx_source"}}<input name="fx_rate_source"></label>
-    <label class="check"><input type="checkbox" name="fx_confirmed">{{t $s "correct.fx_confirm"}}</label>
+    <label data-fx-field hidden>{{t $s "correct.fx_rate"}}<input name="fx_rate" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" data-fx-required></label>
+    <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required>{{t $s "correct.fx_confirm"}}</label>
     <label>{{t $s "correct.source"}}<input name="source" value="manual-correction"></label>
     <label class="wide">{{t $s "correct.notes"}}<textarea name="notes" required maxlength="2000" rows="3"></textarea></label>
     <button type="submit">{{t $s "correct.submit"}}</button>

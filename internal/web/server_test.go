@@ -189,6 +189,16 @@ func TestThemeStylesUseSemanticSurfaces(t *testing.T) {
 	}
 }
 
+func TestFXFieldsOnlyExpandForForeignCurrency(t *testing.T) {
+	handler := newTestHandler(t)
+	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
+	for _, want := range []string{`[data-currency-select]`, `select.value !== select.dataset.baseCurrency`, `[data-fx-field]`, `field.hidden = !foreign`, `[data-fx-required]`} {
+		if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
+			t.Fatalf("conditional FX interaction missing %q: status=%d body=%s", want, script.Code, script.Body.String())
+		}
+	}
+}
+
 func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	handler := newTestHandler(t)
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
@@ -413,10 +423,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `id="add-event"`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `id="add-event"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
+	}
+	if strings.Count(detail.Body.String(), `data-fx-field hidden`) != 4 {
+		t.Fatalf("same-currency event form should initially hide all FX controls: %s", detail.Body.String())
 	}
 
 	unconfirmedFX := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{

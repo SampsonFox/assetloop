@@ -12,6 +12,12 @@
     notes: "notes",
   };
 
+  const syncFXFields = (select) => {
+    const foreign = select.value !== select.dataset.baseCurrency;
+    for (const field of select.form.querySelectorAll("[data-fx-field]")) field.hidden = !foreign;
+    for (const input of select.form.querySelectorAll("[data-fx-required]")) input.required = foreign;
+  };
+
   document.addEventListener("click", (event) => {
 	for (const menu of document.querySelectorAll(".account-menu[open]")) {
 	  if (!menu.contains(event.target)) menu.removeAttribute("open");
@@ -45,11 +51,15 @@
   });
 
   document.addEventListener("change", (event) => {
+    const currency = event.target.closest("[data-currency-select]");
+    if (currency) syncFXFields(currency);
     const form = event.target.closest("[data-auto-submit]");
     if (!form) return;
     if (event.target.name === "theme") document.documentElement.dataset.theme = event.target.value;
     form.requestSubmit();
   });
+
+  for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
 
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");

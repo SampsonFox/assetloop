@@ -46,13 +46,13 @@
     <label>{{t $s "asset.event_type"}}<select name="event_type" required><option value="purchase">{{t $s "event.purchase"}}</option><option value="repair">{{t $s "event.repair"}}</option><option value="sale">{{t $s "event.sale"}}</option></select></label>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.NowValue}}" required></label>
     <label>{{t $s "asset.amount_positive"}}<input name="amount" inputmode="decimal" required placeholder="6999.00"></label>
-    <label>{{t $s "asset.original_currency"}}<select name="currency" required><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
+    <label>{{t $s "asset.original_currency"}}<select name="currency" required data-currency-select data-base-currency="{{.BaseCurrency}}"><option>{{.BaseCurrency}}</option><option>USD</option><option>EUR</option><option>GBP</option><option>HKD</option><option>AUD</option><option>CAD</option><option>SGD</option><option>TWD</option><option>JPY</option><option>KRW</option></select></label>
     <label>{{t $s "asset.source"}}<input name="source" value="manual" maxlength="120"></label>
     <label>{{t $s "asset.reference"}}<input name="external_reference" maxlength="200"></label>
-    <label>{{t $s "asset.fx_rate"}}<input name="fx_rate" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}"></label>
-    <label>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" value="{{.NowValue | printf "%.10s"}}"></label>
-    <label>{{t $s "asset.fx_source"}}<input name="fx_rate_source" placeholder="{{t $s "asset.fx_required"}}"></label>
-    <label class="check"><input type="checkbox" name="fx_confirmed">{{t $s "asset.fx_confirm"}} {{.BaseCurrency}}</label>
+    <label data-fx-field hidden>{{t $s "asset.fx_rate"}}<input name="fx_rate" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" value="{{.NowValue | printf "%.10s"}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
+    <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required>{{t $s "asset.fx_confirm"}} {{.BaseCurrency}}</label>
     <label class="wide">{{t $s "common.notes"}}<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
     <button type="submit">{{t $s "asset.append"}}</button>
   </form>
