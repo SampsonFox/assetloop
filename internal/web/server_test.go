@@ -189,6 +189,17 @@ func TestThemeStylesUseSemanticSurfaces(t *testing.T) {
 	}
 }
 
+func TestCatalogVariantPanelBorderIsContained(t *testing.T) {
+	handler := newTestHandler(t)
+	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
+	if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), `.model-variants { margin:20px 0 0 58px; padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }`) {
+		t.Fatalf("catalog variant panel must use a contained border: status=%d body=%s", stylesheet.Code, stylesheet.Body.String())
+	}
+	if strings.Contains(stylesheet.Body.String(), `border-left:2px solid var(--accent-soft)`) {
+		t.Fatalf("catalog variant panel must not use an overhanging connector border: %s", stylesheet.Body.String())
+	}
+}
+
 func TestFXFieldsOnlyExpandForForeignCurrency(t *testing.T) {
 	handler := newTestHandler(t)
 	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)

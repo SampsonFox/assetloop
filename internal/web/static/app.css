@@ -140,7 +140,7 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .model-identity { justify-content:flex-start; min-width:0; }
 .model-identity h2 { margin:3px 0 0; font-size:24px; }
 .model-category { width:auto; padding:3px 9px; border:0; border-radius:99px; background:var(--accent-soft); color:var(--accent); font-size:12px; }
-.model-variants { margin:20px 0 0 22px; padding:18px 0 0 24px; border-top:1px solid var(--line); border-left:2px solid var(--accent-soft); }
+.model-variants { margin:20px 0 0 58px; padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--paper); }
 .variant-heading h3,.variant-heading p { margin:0; }
 .variant-heading h3 { font-size:16px; }
 .variant-list { display:grid; margin-top:12px; }
@@ -157,4 +157,4 @@ dialog.drawer::backdrop { background:var(--backdrop); }
 .icon-button { width:42px; height:42px; padding:0; border-color:var(--line); background:var(--field); color:var(--ink); font-size:26px; }
 .drawer-actions { justify-content:flex-end; padding-top:8px; }
 @media (max-width:900px) { .asset-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .asset-table th:nth-child(n+4):nth-child(-n+6),.asset-table td:nth-child(n+4):nth-child(-n+6) { display:none; } }
-@media (max-width:760px) { .page-heading,.heading-actions,.model-card-heading,.variant-heading { align-items:flex-start; flex-direction:column; } .asset-grid { grid-template-columns:1fr; } .asset-table th:nth-child(2),.asset-table td:nth-child(2),.asset-table th:nth-child(n+4):nth-child(-n+6),.asset-table td:nth-child(n+4):nth-child(-n+6) { display:none; } .model-variants { margin-left:0; padding-left:16px; } .drawer-panel { padding:22px; } }
+@media (max-width:760px) { .page-heading,.heading-actions,.model-card-heading,.variant-heading { align-items:flex-start; flex-direction:column; } .asset-grid { grid-template-columns:1fr; } .asset-table th:nth-child(2),.asset-table td:nth-child(2),.asset-table th:nth-child(n+4):nth-child(-n+6),.asset-table td:nth-child(n+4):nth-child(-n+6) { display:none; } .model-variants { margin-left:0; padding:16px; } .drawer-panel { padding:22px; } }
