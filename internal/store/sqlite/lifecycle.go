@@ -126,9 +126,13 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 }
 
 func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID string, opts application.EventListOptions) ([]domain.AssetEvent, int, error) {
+	showVoided := int64(0)
+	if opts.ShowVoided {
+		showVoided = 1
+	}
 	rows, err := sqlitedb.New(s.db).ListAssetEventsPage(ctx, sqlitedb.ListAssetEventsPageParams{
 		TenantID: tenantID, AssetID: assetID, SearchQuery: opts.Query, EventTypeFilter: opts.Type,
-		SortKey: opts.Sort, SortDirection: opts.Direction,
+		SortKey: opts.Sort, SortDirection: opts.Direction, ShowVoided: showVoided,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
 	})
 	if err != nil {

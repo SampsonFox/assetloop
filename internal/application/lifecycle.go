@@ -153,7 +153,10 @@ func (s *LifecycleService) TimelinePage(ctx context.Context, actor Principal, as
 	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
 	opts.Query = strings.TrimSpace(opts.Query)
 	opts.Type = strings.TrimSpace(opts.Type)
-	if opts.Type != "" && opts.Type != string(domain.AssetEventVoid) {
+	if opts.Type == string(domain.AssetEventVoid) {
+		return EventListResult{}, NewInputError("validation.filter_invalid")
+	}
+	if opts.Type != "" {
 		eventType, err := s.resolveEventType(ctx, actor.TenantID, domain.AssetEventType(opts.Type))
 		if err != nil {
 			return EventListResult{}, NewInputError("validation.filter_invalid")

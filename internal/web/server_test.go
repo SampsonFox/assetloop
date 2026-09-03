@@ -727,10 +727,24 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("record Agent-confirmed sale: status=%d body=%s", sale.Code, sale.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, `class="timeline-filters"`, `name="event_type"`, `name="sort"`, "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "保养", "清洁并检查", "已作废"} {
+	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, `class="timeline-filters"`, `name="event_type"`, `name="sort"`, `name="show_voided"`, `data-auto-submit`, "显示已作废记录", "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "保养", "清洁并检查"} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
+	}
+	for _, unwanted := range []string{"初始维修金额", "作废并由更正记录替代", `<option value="void"`, `<span class="muted">已作废</span>`} {
+		if strings.Contains(detail.Body.String(), unwanted) {
+			t.Fatalf("effective lifecycle view must hide %q: body=%s", unwanted, detail.Body.String())
+		}
+	}
+	fullHistory := request(t, handler, http.MethodGet, "/assets/"+match[1]+"?show_voided=1", nil, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{"初始维修金额", "正确维修金额", `<span class="muted">已作废</span>`, `name="show_voided" value="1" data-auto-submit checked`} {
+		if fullHistory.Code != http.StatusOK || !strings.Contains(fullHistory.Body.String(), want) {
+			t.Fatalf("full lifecycle history missing %q: status=%d body=%s", want, fullHistory.Code, fullHistory.Body.String())
+		}
+	}
+	if strings.Contains(fullHistory.Body.String(), "作废并由更正记录替代") || strings.Contains(fullHistory.Body.String(), `<option value="void"`) {
+		t.Fatalf("technical void event must remain hidden from full lifecycle history: %s", fullHistory.Body.String())
 	}
 	filteredTimeline := request(t, handler, http.MethodGet, "/assets/"+match[1]+"?event_type=sale&sort=amount&direction=desc", nil, []*http.Cookie{ownerSession, csrf})
 	if filteredTimeline.Code != http.StatusOK || !strings.Contains(filteredTimeline.Body.String(), "用户已在 Agent 对话中确认") || strings.Contains(filteredTimeline.Body.String(), "正确维修金额") || !strings.Contains(filteredTimeline.Body.String(), "730.00 CNY") {

@@ -100,6 +100,7 @@ type pageData struct {
 	TableFilter        string
 	TableSort          string
 	TableDirection     string
+	TableShowVoided    bool
 	TableTotal         int
 	TablePage          int
 	TableTotalPages    int
@@ -604,10 +605,11 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 	eventType := strings.TrimSpace(r.URL.Query().Get("event_type"))
 	sortKey := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("sort")), "occurred")
 	direction := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("direction")), "asc")
+	showVoided := r.URL.Query().Get("show_voided") == "1"
 	page := queryPage(r)
 	const pageSize = 20
 	result, err := s.lifecycle.TimelinePage(r.Context(), principal, assetID, application.EventListOptions{
-		Query: query, Type: eventType, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
+		Query: query, Type: eventType, Sort: sortKey, Direction: direction, ShowVoided: showVoided, Page: page, PageSize: pageSize,
 	})
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
@@ -619,11 +621,11 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		return
 	}
 	if result.Total == 0 && page > 1 {
-		http.Redirect(w, r, eventListURL(assetID, query, eventType, sortKey, direction, 1), http.StatusFound)
+		http.Redirect(w, r, eventListURL(assetID, query, eventType, sortKey, direction, showVoided, 1), http.StatusFound)
 		return
 	}
 	totalPages, previousURL, nextURL := tablePagination(result.Total, page, pageSize, func(target int) string {
-		return eventListURL(assetID, query, eventType, sortKey, direction, target)
+		return eventListURL(assetID, query, eventType, sortKey, direction, showVoided, target)
 	})
 	_, locked, err := s.lifecycle.BaseCurrency(r.Context(), principal)
 	if err != nil {
@@ -641,16 +643,24 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		EventTypeError:     eventTypeMessage,
 		EventTypeForm:      eventTypeFormFromRequest(r),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
-		TableQuery:         query, TableFilter: eventType, TableSort: sortKey, TableDirection: direction,
+		TableQuery:         query, TableFilter: eventType, TableSort: sortKey, TableDirection: direction, TableShowVoided: showVoided,
 		TableTotal: result.Total, TablePage: page, TableTotalPages: totalPages,
 		TablePreviousURL: previousURL, TableNextURL: nextURL,
-		TableClearURL:   eventListURL(assetID, "", "", "occurred", "asc", 1),
-		TableHasFilters: query != "" || eventType != "" || sortKey != "occurred" || direction != "asc",
+		TableClearURL:   eventListURL(assetID, "", "", "occurred", "asc", false, 1),
+		TableHasFilters: query != "" || eventType != "" || sortKey != "occurred" || direction != "asc" || showVoided,
 	})
 }
 
-func eventListURL(assetID, query, eventType, sortKey, direction string, page int) string {
-	return tableURL("/assets/"+assetID, query, "event_type", eventType, sortKey, direction, "occurred", "asc", page) + "#lifecycle-timeline"
+func eventListURL(assetID, query, eventType, sortKey, direction string, showVoided bool, page int) string {
+	path := tableURL("/assets/"+assetID, query, "event_type", eventType, sortKey, direction, "occurred", "asc", page)
+	if showVoided {
+		separator := "?"
+		if strings.Contains(path, "?") {
+			separator = "&"
+		}
+		path += separator + "show_voided=1"
+	}
+	return path + "#lifecycle-timeline"
 }
 
 func eventFormFromRequest(r *http.Request, baseCurrency, nowValue string) eventFormData {

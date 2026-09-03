@@ -131,7 +131,9 @@
     if (currency) syncFXFields(currency);
     const eventType = event.target.closest("[data-event-type-select]");
     if (eventType) syncEventTypeFields(eventType);
-    const form = event.target.closest("[data-auto-submit]");
+    const autoSubmit = event.target.closest("[data-auto-submit]");
+    if (!autoSubmit) return;
+    const form = autoSubmit.matches("form") ? autoSubmit : autoSubmit.form;
     if (!form) return;
     if (event.target.name === "theme") document.documentElement.dataset.theme = event.target.value;
     form.requestSubmit();

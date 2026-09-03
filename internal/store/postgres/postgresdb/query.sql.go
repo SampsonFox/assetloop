@@ -1084,22 +1084,28 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        COUNT(*) OVER ()::bigint AS total_count
 FROM asset_events e
 WHERE e.tenant_id = $1 AND e.asset_id = $2
-  AND ($3::text = '' OR e.notes ILIKE '%' || $3::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || $3::text || '%')
-  AND ($4::text = '' OR e.event_type = $4::text)
+  AND e.event_type != 'void'
+  AND ($3::boolean OR NOT EXISTS (
+      SELECT 1 FROM asset_events v
+      WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+  ))
+  AND ($4::text = '' OR e.notes ILIKE '%' || $4::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || $4::text || '%')
+  AND ($5::text = '' OR e.event_type = $5::text)
 ORDER BY
-  CASE WHEN $5::text = 'occurred' AND $6::text = 'asc' THEN e.occurred_at END ASC,
-  CASE WHEN $5::text = 'occurred' AND $6::text = 'desc' THEN e.occurred_at END DESC,
-  CASE WHEN $5::text = 'amount' AND $6::text = 'asc' THEN e.base_amount_minor END ASC,
-  CASE WHEN $5::text = 'amount' AND $6::text = 'desc' THEN e.base_amount_minor END DESC,
-  CASE WHEN $5::text = 'type' AND $6::text = 'asc' THEN e.event_type END ASC,
-  CASE WHEN $5::text = 'type' AND $6::text = 'desc' THEN e.event_type END DESC,
+  CASE WHEN $6::text = 'occurred' AND $7::text = 'asc' THEN e.occurred_at END ASC,
+  CASE WHEN $6::text = 'occurred' AND $7::text = 'desc' THEN e.occurred_at END DESC,
+  CASE WHEN $6::text = 'amount' AND $7::text = 'asc' THEN e.base_amount_minor END ASC,
+  CASE WHEN $6::text = 'amount' AND $7::text = 'desc' THEN e.base_amount_minor END DESC,
+  CASE WHEN $6::text = 'type' AND $7::text = 'asc' THEN e.event_type END ASC,
+  CASE WHEN $6::text = 'type' AND $7::text = 'desc' THEN e.event_type END DESC,
   e.created_at DESC, e.id DESC
-LIMIT $8::bigint OFFSET $7::bigint
+LIMIT $9::bigint OFFSET $8::bigint
 `
 
 type ListAssetEventsPageParams struct {
 	TenantID        uuid.UUID
 	AssetID         uuid.UUID
+	ShowVoided      bool
 	SearchQuery     string
 	EventTypeFilter string
 	SortKey         string
@@ -1135,6 +1141,7 @@ func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPa
 	rows, err := q.db.QueryContext(ctx, listAssetEventsPage,
 		arg.TenantID,
 		arg.AssetID,
+		arg.ShowVoided,
 		arg.SearchQuery,
 		arg.EventTypeFilter,
 		arg.SortKey,

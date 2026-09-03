@@ -129,6 +129,9 @@ Transactions group related cash and lifecycle effects, while asset events remain
 Confirmed events cannot be updated or deleted at either Store or database level. A correction
 atomically appends a zero-value void event plus a replacement economic event that references the
 original; the original row remains unchanged and queryable.
+User-facing lifecycle collections never render the technical void row as a separate event. Their
+default effective view excludes voided originals; an explicit history option adds those originals
+back with a voided marker while preserving the same server-side filtering, sorting, and pagination.
 
 Each tenant may register additional event types without changing the fixed meanings of purchase,
 repair, sale, and void. A custom type records a stable display name and exactly one cash-flow effect:

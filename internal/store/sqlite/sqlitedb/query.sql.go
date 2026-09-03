@@ -1071,7 +1071,8 @@ func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams
 const listAssetEventsPage = `-- name: ListAssetEventsPage :many
 WITH list_options AS (
     SELECT CAST(?7 AS TEXT) AS sort_key,
-           CAST(?8 AS TEXT) AS sort_direction
+           CAST(?8 AS TEXT) AS sort_direction,
+           CAST(?9 AS INTEGER) AS show_voided
 )
 SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
@@ -1086,6 +1087,11 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
 FROM asset_events e
 CROSS JOIN list_options o
 WHERE e.tenant_id = ?1 AND e.asset_id = ?2
+  AND e.event_type != 'void'
+  AND (o.show_voided = 1 OR NOT EXISTS (
+      SELECT 1 FROM asset_events v
+      WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+  ))
   AND (CAST(?3 AS TEXT) = '' OR LOWER(e.notes) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR LOWER(COALESCE(e.fx_rate_source, '')) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%')
   AND (CAST(?4 AS TEXT) = '' OR e.event_type = CAST(?4 AS TEXT))
 ORDER BY
@@ -1108,6 +1114,7 @@ type ListAssetEventsPageParams struct {
 	PageSize        int64
 	SortKey         string
 	SortDirection   string
+	ShowVoided      int64
 }
 
 type ListAssetEventsPageRow struct {
@@ -1143,6 +1150,7 @@ func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPa
 		arg.PageSize,
 		arg.SortKey,
 		arg.SortDirection,
+		arg.ShowVoided,
 	)
 	if err != nil {
 		return nil, err

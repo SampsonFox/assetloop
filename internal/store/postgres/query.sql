@@ -465,6 +465,11 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        COUNT(*) OVER ()::bigint AS total_count
 FROM asset_events e
 WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+  AND e.event_type != 'void'
+  AND (sqlc.arg(show_voided)::boolean OR NOT EXISTS (
+      SELECT 1 FROM asset_events v
+      WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+  ))
   AND (sqlc.arg(search_query)::text = '' OR e.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || sqlc.arg(search_query)::text || '%')
   AND (sqlc.arg(event_type_filter)::text = '' OR e.event_type = sqlc.arg(event_type_filter)::text)
 ORDER BY

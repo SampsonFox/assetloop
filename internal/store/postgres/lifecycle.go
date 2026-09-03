@@ -165,7 +165,7 @@ func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID strin
 	}
 	rows, err := postgresdb.New(s.db).ListAssetEventsPage(ctx, postgresdb.ListAssetEventsPageParams{
 		TenantID: tenantUUID, AssetID: assetUUID, SearchQuery: opts.Query, EventTypeFilter: opts.Type,
-		SortKey: opts.Sort, SortDirection: opts.Direction,
+		SortKey: opts.Sort, SortDirection: opts.Direction, ShowVoided: opts.ShowVoided,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
 	})
 	if err != nil {

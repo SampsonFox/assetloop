@@ -116,8 +116,16 @@ func runLifecycle(t *testing.T, store Store) {
 		t.Fatalf("base-currency sale should keep original-currency evidence nullable: %+v", events[len(events)-1])
 	}
 	eventPage, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "repair", Sort: "amount", Direction: "desc", Page: 1, PageSize: 1})
-	if err != nil || eventPage.Total != 2 || len(eventPage.Events) != 1 || eventPage.Events[0].ID != replacement.ID || eventPage.Summary.NetCashflowMinor != 714_000 {
+	if err != nil || eventPage.Total != 1 || len(eventPage.Events) != 1 || eventPage.Events[0].ID != replacement.ID || eventPage.Summary.NetCashflowMinor != 714_000 {
 		t.Fatalf("server-paged lifecycle result mismatch: result=%+v err=%v", eventPage, err)
+	}
+	fullHistory, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "repair", ShowVoided: true, Sort: "amount", Direction: "desc", Page: 1, PageSize: 10})
+	if err != nil || fullHistory.Total != 2 || len(fullHistory.Events) != 2 || fullHistory.Events[0].ID != replacement.ID || fullHistory.Events[1].ID != repair.ID || !fullHistory.Events[1].IsVoided {
+		t.Fatalf("full lifecycle history should add the voided original without exposing the technical void event: result=%+v err=%v", fullHistory, err)
+	}
+	var inputErr application.InputError
+	if _, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "void", Page: 1, PageSize: 25}); !errors.As(err, &inputErr) {
+		t.Fatalf("technical void event must not be a user-facing filter, got %v", err)
 	}
 	searchedEvents, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Query: "corrected", Page: 1, PageSize: 25})
 	if err != nil || searchedEvents.Total != 1 || len(searchedEvents.Events) != 1 || searchedEvents.Events[0].ID != replacement.ID {

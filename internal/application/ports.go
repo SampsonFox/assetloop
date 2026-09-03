@@ -102,12 +102,13 @@ type PortfolioSummary struct {
 }
 
 type EventListOptions struct {
-	Query     string
-	Type      string
-	Sort      string
-	Direction string
-	Page      int
-	PageSize  int
+	Query      string
+	Type       string
+	Sort       string
+	Direction  string
+	ShowVoided bool
+	Page       int
+	PageSize   int
 }
 
 type EventListResult struct {

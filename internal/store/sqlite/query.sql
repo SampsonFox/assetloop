@@ -466,7 +466,8 @@ ORDER BY e.occurred_at, e.created_at, e.id;
 -- name: ListAssetEventsPage :many
 WITH list_options AS (
     SELECT CAST(sqlc.arg(sort_key) AS TEXT) AS sort_key,
-           CAST(sqlc.arg(sort_direction) AS TEXT) AS sort_direction
+           CAST(sqlc.arg(sort_direction) AS TEXT) AS sort_direction,
+           CAST(sqlc.arg(show_voided) AS INTEGER) AS show_voided
 )
 SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
@@ -481,6 +482,11 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
 FROM asset_events e
 CROSS JOIN list_options o
 WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+  AND e.event_type != 'void'
+  AND (o.show_voided = 1 OR NOT EXISTS (
+      SELECT 1 FROM asset_events v
+      WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+  ))
   AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR LOWER(e.notes) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR LOWER(COALESCE(e.fx_rate_source, '')) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')
   AND (CAST(sqlc.arg(event_type_filter) AS TEXT) = '' OR e.event_type = CAST(sqlc.arg(event_type_filter) AS TEXT))
 ORDER BY
