@@ -4,16 +4,23 @@
 	<a href="/">{{t $s "common.back_assets"}}</a>
 </div>
 <section class="card asset-profile">
-  <h2>{{t $s "asset.taxonomy"}}</h2>
-  <dl class="asset-details-grid">
-    <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd></div>
-    <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
-    <div class="asset-detail"><dt>{{t $s "asset.variant"}}</dt><dd>{{.Asset.Variant}}</dd></div>
-    <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
-    <div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>
-    <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
-  </dl>
-  <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
+  <figure class="asset-product-visual">
+    {{if eq .Asset.Model "iPhone 17 Pro"}}<img class="asset-product-image" src="/static/product-demo-iphone-17-pro-deep-blue.jpg" alt="{{.Asset.Model}}">{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>{{end}}
+  </figure>
+  <div class="asset-profile-content">
+    <p class="eyebrow">{{.Asset.Category}}</p>
+    <h2>{{.Asset.Model}}</h2>
+    <p class="asset-variant-summary">{{.Asset.Variant}}{{if .Asset.Color}} · {{.Asset.Color}}{{end}}</p>
+    <dl class="asset-details-grid">
+      <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "asset.variant"}}</dt><dd>{{.Asset.Variant}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
+    </dl>
+    <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
+  </div>
 </section>
 <section class="grid section-gap">
   <article class="card"><span class="metric">{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</span><h2>{{t $s "overview.expense"}}</h2><p>{{t $s "overview.expense_help"}}</p></article>
