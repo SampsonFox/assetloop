@@ -76,19 +76,24 @@ func runLifecycle(t *testing.T, store Store) {
 	}
 	repair, err := service.Record(ctx, owner, application.RecordEvent{
 		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: 20_000, Currency: "CNY",
-		OccurredAt: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), Notes: "screen repair",
+		OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "screen repair",
 	})
 	if err != nil {
 		t.Fatalf("record repair: %v", err)
 	}
+	time.Sleep(time.Millisecond)
 	replacement, err := service.Correct(ctx, owner, repair.ID, application.RecordEvent{
-		AmountMinor: 15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), Notes: "corrected repair",
+		AmountMinor: 15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "corrected repair",
 	})
 	if err != nil {
 		t.Fatalf("correct repair: %v", err)
 	}
 	if replacement.ReplacesEventID != repair.ID || replacement.BaseAmountMinor != -15_000 {
 		t.Fatalf("replacement mismatch: %+v", replacement)
+	}
+	stableOrder, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Page: 1, PageSize: 10})
+	if err != nil || len(stableOrder.Events) != 3 || stableOrder.Events[0].ID != purchase.ID || stableOrder.Events[1].ID != maintenance.ID || stableOrder.Events[2].ID != replacement.ID {
+		t.Fatalf("correction must retain the original event's position when occurrence times match: result=%+v err=%v", stableOrder, err)
 	}
 	repairingList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Status: "repairing", Page: 1, PageSize: 25})
 	if err != nil || repairingList.Total != 1 || len(repairingList.Assets) != 1 || repairingList.Assets[0].Summary.Status != "repairing" || repairingList.Assets[0].Summary.NetCashflowMinor != -86_000 {

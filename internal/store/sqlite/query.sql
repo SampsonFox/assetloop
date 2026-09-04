@@ -464,10 +464,19 @@ WHERE e.tenant_id = ? AND e.asset_id = ?
 ORDER BY e.occurred_at, e.created_at, e.id;
 
 -- name: ListAssetEventsPage :many
-WITH list_options AS (
+WITH RECURSIVE list_options AS (
     SELECT CAST(sqlc.arg(sort_key) AS TEXT) AS sort_key,
            CAST(sqlc.arg(sort_direction) AS TEXT) AS sort_direction,
            CAST(sqlc.arg(show_voided) AS INTEGER) AS show_voided
+), event_lineage (id, root_created_at) AS (
+    SELECT id, created_at
+    FROM asset_events
+    WHERE tenant_id = sqlc.arg(tenant_id) AND asset_id = sqlc.arg(asset_id) AND replaces_event_id IS NULL
+    UNION ALL
+    SELECT e.id, lineage.root_created_at
+    FROM asset_events e
+    JOIN event_lineage lineage ON lineage.id = e.replaces_event_id
+    WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
 )
 SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
@@ -480,6 +489,7 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        ) AS is_voided,
        COUNT(*) OVER () AS total_count
 FROM asset_events e
+JOIN event_lineage lineage ON lineage.id = e.id
 CROSS JOIN list_options o
 WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
   AND e.event_type != 'void'
@@ -492,6 +502,10 @@ WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
 ORDER BY
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN e.occurred_at END ASC,
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.occurred_at END DESC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN lineage.root_created_at END ASC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN lineage.root_created_at END DESC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN e.created_at END ASC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.created_at END DESC,
   CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'asc' THEN e.base_amount_minor END ASC,
   CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'desc' THEN e.base_amount_minor END DESC,
   CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'asc' THEN e.event_type END ASC,

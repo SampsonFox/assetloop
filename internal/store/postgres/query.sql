@@ -453,6 +453,16 @@ WHERE e.tenant_id = $1 AND e.asset_id = $2
 ORDER BY e.occurred_at, e.created_at, e.id;
 
 -- name: ListAssetEventsPage :many
+WITH RECURSIVE event_lineage (id, root_created_at) AS (
+    SELECT id, created_at
+    FROM asset_events
+    WHERE tenant_id = sqlc.arg(tenant_id) AND asset_id = sqlc.arg(asset_id) AND replaces_event_id IS NULL
+    UNION ALL
+    SELECT e.id, lineage.root_created_at
+    FROM asset_events e
+    JOIN event_lineage lineage ON lineage.id = e.replaces_event_id
+    WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+)
 SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
@@ -464,6 +474,7 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        ) AS is_voided,
        COUNT(*) OVER ()::bigint AS total_count
 FROM asset_events e
+JOIN event_lineage lineage ON lineage.id = e.id
 WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
   AND e.event_type != 'void'
   AND (sqlc.arg(show_voided)::boolean OR NOT EXISTS (
@@ -475,6 +486,10 @@ WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
 ORDER BY
   CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.occurred_at END ASC,
   CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.occurred_at END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN lineage.root_created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN lineage.root_created_at END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.created_at END DESC,
   CASE WHEN sqlc.arg(sort_key)::text = 'amount' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.base_amount_minor END ASC,
   CASE WHEN sqlc.arg(sort_key)::text = 'amount' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.base_amount_minor END DESC,
   CASE WHEN sqlc.arg(sort_key)::text = 'type' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.event_type END ASC,
