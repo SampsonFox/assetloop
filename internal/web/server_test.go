@@ -735,7 +735,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("record Agent-confirmed sale: status=%d body=%s", sale.Code, sale.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, `class="timeline-filters"`, `name="event_type"`, `name="sort"`, `name="show_voided"`, `data-auto-submit`, "显示已作废记录", "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "保养", "清洁并检查"} {
+	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, `class="timeline-filters asset-search-shell"`, `class="asset-filter-disclosure "`, `name="event_type"`, `name="sort"`, `name="show_voided"`, `data-auto-submit`, "更多筛选", "显示已作废记录", "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "保养", "清洁并检查"} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -755,7 +755,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("technical void event must remain hidden from full lifecycle history: %s", fullHistory.Body.String())
 	}
 	filteredTimeline := request(t, handler, http.MethodGet, "/assets/"+match[1]+"?event_type=sale&sort=amount&direction=desc", nil, []*http.Cookie{ownerSession, csrf})
-	if filteredTimeline.Code != http.StatusOK || !strings.Contains(filteredTimeline.Body.String(), "用户已在 Agent 对话中确认") || strings.Contains(filteredTimeline.Body.String(), "正确维修金额") || !strings.Contains(filteredTimeline.Body.String(), "730.00 CNY") {
+	if filteredTimeline.Code != http.StatusOK || !strings.Contains(filteredTimeline.Body.String(), "用户已在 Agent 对话中确认") || strings.Contains(filteredTimeline.Body.String(), "正确维修金额") || !strings.Contains(filteredTimeline.Body.String(), "730.00 CNY") || !strings.Contains(filteredTimeline.Body.String(), `class="asset-filter-disclosure has-active"`) {
 		t.Fatalf("server-filtered timeline must keep full summary while filtering rows: status=%d body=%s", filteredTimeline.Code, filteredTimeline.Body.String())
 	}
 	assetList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})

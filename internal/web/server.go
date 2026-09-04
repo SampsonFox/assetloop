@@ -102,6 +102,7 @@ type pageData struct {
 	TableSort          string
 	TableDirection     string
 	TableShowVoided    bool
+	TableAdvanced      bool
 	TableTotal         int
 	TablePage          int
 	TableTotalPages    int
@@ -649,6 +650,7 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		TablePreviousURL: previousURL, TableNextURL: nextURL,
 		TableClearURL:   eventListURL(assetID, "", "", "occurred", "asc", false, 1),
 		TableHasFilters: query != "" || eventType != "" || sortKey != "occurred" || direction != "asc" || showVoided,
+		TableAdvanced:   eventType != "" || sortKey != "occurred" || direction != "asc" || showVoided,
 	})
 }
 

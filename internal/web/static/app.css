@@ -171,10 +171,12 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .net-value.is-negative { color:var(--danger); }
 .pagination { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; color:var(--muted); }
 .pagination > div { display:flex; gap:8px; }
-.timeline-filters { display:grid; grid-template-columns:minmax(180px,2fr) repeat(3,minmax(120px,1fr)) minmax(160px,auto) auto auto; gap:10px; align-items:end; margin:14px 0 22px; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--field); }
+.timeline-filters { display:flex; gap:12px; align-items:end; margin:12px 0 22px; padding:0; border:0; background:transparent; }
+.timeline-filters .asset-search { flex:1 1 420px; min-width:180px; }
 .timeline-filters label { gap:5px; color:var(--muted); font-size:12px; }
 .timeline-filters input,.timeline-filters select { min-height:40px; }
 .timeline-filters .switch-control { min-height:40px; flex-direction:row; align-items:center; gap:9px; cursor:pointer; color:var(--ink); font-size:14px; white-space:nowrap; }
+.timeline-filter-panel { grid-template-columns:repeat(4,minmax(130px,1fr)); width:min(760px,calc(100vw - 48px)); }
 .switch-control input { position:absolute; inline-size:1px; block-size:1px; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
 .switch-track { position:relative; inline-size:36px; block-size:20px; flex:0 0 auto; border:1px solid var(--line-strong); border-radius:999px; background:var(--void-soft); transition:background-color 160ms ease,border-color 160ms ease; }
 .switch-track::after { content:""; position:absolute; inset-block-start:2px; inset-inline-start:2px; inline-size:14px; block-size:14px; border-radius:50%; background:var(--card); box-shadow:0 1px 3px var(--shadow); transition:transform 160ms ease; }
