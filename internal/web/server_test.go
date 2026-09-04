@@ -751,13 +751,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("server-filtered timeline must keep full summary while filtering rows: status=%d body=%s", filteredTimeline.Code, filteredTimeline.Body.String())
 	}
 	assetList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"7270.00 CNY", "730.00 CNY", "最终结算", "已卖出", `name="q"`, `name="status"`, `name="sort"`, `name="direction"`, `class="table-sort"`} {
+	for _, want := range []string{"7270.00 CNY", "730.00 CNY", "最终结算", "已卖出", `name="q"`, `name="status"`, `name="sort"`, `name="direction"`, `class="asset-filter-disclosure "`, "更多筛选", `class="table-sort"`} {
 		if assetList.Code != http.StatusOK || !strings.Contains(assetList.Body.String(), want) {
 			t.Fatalf("asset list should show server-filtered lifecycle summary %q: status=%d body=%s", want, assetList.Code, assetList.Body.String())
 		}
 	}
 	filteredAssetList := request(t, handler, http.MethodGet, "/?q=主力&status=sold", nil, []*http.Cookie{ownerSession, csrf})
-	if filteredAssetList.Code != http.StatusOK || !strings.Contains(filteredAssetList.Body.String(), "我的主力手机") {
+	if filteredAssetList.Code != http.StatusOK || !strings.Contains(filteredAssetList.Body.String(), "我的主力手机") || !strings.Contains(filteredAssetList.Body.String(), `class="asset-filter-disclosure has-active"`) || !strings.Contains(filteredAssetList.Body.String(), "已启用") {
 		t.Fatalf("asset list search should match asset data: status=%d body=%s", filteredAssetList.Code, filteredAssetList.Body.String())
 	}
 	sortedAssetList := request(t, handler, http.MethodGet, "/?sort=net&direction=asc", nil, []*http.Cookie{ownerSession, csrf})

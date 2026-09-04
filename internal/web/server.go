@@ -96,6 +96,7 @@ type pageData struct {
 	AssetGridURL       string
 	AssetClearURL      string
 	AssetHasFilters    bool
+	AssetAdvanced      bool
 	TableQuery         string
 	TableFilter        string
 	TableSort          string
@@ -888,6 +889,7 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 		AssetPreviousURL: previousURL, AssetNextURL: nextURL,
 		AssetListURL: assetsURL("list", query, statusFilter, sortKey, direction, page), AssetGridURL: assetsURL("grid", query, statusFilter, sortKey, direction, page),
 		AssetClearURL: assetsURL(view, "", "", "created", "desc", 1), AssetHasFilters: query != "" || (statusFilter != "" && statusFilter != "all") || sortKey != "created" || direction != "desc",
+		AssetAdvanced: (statusFilter != "" && statusFilter != "all") || sortKey != "created" || direction != "desc",
 	})
 }
 

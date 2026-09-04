@@ -8,27 +8,35 @@
 </div>
 {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
 
-<form class="asset-filters" method="get" action="/">
+<form class="asset-filters asset-search-shell" method="get" action="/">
   {{if eq .AssetView "grid"}}<input type="hidden" name="view" value="grid">{{end}}
   <label class="asset-search"><span>{{t $s "assets.search"}}</span><input type="search" name="q" value="{{.AssetQuery}}" placeholder="{{t $s "assets.search_placeholder"}}"></label>
-  <label><span>{{t $s "assets.status"}}</span><select name="status">
-    <option value="" {{if eq .AssetStatus ""}}selected{{end}}>{{t $s "assets.all_statuses"}}</option>
-    <option value="active" {{if eq .AssetStatus "active"}}selected{{end}}>{{t $s "status.active"}}</option>
-    <option value="repairing" {{if eq .AssetStatus "repairing"}}selected{{end}}>{{t $s "status.repairing"}}</option>
-    <option value="sold" {{if eq .AssetStatus "sold"}}selected{{end}}>{{t $s "status.sold"}}</option>
-    <option value="unacquired" {{if eq .AssetStatus "unacquired"}}selected{{end}}>{{t $s "status.unacquired"}}</option>
-  </select></label>
-  <label><span>{{t $s "table.sort"}}</span><select name="sort">
-    <option value="created" {{if eq .AssetSort "created"}}selected{{end}}>{{t $s "table.created"}}</option>
-    <option value="name" {{if eq .AssetSort "name"}}selected{{end}}>{{t $s "assets.item"}}</option>
-    <option value="model" {{if eq .AssetSort "model"}}selected{{end}}>{{t $s "assets.taxonomy"}}</option>
-    <option value="status" {{if eq .AssetSort "status"}}selected{{end}}>{{t $s "assets.status"}}</option>
-    <option value="net" {{if eq .AssetSort "net"}}selected{{end}}>{{t $s "assets.net_settlement"}}</option>
-    <option value="cost" {{if eq .AssetSort "cost"}}selected{{end}}>{{t $s "assets.cost"}}</option>
-  </select></label>
-  <label><span>{{t $s "table.direction"}}</span><select name="direction"><option value="asc" {{if eq .AssetDirection "asc"}}selected{{end}}>{{t $s "table.ascending"}}</option><option value="desc" {{if eq .AssetDirection "desc"}}selected{{end}}>{{t $s "table.descending"}}</option></select></label>
-  <button class="auto" type="submit">{{t $s "assets.filter"}}</button>
-  {{if .AssetHasFilters}}<a class="button secondary" href="{{.AssetClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
+  <div class="asset-filter-actions">
+    <button class="auto" type="submit">{{t $s "assets.search"}}</button>
+    <details class="asset-filter-disclosure {{if .AssetAdvanced}}has-active{{end}}">
+      <summary class="button secondary auto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>{{t $s "assets.more_filters"}}</span>{{if .AssetAdvanced}}<small>{{t $s "assets.filters_active"}}</small>{{end}}</summary>
+      <div class="asset-filter-panel">
+        <label><span>{{t $s "assets.status"}}</span><select name="status">
+          <option value="" {{if eq .AssetStatus ""}}selected{{end}}>{{t $s "assets.all_statuses"}}</option>
+          <option value="active" {{if eq .AssetStatus "active"}}selected{{end}}>{{t $s "status.active"}}</option>
+          <option value="repairing" {{if eq .AssetStatus "repairing"}}selected{{end}}>{{t $s "status.repairing"}}</option>
+          <option value="sold" {{if eq .AssetStatus "sold"}}selected{{end}}>{{t $s "status.sold"}}</option>
+          <option value="unacquired" {{if eq .AssetStatus "unacquired"}}selected{{end}}>{{t $s "status.unacquired"}}</option>
+        </select></label>
+        <label><span>{{t $s "table.sort"}}</span><select name="sort">
+          <option value="created" {{if eq .AssetSort "created"}}selected{{end}}>{{t $s "table.created"}}</option>
+          <option value="name" {{if eq .AssetSort "name"}}selected{{end}}>{{t $s "assets.item"}}</option>
+          <option value="model" {{if eq .AssetSort "model"}}selected{{end}}>{{t $s "assets.taxonomy"}}</option>
+          <option value="status" {{if eq .AssetSort "status"}}selected{{end}}>{{t $s "assets.status"}}</option>
+          <option value="net" {{if eq .AssetSort "net"}}selected{{end}}>{{t $s "assets.net_settlement"}}</option>
+          <option value="cost" {{if eq .AssetSort "cost"}}selected{{end}}>{{t $s "assets.cost"}}</option>
+        </select></label>
+        <label><span>{{t $s "table.direction"}}</span><select name="direction"><option value="asc" {{if eq .AssetDirection "asc"}}selected{{end}}>{{t $s "table.ascending"}}</option><option value="desc" {{if eq .AssetDirection "desc"}}selected{{end}}>{{t $s "table.descending"}}</option></select></label>
+        <div class="asset-filter-panel-actions"><button class="auto" type="submit">{{t $s "assets.filter"}}</button></div>
+      </div>
+    </details>
+    {{if .AssetHasFilters}}<a class="button secondary" href="{{.AssetClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
+  </div>
 </form>
 
 {{if .Assets}}
