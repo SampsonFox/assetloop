@@ -339,9 +339,17 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 	if viewCookie.Value != "grid" || !strings.Contains(grid.Body.String(), `class="is-active" aria-current="page">卡片`) {
 		t.Fatalf("grid preference was not selected: cookie=%q body=%s", viewCookie.Value, grid.Body.String())
 	}
+	if !strings.Contains(grid.Body.String(), `href="/?view=list"`) {
+		t.Fatalf("grid view must expose an explicit list switch: %s", grid.Body.String())
+	}
 	persisted := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, viewCookie})
 	if !strings.Contains(persisted.Body.String(), `class="is-active" aria-current="page">卡片`) {
 		t.Fatalf("grid preference was not persisted: %s", persisted.Body.String())
+	}
+	list := request(t, handler, http.MethodGet, "/?view=list", nil, []*http.Cookie{session, csrf, viewCookie})
+	listCookie := responseCookie(t, list, assetViewCookie)
+	if listCookie.Value != "list" || !strings.Contains(list.Body.String(), `class="is-active" aria-current="page">列表`) {
+		t.Fatalf("list switch must override the persisted grid preference: cookie=%q body=%s", listCookie.Value, list.Body.String())
 	}
 	legacy := request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{session, csrf})
 	if legacy.Code != http.StatusPermanentRedirect || legacy.Header().Get("Location") != "/" {
@@ -761,7 +769,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("asset list search should match asset data: status=%d body=%s", filteredAssetList.Code, filteredAssetList.Body.String())
 	}
 	sortedAssetList := request(t, handler, http.MethodGet, "/?sort=net&direction=asc", nil, []*http.Cookie{ownerSession, csrf})
-	if sortedAssetList.Code != http.StatusOK || !strings.Contains(sortedAssetList.Body.String(), `href="/?sort=net"`) || !strings.Contains(sortedAssetList.Body.String(), `aria-sort="ascending"`) {
+	if sortedAssetList.Code != http.StatusOK || !strings.Contains(sortedAssetList.Body.String(), `href="/?sort=net&amp;view=list"`) || !strings.Contains(sortedAssetList.Body.String(), `aria-sort="ascending"`) {
 		t.Fatalf("asset server sort controls missing: status=%d body=%s", sortedAssetList.Code, sortedAssetList.Body.String())
 	}
 	emptyAssetList := request(t, handler, http.MethodGet, "/?q=不存在的物品", nil, []*http.Cookie{ownerSession, csrf})

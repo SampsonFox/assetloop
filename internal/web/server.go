@@ -895,7 +895,7 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 
 func assetsURL(view, query, status, sortKey, direction string, page int) string {
 	values := url.Values{}
-	if view == "grid" {
+	if view == "grid" || view == "list" {
 		values.Set("view", view)
 	}
 	if query != "" {
