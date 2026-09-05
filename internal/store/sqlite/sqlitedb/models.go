@@ -88,6 +88,14 @@ type ItemCategory struct {
 	IconKey   string
 }
 
+type LifecycleRequest struct {
+	TenantID    string
+	UserID      string
+	RequestKey  string
+	RequestHash string
+	EventID     string
+}
+
 type ProductModel struct {
 	ID         string
 	TenantID   string

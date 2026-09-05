@@ -23,6 +23,7 @@ func migrationLock(ctx context.Context, db *sql.DB, dialect string) (func(), err
 			return nil, err
 		}
 		if _, err := conn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", key); err != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 			conn.Close()
 			return nil, err
 		}

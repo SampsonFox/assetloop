@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Store) GetPortfolioSummary(ctx context.Context, tenantID string) (application.PortfolioSummary, error) {
-	row, err := sqlitedb.New(s.db).GetPortfolioSummary(ctx, tenantID)
+	row, err := s.queries().GetPortfolioSummary(ctx, tenantID)
 	if err != nil {
 		return application.PortfolioSummary{}, err
 	}
@@ -23,12 +23,12 @@ func (s *Store) GetPortfolioSummary(ctx context.Context, tenantID string) (appli
 }
 
 func (s *Store) TenantBaseCurrency(ctx context.Context, tenantID string) (string, bool, error) {
-	row, err := sqlitedb.New(s.db).GetTenantBaseCurrency(ctx, tenantID)
+	row, err := s.queries().GetTenantBaseCurrency(ctx, tenantID)
 	return row.BaseCurrency, row.BaseCurrencyLocked != 0, err
 }
 
 func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.AssetEventTypeDefinition) error {
-	return sqlitedb.New(s.db).CreateAssetEventType(ctx, sqlitedb.CreateAssetEventTypeParams{
+	return s.queries().CreateAssetEventType(ctx, sqlitedb.CreateAssetEventTypeParams{
 		ID: eventType.ID, TenantID: eventType.TenantID, Name: eventType.Name,
 		NormalizedName: eventType.NormalizedName, CashflowDirection: string(eventType.Cashflow),
 		CreatedByUserID: eventType.CreatedByUserID, CreatedAt: sqliteTime(eventType.CreatedAt),
@@ -36,7 +36,7 @@ func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.Asset
 }
 
 func (s *Store) ListAssetEventTypes(ctx context.Context, tenantID string) ([]domain.AssetEventTypeDefinition, error) {
-	rows, err := sqlitedb.New(s.db).ListAssetEventTypes(ctx, tenantID)
+	rows, err := s.queries().ListAssetEventTypes(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func sqliteEventType(row sqlitedb.AssetEventType) (domain.AssetEventTypeDefiniti
 }
 
 func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (domain.AssetEvent, error) {
-	row, err := sqlitedb.New(s.db).GetAssetEvent(ctx, sqlitedb.GetAssetEventParams{TenantID: tenantID, ID: eventID})
+	row, err := s.queries().GetAssetEvent(ctx, sqlitedb.GetAssetEventParams{TenantID: tenantID, ID: eventID})
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -107,7 +107,7 @@ func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (do
 }
 
 func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) ([]domain.AssetEvent, error) {
-	rows, err := sqlitedb.New(s.db).ListAssetEvents(ctx, sqlitedb.ListAssetEventsParams{TenantID: tenantID, AssetID: assetID})
+	rows, err := s.queries().ListAssetEvents(ctx, sqlitedb.ListAssetEventsParams{TenantID: tenantID, AssetID: assetID})
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID strin
 	if opts.ShowVoided {
 		showVoided = 1
 	}
-	rows, err := sqlitedb.New(s.db).ListAssetEventsPage(ctx, sqlitedb.ListAssetEventsPageParams{
+	rows, err := s.queries().ListAssetEventsPage(ctx, sqlitedb.ListAssetEventsPageParams{
 		TenantID: tenantID, AssetID: assetID, SearchQuery: opts.Query, EventTypeFilter: opts.Type,
 		SortKey: opts.Sort, SortDirection: opts.Direction, ShowVoided: showVoided,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
@@ -155,7 +155,7 @@ func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID strin
 }
 
 func (s *Store) GetAssetSummary(ctx context.Context, tenantID, assetID string) (domain.AssetSummary, error) {
-	row, err := sqlitedb.New(s.db).GetAssetSummary(ctx, sqlitedb.GetAssetSummaryParams{TenantID: tenantID, AssetID: assetID})
+	row, err := s.queries().GetAssetSummary(ctx, sqlitedb.GetAssetSummaryParams{TenantID: tenantID, AssetID: assetID})
 	if err != nil {
 		return domain.AssetSummary{}, err
 	}
@@ -166,6 +166,9 @@ func (s *Store) GetAssetSummary(ctx context.Context, tenantID, assetID string) (
 }
 
 func (s *Store) lifecycleTx(ctx context.Context, fn func(*sqlitedb.Queries) error) error {
+	if s.tx != nil {
+		return fn(s.queries())
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

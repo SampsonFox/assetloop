@@ -12,6 +12,14 @@ import (
 
 type Store struct {
 	db *sql.DB
+	tx *sql.Tx
+}
+
+func (s *Store) queries() *postgresdb.Queries {
+	if s.tx != nil {
+		return postgresdb.New(s.tx)
+	}
+	return postgresdb.New(s.db)
 }
 
 func New(db *sql.DB) *Store { return &Store{db: db} }
@@ -63,7 +71,7 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 	if err != nil {
 		return domain.Asset{}, fmt.Errorf("parse asset ID: %w", err)
 	}
-	row, err := postgresdb.New(s.db).GetAsset(ctx, postgresdb.GetAssetParams{TenantID: tenantUUID, ID: assetUUID})
+	row, err := s.queries().GetAsset(ctx, postgresdb.GetAssetParams{TenantID: tenantUUID, ID: assetUUID})
 	if err != nil {
 		return domain.Asset{}, err
 	}

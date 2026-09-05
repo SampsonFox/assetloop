@@ -186,6 +186,20 @@ aggregate totals, and custom event-type isolation.
 
 The lifecycle Store atomically creates the grouping transaction and event, locks the base currency,
 and, for corrections, writes the void and replacement rows in the same database transaction.
+`WithLifecycleWrite` supplies a transaction-bound Store to the application policy. It acquires a
+tenant write lock before any lifecycle state read (a PostgreSQL row lock or SQLite write
+reservation), so concurrent commands cannot both validate the same pre-write state. Money and
+correction policy remain in the application layer; adapters only supply isolation and persistence.
+
+Lifecycle commands accept an optional `RequestKey`. Web forms generate it automatically and retain
+it on validation errors; semantic clients must reuse it when retrying a confirmed command. The
+receipt is scoped to tenant, user, and key, and stores a SHA-256 fingerprint of the command plus the
+result event ID in `lifecycle_requests`. The fingerprint includes the operation and corrected event
+ID, with timestamps normalized to UTC. Same-key/same-command retries return the original economic
+event (with its current void status); changed payloads are rejected. Authorization is checked before
+replay. Receipt, transaction, economic event, and correction rows commit together, so failed commands
+leave no reserved key or partial write. Callers omitting a key retain the original command behavior
+and receive concurrency protection, but cannot replay a successful request idempotently.
 Harness-confirmed MCP commands append formal lifecycle events directly through this same application
 use case. Historical installations may retain a dormant `import_drafts` compatibility table from an
 older migration; active code neither reads nor writes it, and a later contract migration may remove it
@@ -208,6 +222,8 @@ An unchanged schema creates no backup. An existing SQLite schema is backed up wi
 and the backup integrity is verified before an upgrade; this is a consistent database snapshot,
 not a filesystem copy. After migration, integrity and foreign-key checks must pass. Failure stops
 startup and retains the pre-upgrade backup for recovery.
+SQLite also verifies integrity and foreign keys on an unchanged schema, so a failed post-migration
+check cannot be bypassed by restarting once the migration version has advanced.
 
 ### 7.3 Tenant boundary
 

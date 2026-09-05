@@ -84,6 +84,50 @@ func TestUpgradeCustomEventTypesPreservesLifecycle(t *testing.T) {
 	})
 }
 
+func TestUpgradeLifecycleRequestsPreservesV7Data(t *testing.T) {
+	for _, driver := range []string{"sqlite", "postgres"} {
+		t.Run(driver, func(t *testing.T) {
+			cfg := config.Database{Driver: driver, DSN: filepath.Join(t.TempDir(), "v7.db")}
+			if driver == "postgres" {
+				dsn := os.Getenv("TEST_POSTGRES_DSN")
+				if dsn == "" {
+					if os.Getenv("REQUIRE_POSTGRES_TEST") == "true" {
+						t.Fatal("PostgreSQL required")
+					}
+					t.Skip("TEST_POSTGRES_DSN not set")
+				}
+				var cleanup func()
+				cfg, cleanup = postgresUpgradeSchema(t, dsn)
+				defer cleanup()
+			}
+			db, err := basestore.Open(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			applyMigrationsThrough(t, db, driver, 7)
+			createdAt := any("2026-09-01T00:00:00Z")
+			if driver == "postgres" {
+				createdAt = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+			}
+			if _, err := db.Exec("INSERT INTO tenants (id,name,base_currency,created_at) VALUES ("+values(driver, 4)+")", "99999999-9999-4999-8999-999999999999", "v7 preserved tenant", "CNY", createdAt); err != nil {
+				t.Fatal(err)
+			}
+			if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
+				t.Fatal(err)
+			}
+			var name string
+			if err := db.QueryRow("SELECT name FROM tenants").Scan(&name); err != nil || name != "v7 preserved tenant" {
+				t.Fatalf("v7 data changed: %q %v", name, err)
+			}
+			var count int
+			if err := db.QueryRow("SELECT count(*) FROM lifecycle_requests").Scan(&count); err != nil || count != 0 {
+				t.Fatalf("new receipt table: %d %v", count, err)
+			}
+		})
+	}
+}
+
 func runCustomEventTypeUpgradeTest(t *testing.T, cfg config.Database) {
 	t.Helper()
 	db, err := basestore.Open(cfg)

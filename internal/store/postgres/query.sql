@@ -182,6 +182,12 @@ SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        COALESCE(er.has_purchase, FALSE) AS has_purchase,
        COALESCE(er.has_sale, FALSE) AS has_sale,
        COALESCE(re.event_type, '') AS latest_event_type,
+       CASE
+           WHEN COALESCE(er.has_sale, FALSE) THEN 'sold'
+           WHEN COALESCE(er.has_purchase, FALSE) AND re.event_type = 'repair' THEN 'repairing'
+           WHEN COALESCE(er.has_purchase, FALSE) THEN 'active'
+           ELSE 'unacquired'
+       END::text AS status,
        t.base_currency::text AS base_currency
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -205,12 +211,7 @@ WHERE a.tenant_id = sqlc.arg(tenant_id)
 SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
        variant_id, variant_name, display_name, serial_number, color, purchase_channel, notes, created_at,
        expense_minor, income_minor, net_minor,
-       CASE
-           WHEN has_sale THEN 'sold'
-           WHEN has_purchase AND latest_event_type = 'repair' THEN 'repairing'
-           WHEN has_purchase THEN 'active'
-           ELSE 'unacquired'
-       END AS status,
+       status,
        base_currency
 FROM asset_rows
 WHERE sqlc.arg(status_filter)::text IN ('', 'all')
@@ -524,3 +525,14 @@ JOIN assets a ON a.tenant_id = t.id AND a.id = sqlc.arg(asset_id)
 LEFT JOIN effective_events e ON e.asset_id = a.id
 WHERE t.id = sqlc.arg(tenant_id)
 GROUP BY t.base_currency;
+
+-- name: LockLifecycleTenant :execrows
+UPDATE tenants SET id = id WHERE id = sqlc.arg(tenant_id);
+
+-- name: FindLifecycleRequest :one
+SELECT request_hash, event_id FROM lifecycle_requests
+WHERE tenant_id = sqlc.arg(tenant_id) AND user_id = sqlc.arg(user_id) AND request_key = sqlc.arg(request_key);
+
+-- name: SaveLifecycleRequest :exec
+INSERT INTO lifecycle_requests (tenant_id, user_id, request_key, request_hash, event_id)
+VALUES (sqlc.arg(tenant_id), sqlc.arg(user_id), sqlc.arg(request_key), sqlc.arg(request_hash), sqlc.arg(event_id));

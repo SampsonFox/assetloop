@@ -540,3 +540,14 @@ JOIN assets a ON a.tenant_id = t.id AND a.id = sqlc.arg(asset_id)
 LEFT JOIN effective_events e ON e.asset_id = a.id
 WHERE t.id = sqlc.arg(tenant_id)
 GROUP BY t.base_currency;
+
+-- name: LockLifecycleTenant :execrows
+UPDATE tenants SET id = id WHERE id = sqlc.arg(tenant_id);
+
+-- name: FindLifecycleRequest :one
+SELECT request_hash, event_id FROM lifecycle_requests
+WHERE tenant_id = sqlc.arg(tenant_id) AND user_id = sqlc.arg(user_id) AND request_key = sqlc.arg(request_key);
+
+-- name: SaveLifecycleRequest :exec
+INSERT INTO lifecycle_requests (tenant_id, user_id, request_key, request_hash, event_id)
+VALUES (sqlc.arg(tenant_id), sqlc.arg(user_id), sqlc.arg(request_key), sqlc.arg(request_hash), sqlc.arg(event_id));

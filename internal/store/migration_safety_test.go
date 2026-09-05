@@ -13,6 +13,27 @@ import (
 )
 
 func TestMigrationSafety(t *testing.T) {
+	t.Run("foreign key failure keeps subsequent startup closed", func(t *testing.T) {
+		cfg := config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "foreign-key.db")}
+		db, err := basestore.Open(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		applyMigrationsThrough(t, db, "sqlite", 7)
+		if _, err := db.Exec("PRAGMA foreign_keys=OFF; INSERT INTO item_categories (id,tenant_id,name,created_at) VALUES ('bad-category','missing-tenant','Corrupt','2026-09-01T00:00:00Z'); PRAGMA foreign_keys=ON;"); err != nil {
+			t.Fatal(err)
+		}
+		for range 2 {
+			if err := basestore.Migrate(context.Background(), db, cfg); err == nil {
+				t.Fatal("foreign key violation accepted at startup")
+			}
+		}
+		backups, err := filepath.Glob(cfg.DSN + ".backup-*")
+		if err != nil || len(backups) != 1 {
+			t.Fatalf("upgrade backup lost or duplicated: %v %v", backups, err)
+		}
+	})
 	t.Run("failed upgrade preserves recoverable backup", func(t *testing.T) {
 		cfg := config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "failed.db")}
 		db, err := basestore.Open(cfg)

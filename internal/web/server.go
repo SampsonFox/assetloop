@@ -122,6 +122,7 @@ type pageData struct {
 }
 
 type eventFormData struct {
+	RequestKey        string
 	Type              string
 	OccurredAt        string
 	Amount            string
@@ -584,7 +585,7 @@ func (s *Server) renderCorrectionForm(w http.ResponseWriter, r *http.Request, st
 
 func eventFormForCorrection(event domain.AssetEvent) eventFormData {
 	currency, amountMinor := event.BaseCurrency, event.BaseAmountMinor
-	form := eventFormData{OccurredAt: event.OccurredAt.Local().Format("2006-01-02T15:04"), Source: "manual-correction"}
+	form := eventFormData{RequestKey: randomToken(), OccurredAt: event.OccurredAt.Local().Format("2006-01-02T15:04"), Source: "manual-correction"}
 	if event.FX != nil {
 		currency, amountMinor = event.FX.OriginalCurrency, event.FX.OriginalAmountMinor
 		form.FXRate = formatRate(event.FX.RateScaled)
@@ -668,13 +669,17 @@ func eventListURL(assetID, query, eventType, sortKey, direction string, showVoid
 
 func eventFormFromRequest(r *http.Request, baseCurrency, nowValue string) eventFormData {
 	form := eventFormData{
-		Type: "purchase", OccurredAt: nowValue, Currency: baseCurrency, Source: "manual",
+		RequestKey: randomToken(),
+		Type:       "purchase", OccurredAt: nowValue, Currency: baseCurrency, Source: "manual",
 		FXRateDate: strings.SplitN(nowValue, "T", 2)[0],
 	}
 	if r.Method != http.MethodPost {
 		return form
 	}
 	form.Type = r.FormValue("event_type")
+	if key := r.FormValue("request_key"); key != "" {
+		form.RequestKey = key
+	}
 	form.OccurredAt = r.FormValue("occurred_at")
 	form.Amount = r.FormValue("amount")
 	form.Currency = r.FormValue("currency")
@@ -718,7 +723,8 @@ func (s *Server) recordEventFromForm(r *http.Request, principal application.Prin
 		return application.RecordEvent{}, err
 	}
 	cmd := application.RecordEvent{
-		AssetID: assetID, Type: eventType, AmountMinor: amount, Currency: currency,
+		RequestKey: r.FormValue("request_key"),
+		AssetID:    assetID, Type: eventType, AmountMinor: amount, Currency: currency,
 		OccurredAt: occurredAt, Source: r.FormValue("source"),
 		ExternalReference: r.FormValue("external_reference"), Notes: r.FormValue("notes"),
 	}

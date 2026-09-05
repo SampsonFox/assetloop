@@ -629,6 +629,29 @@ func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized 
 	return i, err
 }
 
+const findLifecycleRequest = `-- name: FindLifecycleRequest :one
+SELECT request_hash, event_id FROM lifecycle_requests
+WHERE tenant_id = $1 AND user_id = $2 AND request_key = $3
+`
+
+type FindLifecycleRequestParams struct {
+	TenantID   uuid.UUID
+	UserID     uuid.UUID
+	RequestKey string
+}
+
+type FindLifecycleRequestRow struct {
+	RequestHash string
+	EventID     uuid.UUID
+}
+
+func (q *Queries) FindLifecycleRequest(ctx context.Context, arg FindLifecycleRequestParams) (FindLifecycleRequestRow, error) {
+	row := q.db.QueryRowContext(ctx, findLifecycleRequest, arg.TenantID, arg.UserID, arg.RequestKey)
+	var i FindLifecycleRequestRow
+	err := row.Scan(&i.RequestHash, &i.EventID)
+	return i, err
+}
+
 const firstPrincipal = `-- name: FirstPrincipal :one
 SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name,
        u.locale, u.theme
@@ -1316,6 +1339,12 @@ SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        COALESCE(er.has_purchase, FALSE) AS has_purchase,
        COALESCE(er.has_sale, FALSE) AS has_sale,
        COALESCE(re.event_type, '') AS latest_event_type,
+       CASE
+           WHEN COALESCE(er.has_sale, FALSE) THEN 'sold'
+           WHEN COALESCE(er.has_purchase, FALSE) AND re.event_type = 'repair' THEN 'repairing'
+           WHEN COALESCE(er.has_purchase, FALSE) THEN 'active'
+           ELSE 'unacquired'
+       END::text AS status,
        t.base_currency::text AS base_currency
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -1339,12 +1368,7 @@ WHERE a.tenant_id = $6
 SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
        variant_id, variant_name, display_name, serial_number, color, purchase_channel, notes, created_at,
        expense_minor, income_minor, net_minor,
-       CASE
-           WHEN has_sale THEN 'sold'
-           WHEN has_purchase AND latest_event_type = 'repair' THEN 'repairing'
-           WHEN has_purchase THEN 'active'
-           ELSE 'unacquired'
-       END AS status,
+       status,
        base_currency
 FROM asset_rows
 WHERE $1::text IN ('', 'all')
@@ -1818,6 +1842,18 @@ func (q *Queries) ListVariants(ctx context.Context, tenantID uuid.UUID) ([]ListV
 	return items, nil
 }
 
+const lockLifecycleTenant = `-- name: LockLifecycleTenant :execrows
+UPDATE tenants SET id = id WHERE id = $1
+`
+
+func (q *Queries) LockLifecycleTenant(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockLifecycleTenant, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const lockTenantBaseCurrency = `-- name: LockTenantBaseCurrency :exec
 UPDATE tenants
 SET base_currency_locked = TRUE
@@ -1831,6 +1867,30 @@ type LockTenantBaseCurrencyParams struct {
 
 func (q *Queries) LockTenantBaseCurrency(ctx context.Context, arg LockTenantBaseCurrencyParams) error {
 	_, err := q.db.ExecContext(ctx, lockTenantBaseCurrency, arg.ID, arg.BaseCurrency)
+	return err
+}
+
+const saveLifecycleRequest = `-- name: SaveLifecycleRequest :exec
+INSERT INTO lifecycle_requests (tenant_id, user_id, request_key, request_hash, event_id)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type SaveLifecycleRequestParams struct {
+	TenantID    uuid.UUID
+	UserID      uuid.UUID
+	RequestKey  string
+	RequestHash string
+	EventID     uuid.UUID
+}
+
+func (q *Queries) SaveLifecycleRequest(ctx context.Context, arg SaveLifecycleRequestParams) error {
+	_, err := q.db.ExecContext(ctx, saveLifecycleRequest,
+		arg.TenantID,
+		arg.UserID,
+		arg.RequestKey,
+		arg.RequestHash,
+		arg.EventID,
+	)
 	return err
 }
 

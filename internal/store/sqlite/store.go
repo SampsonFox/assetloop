@@ -12,6 +12,14 @@ import (
 
 type Store struct {
 	db *sql.DB
+	tx *sql.Tx
+}
+
+func (s *Store) queries() *sqlitedb.Queries {
+	if s.tx != nil {
+		return sqlitedb.New(s.tx)
+	}
+	return sqlitedb.New(s.db)
 }
 
 func New(db *sql.DB) *Store { return &Store{db: db} }
@@ -49,7 +57,7 @@ func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Ass
 }
 
 func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.Asset, error) {
-	row, err := sqlitedb.New(s.db).GetAsset(ctx, sqlitedb.GetAssetParams{TenantID: tenantID, ID: assetID})
+	row, err := s.queries().GetAsset(ctx, sqlitedb.GetAssetParams{TenantID: tenantID, ID: assetID})
 	if err != nil {
 		return domain.Asset{}, err
 	}

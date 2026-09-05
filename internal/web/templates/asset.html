@@ -64,6 +64,7 @@
     <div class="drawer-body event-form-grid">
     {{if .Error}}<p class="error wide" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="request_key" value="{{.EventForm.RequestKey}}">
     <div class="form-field"><div class="field-heading"><label for="event-type-select">{{t $s "asset.event_type"}}</label><button class="link-button" type="button" data-dialog-open="event-type-drawer" data-title="{{t $s "asset.event_type_create"}}" data-action="/admin/event-types" aria-controls="event-type-drawer">{{t $s "asset.event_type_add"}}</button></div><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}<option value="{{.Name}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .Name}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}</select></div>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
     <label data-money-field>{{t $s "asset.amount_positive"}}<input name="amount" inputmode="decimal" required placeholder="6999.00" value="{{.EventForm.Amount}}"></label>

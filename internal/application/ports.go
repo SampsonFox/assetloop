@@ -118,6 +118,9 @@ type EventListResult struct {
 }
 
 type LifecycleStore interface {
+	WithLifecycleWrite(context.Context, string, func(LifecycleStore) (domain.AssetEvent, error)) (domain.AssetEvent, error)
+	FindLifecycleRequest(context.Context, string, string, string) (LifecycleRequest, bool, error)
+	SaveLifecycleRequest(context.Context, LifecycleRequest) error
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 	TenantBaseCurrency(context.Context, string) (string, bool, error)
 	CreateAssetEventType(context.Context, domain.AssetEventTypeDefinition) error
@@ -129,4 +132,12 @@ type LifecycleStore interface {
 	GetAssetSummary(context.Context, string, string) (domain.AssetSummary, error)
 	GetPortfolioSummary(context.Context, string) (PortfolioSummary, error)
 	CorrectAssetEvent(context.Context, domain.AssetTransaction, domain.AssetEvent, domain.AssetEvent) error
+}
+
+type LifecycleRequest struct {
+	TenantID string
+	UserID   string
+	Key      string
+	Hash     string
+	EventID  string
 }

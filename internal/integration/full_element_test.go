@@ -123,7 +123,8 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 
 	lifecycle := application.NewLifecycleService(store)
 	purchase, err := lifecycle.Record(ctx, owner, application.RecordEvent{
-		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 100_000, Currency: "USD",
+		RequestKey: "full-element-purchase",
+		AssetID:    asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 100_000, Currency: "USD",
 		OccurredAt: time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC), Source: "ai-harness",
 		ExternalReference: "ORDER-FULL-001", Notes: "user-confirmed foreign purchase",
 		FXRateScaled: 712_000_000, FXRateDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
@@ -134,6 +135,14 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	}
 	if purchase.BaseAmountMinor != -712_000 || purchase.FX == nil || purchase.FX.OriginalAmountMinor != 100_000 || purchase.FX.OriginalCurrency != "USD" {
 		t.Fatalf("purchase money evidence mismatch: %+v", purchase)
+	}
+	retry, err := application.NewLifecycleService(store).Record(ctx, owner, application.RecordEvent{
+		RequestKey: "full-element-purchase", AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 100_000, Currency: "USD",
+		OccurredAt: time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC), Source: "ai-harness", ExternalReference: "ORDER-FULL-001", Notes: "user-confirmed foreign purchase",
+		FXRateScaled: 712_000_000, FXRateDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), FXRateSource: "full-element-fixture", FXConfirmed: true,
+	})
+	if err != nil || retry.ID != purchase.ID {
+		t.Fatalf("confirmed purchase retry: %+v %v", retry, err)
 	}
 	_, locked, err := lifecycle.BaseCurrency(ctx, owner)
 	if err != nil || !locked {

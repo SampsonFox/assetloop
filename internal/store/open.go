@@ -52,6 +52,9 @@ func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
 		return err
 	}
 	if current == target {
+		if cfg.Driver == "sqlite" {
+			return verifySQLite(ctx, db)
+		}
 		return nil
 	}
 	if cfg.Driver == "sqlite" && current > 0 {

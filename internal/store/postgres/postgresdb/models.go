@@ -91,6 +91,14 @@ type ItemCategory struct {
 	IconKey   string
 }
 
+type LifecycleRequest struct {
+	TenantID    uuid.UUID
+	UserID      uuid.UUID
+	RequestKey  string
+	RequestHash string
+	EventID     uuid.UUID
+}
+
 type ProductModel struct {
 	ID         uuid.UUID
 	TenantID   uuid.UUID

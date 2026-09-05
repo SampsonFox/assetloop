@@ -18,6 +18,7 @@ type LifecycleService struct {
 }
 
 type RecordEvent struct {
+	RequestKey        string
 	AssetID           string
 	Type              domain.AssetEventType
 	AmountMinor       int64
@@ -67,6 +68,12 @@ func (s *LifecycleService) Record(ctx context.Context, actor Principal, cmd Reco
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEvent{}, err
 	}
+	return s.write(ctx, actor, "record", "", cmd, func(scoped *LifecycleService) (domain.AssetEvent, error) {
+		return scoped.record(ctx, actor, cmd)
+	})
+}
+
+func (s *LifecycleService) record(ctx context.Context, actor Principal, cmd RecordEvent) (domain.AssetEvent, error) {
 	eventType, err := s.resolveEventType(ctx, actor.TenantID, cmd.Type)
 	if err != nil {
 		return domain.AssetEvent{}, err
@@ -88,6 +95,12 @@ func (s *LifecycleService) Correct(ctx context.Context, actor Principal, eventID
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEvent{}, err
 	}
+	return s.write(ctx, actor, "correct", eventID, cmd, func(scoped *LifecycleService) (domain.AssetEvent, error) {
+		return scoped.correct(ctx, actor, eventID, cmd)
+	})
+}
+
+func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID string, cmd RecordEvent) (domain.AssetEvent, error) {
 	if err := validID("event ID", eventID); err != nil {
 		return domain.AssetEvent{}, err
 	}
