@@ -237,6 +237,10 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .danger-link { color:var(--danger); }
 .link-button { width:auto; cursor:pointer; }
 .form-field { display:grid; gap:7px; }
+.money-input-group { display:grid; grid-template-columns:minmax(0,1fr) 94px; }
+.money-input-group input { min-width:0; border-radius:10px 0 0 10px; }
+.money-input-group .currency-suffix { position:relative; margin-left:-1px; border-radius:0 10px 10px 0; font-weight:750; text-transform:uppercase; }
+.money-input-group input:focus { position:relative; z-index:1; }
 .field-heading label { display:block; }
 .field-heading .link-button { width:auto; }
 .empty-inline { padding:18px; border-radius:10px; background:var(--paper); color:var(--muted); }

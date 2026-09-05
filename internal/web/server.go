@@ -132,7 +132,6 @@ type eventFormData struct {
 	FXRate            string
 	FXRateDate        string
 	FXRateSource      string
-	FXConfirmed       bool
 	Notes             string
 }
 
@@ -591,7 +590,6 @@ func eventFormForCorrection(event domain.AssetEvent) eventFormData {
 		form.FXRate = formatRate(event.FX.RateScaled)
 		form.FXRateDate = event.FX.RateDate.Format("2006-01-02")
 		form.FXRateSource = event.FX.RateSource
-		form.FXConfirmed = true
 	}
 	form.Currency = currency
 	form.Amount = strings.TrimSuffix(domain.FormatMinor(amountMinor, currency), " "+currency)
@@ -688,7 +686,6 @@ func eventFormFromRequest(r *http.Request, baseCurrency, nowValue string) eventF
 	form.FXRate = r.FormValue("fx_rate")
 	form.FXRateDate = r.FormValue("fx_rate_date")
 	form.FXRateSource = r.FormValue("fx_rate_source")
-	form.FXConfirmed = r.FormValue("fx_confirmed") == "on"
 	form.Notes = r.FormValue("notes")
 	return form
 }
@@ -742,7 +739,7 @@ func (s *Server) recordEventFromForm(r *http.Request, principal application.Prin
 			return application.RecordEvent{}, err
 		}
 		cmd.FXRateSource = r.FormValue("fx_rate_source")
-		cmd.FXConfirmed = r.FormValue("fx_confirmed") == "on"
+		cmd.FXConfirmed = true
 	}
 	return cmd, nil
 }

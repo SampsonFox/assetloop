@@ -633,7 +633,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以物品记录为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-summary"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以物品记录为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-summary"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -648,7 +648,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if regexp.MustCompile(`<form[^>]+action="/assets/` + regexp.QuoteMeta(match[1]) + `/events"`).MatchString(visibleDetail) {
 		t.Fatalf("lifecycle create form must not be rendered in the page flow: %s", visibleDetail)
 	}
-	if strings.Count(detail.Body.String(), `data-fx-field hidden`) != 4 {
+	if strings.Count(detail.Body.String(), `data-fx-field hidden`) != 3 || strings.Contains(detail.Body.String(), `name="fx_confirmed"`) {
 		t.Fatalf("same-currency event form should initially hide all FX controls: %s", detail.Body.String())
 	}
 	createEventType := request(t, handler, http.MethodPost, "/admin/event-types", url.Values{
@@ -670,26 +670,25 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 
-	unconfirmedFX := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
+	missingFX := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
 		"csrf_token": {csrf.Value}, "event_type": {"purchase"}, "amount": {"1000.00"}, "currency": {"USD"},
-		"fx_rate": {"7.12"}, "fx_rate_date": {"2026-08-01"}, "fx_rate_source": {"web-fixture"},
 		"occurred_at": {"2026-08-01T10:00"}, "source": {"manual"},
 	}, []*http.Cookie{ownerSession, csrf})
-	if unconfirmedFX.Code != http.StatusUnprocessableEntity || !strings.Contains(unconfirmedFX.Body.String(), "必须确认汇率换算") {
-		t.Fatalf("unconfirmed FX should be rejected: status=%d body=%s", unconfirmedFX.Code, unconfirmedFX.Body.String())
+	if missingFX.Code != http.StatusUnprocessableEntity || !strings.Contains(missingFX.Body.String(), "汇率格式无效") {
+		t.Fatalf("foreign currency without FX evidence should be rejected: status=%d body=%s", missingFX.Code, missingFX.Body.String())
 	}
-	for _, want := range []string{`value="1000.00"`, `<option selected>USD</option>`, `value="7.12"`, `value="2026-08-01"`, `value="web-fixture"`, `value="2026-08-01T10:00"`} {
-		if !strings.Contains(unconfirmedFX.Body.String(), want) {
-			t.Fatalf("rejected event form must retain %q: %s", want, unconfirmedFX.Body.String())
+	for _, want := range []string{`value="1000.00"`, `name="currency" value="USD"`, `value="2026-08-01T10:00"`} {
+		if !strings.Contains(missingFX.Body.String(), want) {
+			t.Fatalf("rejected event form must retain %q: %s", want, missingFX.Body.String())
 		}
 	}
 	purchase := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
 		"csrf_token": {csrf.Value}, "event_type": {"purchase"}, "amount": {"1000.00"}, "currency": {"USD"},
-		"fx_rate": {"7.12"}, "fx_rate_date": {"2026-08-01"}, "fx_rate_source": {"web-fixture"}, "fx_confirmed": {"on"},
+		"fx_rate": {"7.12"}, "fx_rate_date": {"2026-08-01"}, "fx_rate_source": {"web-fixture"},
 		"occurred_at": {"2026-08-01T10:00"}, "source": {"manual"}, "external_reference": {"ORDER-WEB-001"}, "notes": {"美元买入"},
 	}, []*http.Cookie{ownerSession, csrf})
 	if purchase.Code != http.StatusSeeOther {
-		t.Fatalf("record purchase: status=%d body=%s", purchase.Code, purchase.Body.String())
+		t.Fatalf("record purchase without redundant FX confirmation: status=%d body=%s", purchase.Code, purchase.Body.String())
 	}
 	maintenance := request(t, handler, http.MethodPost, "/assets/"+match[1]+"/events", url.Values{
 		"csrf_token": {csrf.Value}, "event_type": {"保养"}, "amount": {"0"}, "currency": {"CNY"},
@@ -710,6 +709,15 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if len(correctionLinks) != 3 {
 		t.Fatalf("expected purchase, custom, and repair correction links: %s", detail.Body.String())
 	}
+	correctionForm := request(t, handler, http.MethodGet, "/events/"+correctionLinks[2][1]+"/correct", nil, []*http.Cookie{ownerSession, csrf})
+	for _, want := range []string{`class="money-input-group"`, `class="currency-suffix"`, `list="correction-currencies"`, `aria-label="原始货币"`} {
+		if correctionForm.Code != http.StatusOK || !strings.Contains(correctionForm.Body.String(), want) {
+			t.Fatalf("correction money input missing %q: status=%d body=%s", want, correctionForm.Code, correctionForm.Body.String())
+		}
+	}
+	if strings.Contains(correctionForm.Body.String(), `name="fx_confirmed"`) {
+		t.Fatalf("correction form must not ask for redundant FX confirmation: %s", correctionForm.Body.String())
+	}
 	invalidCorrection := request(t, handler, http.MethodPost, "/events/"+correctionLinks[2][1]+"/correct", url.Values{
 		"csrf_token": {csrf.Value}, "amount": {"invalid"}, "currency": {"CNY"},
 		"occurred_at": {"2026-08-10T10:00"}, "source": {"manual-correction"}, "notes": {"保留这段更正说明"},
@@ -720,7 +728,8 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	corrected := request(t, handler, http.MethodPost, "/events/"+correctionLinks[2][1]+"/correct", url.Values{
-		"csrf_token": {csrf.Value}, "amount": {"150.00"}, "currency": {"CNY"},
+		"csrf_token": {csrf.Value}, "amount": {"20.00"}, "currency": {"USD"},
+		"fx_rate": {"7.5"}, "fx_rate_date": {"2026-08-10"}, "fx_rate_source": {"correction-fixture"},
 		"occurred_at": {"2026-08-10T10:00"}, "source": {"manual-correction"}, "notes": {"正确维修金额"},
 	}, []*http.Cookie{ownerSession, csrf})
 	if corrected.Code != http.StatusSeeOther {

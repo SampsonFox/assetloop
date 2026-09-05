@@ -158,8 +158,9 @@ Rates are stored as signed-safe fixed-point integers scaled by `100,000,000` and
 units per original major unit.” Conversion applies the ISO minor-unit exponent for both currencies
 and rounds once to the nearest base minor unit. Floating point is never used for persisted or
 calculated money. When the original currency equals the base currency, original amount/currency
-and FX evidence remain null; otherwise all evidence fields are mandatory. Web confirms them in its
-event form; the AI Harness confirms them in conversation before making a semantic MCP write.
+and FX evidence remain null; otherwise all evidence fields are mandatory. In Web, choosing a foreign
+currency and submitting its required rate evidence is the confirmation; the AI Harness confirms the
+same evidence in conversation before making a semantic MCP write.
 
 The first monetary record locks the tenant base currency. Changing it later requires a dedicated, audited migration operation, not a settings edit.
 

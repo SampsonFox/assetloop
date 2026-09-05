@@ -8,13 +8,18 @@
   <form class="form-grid section-gap" action="/events/{{$event.ID}}/correct" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="request_key" value="{{.EventForm.RequestKey}}">
-    <label>{{t $s "correct.amount"}}<input name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required></label>
-    <label>{{t $s "asset.original_currency"}}<select name="currency" required data-currency-select data-base-currency="{{.BaseCurrency}}"><option {{if eq .EventForm.Currency .BaseCurrency}}selected{{end}}>{{.BaseCurrency}}</option><option {{if eq .EventForm.Currency "USD"}}selected{{end}}>USD</option><option {{if eq .EventForm.Currency "EUR"}}selected{{end}}>EUR</option><option {{if eq .EventForm.Currency "GBP"}}selected{{end}}>GBP</option><option {{if eq .EventForm.Currency "HKD"}}selected{{end}}>HKD</option><option {{if eq .EventForm.Currency "AUD"}}selected{{end}}>AUD</option><option {{if eq .EventForm.Currency "CAD"}}selected{{end}}>CAD</option><option {{if eq .EventForm.Currency "SGD"}}selected{{end}}>SGD</option><option {{if eq .EventForm.Currency "TWD"}}selected{{end}}>TWD</option><option {{if eq .EventForm.Currency "JPY"}}selected{{end}}>JPY</option><option {{if eq .EventForm.Currency "KRW"}}selected{{end}}>KRW</option></select></label>
+    <div class="form-field">
+      <label for="correction-amount">{{t $s "correct.amount"}}</label>
+      <div class="money-input-group">
+        <input id="correction-amount" name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required>
+        <input class="currency-suffix" name="currency" value="{{.EventForm.Currency}}" list="correction-currencies" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" spellcheck="false" required data-currency-select data-base-currency="{{.BaseCurrency}}" aria-label="{{t $s "asset.original_currency"}}">
+        <datalist id="correction-currencies"><option value="CNY"></option><option value="USD"></option><option value="EUR"></option><option value="GBP"></option><option value="HKD"></option><option value="AUD"></option><option value="CAD"></option><option value="SGD"></option><option value="TWD"></option><option value="JPY"></option><option value="KRW"></option></datalist>
+      </div>
+    </div>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
     <label data-fx-field hidden>{{t $s "correct.fx_rate"}}<input name="fx_rate" value="{{.EventForm.FXRate}}" inputmode="decimal" placeholder="{{t $s "asset.fx_required"}}" data-fx-required></label>
     <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" value="{{.EventForm.FXRateDate}}" data-fx-required></label>
     <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" value="{{.EventForm.FXRateSource}}" data-fx-required></label>
-    <label class="check" data-fx-field hidden><input type="checkbox" name="fx_confirmed" data-fx-required {{if .EventForm.FXConfirmed}}checked{{end}}>{{t $s "correct.fx_confirm"}}</label>
     <label>{{t $s "correct.source"}}<input name="source" value="{{.EventForm.Source}}"></label>
     <label class="wide">{{t $s "correct.notes"}}<textarea name="notes" required maxlength="2000" rows="3">{{.EventForm.Notes}}</textarea></label>
     <button type="submit">{{t $s "correct.submit"}}</button>

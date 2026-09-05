@@ -19,7 +19,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, inline custom lifecycle event types, and FX confirmation screens |
+| `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, inline custom lifecycle event types, and progressively disclosed FX evidence forms |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
@@ -67,7 +67,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `internal/application/lifecycle_write.go`, both Store `lifecycle_write.go` adapters | transaction-bound lifecycle policy and durable tenant/user-scoped idempotency receipts |
 | `internal/store/storetest/lifecycle_safety.go`, `internal/web/lifecycle_retry_test.go` | concurrent mutations, independent-connection retries, receipt rollback, and Web form replay |
 | `internal/web/i18n.go` | registered locales, stable message keys, browser/cookie locale matching, and zh-CN fallback |
-| `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, FX confirmation, correction, import confirmation, totals, and role denial |
+| `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, progressive FX evidence, correction, import confirmation, totals, and role denial |
 | `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → catalog → foreign purchase → repair correction → sale scenario on both databases |
 
 ## Read paths by task
