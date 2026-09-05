@@ -30,7 +30,7 @@
   </div>
 </section>
 <section class="card section-gap" id="lifecycle-timeline">
-  <header class="timeline-heading"><h2>{{t $s "asset.timeline"}}</h2>{{if .CanManageLifecycle}}<button class="button auto" id="add-event" type="button" data-dialog-open="event-drawer" data-title="{{t $s "asset.add_event"}}" data-action="/assets/{{.Asset.ID}}/events" aria-controls="event-drawer"><span aria-hidden="true">＋</span>{{t $s "asset.add_event_short"}}</button>{{end}}</header>
+  <header class="timeline-heading"><h2>{{t $s "asset.timeline"}}</h2>{{if .CanManageLifecycle}}<button class="icon-button" id="add-event" type="button" data-dialog-open="event-drawer" data-title="{{t $s "asset.add_event"}}" data-action="/assets/{{.Asset.ID}}/events" aria-controls="event-drawer" aria-label="{{t $s "asset.add_event"}}" title="{{t $s "asset.add_event"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>{{end}}</header>
   <dl class="timeline-summary" aria-label="{{t $s "asset.cashflow_summary"}}">
     <div class="timeline-summary-item"><dt>{{t $s "overview.expense"}}</dt><dd>{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</dd></div>
     <div class="timeline-summary-item"><dt>{{t $s "asset.income"}}</dt><dd>{{money .Summary.IncomeMinor .Summary.BaseCurrency}}</dd></div>

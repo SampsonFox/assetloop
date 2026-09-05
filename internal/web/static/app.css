@@ -193,7 +193,6 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 #add-event { scroll-margin-top:24px; }
 .timeline-heading { margin-bottom:16px; }
 .timeline-heading h2 { margin:0; }
-.timeline-heading .button { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
 .timeline-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 0 14px; padding:10px 0; border-block:1px solid var(--line); }
 .timeline-summary-item { min-width:0; padding:2px 16px; }
 .timeline-summary-item + .timeline-summary-item { border-left:1px solid var(--line); }
