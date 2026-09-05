@@ -23,3 +23,22 @@ FINISH: Verify desktop/mobile, localization, inherited and overridden states, an
 - Resource pickers fetch paged search results on demand. Do not preload the full resource library.
 - Product color belongs to the specification; the resource table has no product color or capacity fields.
 - A saved item can choose a dedicated resource or restore inheritance. Creation first saves the item.
+
+## Built surface
+
+- `/admin/3d` ships a searchable library with 25 resources per page, an upload drawer, and upload-and-bind selection with explicit binding/inheritance context.
+- `/admin/3d/{id}` combines preview, shared attribution, reference links, reference-protected deletion, and deletion retry for pending resources.
+- Existing theme colors, typography, native controls, and drawers are retained; the resource table becomes labeled rows on narrow screens, and preview/edit content stacks vertically.
+
+## Validation notes
+
+Evidence below is reported by the parent task; this documentation pass inspected the templates and stylesheet without rerunning validation.
+
+- PASS: local Go packages (`cmd/...`, `internal/...`, `migrations/...`), reproducible sqlc hashes, and migration/full-element scenarios on both SQLite and PostgreSQL.
+- PASS: PostgreSQL Store conformance repeated three times, each including 12 cross-connection races; all five Node viewer-mechanics tests passed.
+- Manual checks at 1280×900 and 390×844 covered light/dark preview, keyboard rotation/zoom/reset, upload, binding, and unbinding without overflow.
+- Reduced motion, unavailable WebGL, and selected-model load failure were checked in automated VM tests; physical touch remains untested.
+- Mechanical detection is DEGRADED: regex results were `[]`, but the HTML parser was unavailable; computed contrast has not been proven.
+- The original SQLite database used by the local app was upgraded after a verified backup; no demo database was used. Temporary resource and asset override were removed; original asset fields, nine events, and six transactions matched the backup.
+- Specialized finish reviewer/documenter roles were unavailable; default substitutes were used. Independent finish review returned “ship” for the five-screenshot-and-samples scope, with no material fixes; this is not UAT or production approval.
+- Ignored review evidence in `.impeccable/review/`: `desktop.png`, `mobile.png`, `desktop-dark.png`, `library-desktop.png`, and `library-mobile.png`.
