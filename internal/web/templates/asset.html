@@ -37,7 +37,7 @@
     <div class="timeline-summary-item"><dt>{{t $s "overview.net"}} · {{statusLabel $s .Summary.Status}}</dt><dd class="net-value {{if gt .Summary.NetCashflowMinor 0}}is-positive{{else if lt .Summary.NetCashflowMinor 0}}is-negative{{end}}">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</dd></div>
   </dl>
   <form class="timeline-filters asset-search-shell" method="get" action="/assets/{{.Asset.ID}}#lifecycle-timeline">
-    <label class="asset-search"><span>{{t $s "asset.search_events"}}</span><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "asset.search_events_placeholder"}}"></label>
+    <div class="asset-search"><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "asset.search_events_placeholder"}}" aria-label="{{t $s "asset.search_events"}}"></div>
     <div class="asset-filter-actions">
       <button class="icon-button" type="submit" aria-label="{{t $s "assets.search"}}" title="{{t $s "assets.search"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></button>
       <details class="asset-filter-disclosure {{if .TableAdvanced}}has-active{{end}}">

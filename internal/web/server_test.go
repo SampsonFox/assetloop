@@ -274,7 +274,7 @@ func TestFXFieldsOnlyExpandForForeignCurrency(t *testing.T) {
 func TestLifecycleFormUsesResponsiveDrawerInteraction(t *testing.T) {
 	handler := newTestHandler(t)
 	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
-	for _, want := range []string{`.timeline-heading {`, `.timeline-filters .asset-search { flex:0 1 420px;`, `.timeline-filters.asset-search-shell { flex-direction:row; align-items:end; padding:0;`, `.timeline-filters.asset-search-shell .asset-search { flex:1 1 130px;`, `.event-drawer-panel { display:flex; flex-direction:column;`, `.event-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));`, `.drawer-footer {`} {
+	for _, want := range []string{`.timeline-heading {`, `.timeline-filters .asset-search { flex:0 1 360px;`, `.timeline-filters .asset-filter-disclosure summary { justify-content:center; gap:0;`, `.timeline-filters.asset-search-shell { flex-direction:row; align-items:end; padding:0;`, `.timeline-filters.asset-search-shell .asset-search { flex:1 1 130px;`, `.event-drawer-panel { display:flex; flex-direction:column;`, `.event-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));`, `.drawer-footer {`} {
 		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
 			t.Fatalf("lifecycle drawer style missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
 		}
@@ -735,12 +735,12 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("record Agent-confirmed sale: status=%d body=%s", sale.Code, sale.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, `class="timeline-filters asset-search-shell"`, `class="icon-button" type="submit" aria-label="搜索" title="搜索"`, `<circle cx="11" cy="11" r="6"/>`, `class="asset-filter-disclosure "`, `<summary class="icon-button" aria-label="更多筛选" title="更多筛选">`, `name="event_type"`, `name="sort"`, `name="show_voided"`, `data-auto-submit`, "显示已作废记录", "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "保养", "清洁并检查"} {
+	for _, want := range []string{`class="timeline-list"`, `class="timeline-item`, `class="timeline-filters asset-search-shell"`, `placeholder="搜索备注或汇率来源…" aria-label="搜索记录"`, `class="icon-button" type="submit" aria-label="搜索" title="搜索"`, `<circle cx="11" cy="11" r="6"/>`, `class="asset-filter-disclosure "`, `<summary class="icon-button" aria-label="更多筛选" title="更多筛选">`, `name="event_type"`, `name="sort"`, `name="show_voided"`, `data-auto-submit`, "显示已作废记录", "7270.00 CNY", "8000.00 CNY", "730.00 CNY", "已卖出", "1000.00 USD", "2026-08-01", "web-fixture", "正确维修金额", "保养", "清洁并检查"} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("lifecycle detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
 	}
-	if strings.Contains(detail.Body.String(), `>搜索</button>`) || strings.Contains(detail.Body.String(), `<span>更多筛选</span>`) {
+	if strings.Contains(detail.Body.String(), `<span>搜索记录</span>`) || strings.Contains(detail.Body.String(), `>搜索</button>`) || strings.Contains(detail.Body.String(), `<span>更多筛选</span>`) {
 		t.Fatalf("timeline search actions must remain icon-only: %s", detail.Body.String())
 	}
 	for _, unwanted := range []string{"初始维修金额", "作废并由更正记录替代", `<option value="void"`, `<span class="muted">已作废</span>`} {
