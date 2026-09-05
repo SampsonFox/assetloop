@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -37,16 +38,18 @@ type Options struct {
 	AuthMode          string
 	SecureCookies     bool
 	DisabledPrincipal application.Principal
+	ModelMedia        *application.ModelMediaService
 }
 
 type Server struct {
-	auth      *application.AuthService
-	catalog   *application.CatalogService
-	lifecycle *application.LifecycleService
-	db        Pinger
-	options   Options
-	templates map[string]*template.Template
-	limiter   *loginLimiter
+	auth       *application.AuthService
+	catalog    *application.CatalogService
+	lifecycle  *application.LifecycleService
+	modelMedia *application.ModelMediaService
+	db         Pinger
+	options    Options
+	templates  map[string]*template.Template
+	limiter    *loginLimiter
 }
 
 type pageData struct {
@@ -75,6 +78,7 @@ type pageData struct {
 	TotalNetMinor      int64
 	AssetView          string
 	CategoryIcons      []application.CategoryIconOption
+	Model3D            *domain.ProductModel3D
 }
 
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
@@ -93,7 +97,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		}
 		templates[page] = parsed
 	}
-	return &Server{auth: auth, catalog: catalog, lifecycle: lifecycle, db: db, options: options, templates: templates, limiter: newLoginLimiter(5, 5*time.Minute)}, nil
+	return &Server{auth: auth, catalog: catalog, lifecycle: lifecycle, modelMedia: options.ModelMedia, db: db, options: options, templates: templates, limiter: newLoginLimiter(5, 5*time.Minute)}, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -114,11 +118,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/catalog/categories/{id}", s.updateCategory)
 	mux.HandleFunc("POST /admin/catalog/models", s.createModel)
 	mux.HandleFunc("POST /admin/catalog/models/{id}", s.updateModel)
+	mux.HandleFunc("POST /admin/catalog/models/{id}/3d", s.updateModel3D)
 	mux.HandleFunc("POST /admin/catalog/variants", s.createVariant)
 	mux.HandleFunc("POST /admin/catalog/variants/{id}", s.updateVariant)
 	mux.HandleFunc("POST /assets", s.createAsset)
 	mux.HandleFunc("POST /assets/{id}", s.updateAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
+	mux.HandleFunc("GET /assets/{id}/model.glb", s.assetModel3D)
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
 	mux.HandleFunc("GET /events/{id}/correct", s.correctEventForm)
 	mux.HandleFunc("POST /events/{id}/correct", s.correctEvent)
@@ -129,6 +135,73 @@ func (s *Server) Handler() http.Handler {
 	staticFS, _ := fs.Sub(assets, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 	return securityHeaders(mux)
+}
+
+func (s *Server) updateModel3D(w http.ResponseWriter, r *http.Request) {
+	if s.modelMedia == nil {
+		s.renderError(w, http.StatusServiceUnavailable, errors.New("3D 模型存储未配置"))
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, application.MaxProductModel3DBytes+(1<<20))
+	if err := r.ParseMultipartForm(application.MaxProductModel3DBytes); err != nil {
+		s.renderError(w, http.StatusRequestEntityTooLarge, errors.New("上传内容超过 25 MiB"))
+		return
+	}
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	var file []byte
+	part, _, err := r.FormFile("model_3d")
+	if err == nil {
+		defer part.Close()
+		file, err = io.ReadAll(io.LimitReader(part, application.MaxProductModel3DBytes+1))
+		if err == nil && int64(len(file)) > application.MaxProductModel3DBytes {
+			err = errors.New("GLB 文件超过 25 MiB")
+		}
+	} else if !errors.Is(err, http.ErrMissingFile) {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	if err == nil {
+		_, err = s.modelMedia.Update(r.Context(), principal, application.UpdateProductModel3D{ModelID: r.PathValue("id"), File: file, SourceURL: r.FormValue("model_3d_source_url"), Author: r.FormValue("model_3d_author"), License: r.FormValue("model_3d_license")})
+	}
+	if err != nil {
+		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+}
+
+func (s *Server) assetModel3D(w http.ResponseWriter, r *http.Request) {
+	if s.modelMedia == nil {
+		http.NotFound(w, r)
+		return
+	}
+	principal, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	opened, err := s.modelMedia.OpenForAsset(r.Context(), principal, r.PathValue("id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer opened.Reader.Close()
+	etag := `"sha256-` + opened.Model.SHA256 + `"`
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	if r.Header.Get("If-None-Match") == etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.Header().Set("Content-Type", "model/gltf-binary")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", opened.Info.Size))
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, opened.Reader)
 }
 
 func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
@@ -490,12 +563,19 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		s.renderError(w, http.StatusInternalServerError, err)
 		return
 	}
+	var model3D *domain.ProductModel3D
+	if s.modelMedia != nil {
+		if media, mediaErr := s.modelMedia.GetForModel(r.Context(), principal, asset.ModelID); mediaErr == nil {
+			model3D = &media
+		}
+	}
 	s.render(w, status, "asset", pageData{
 		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message,
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: events,
 		Summary: summary, BaseCurrency: summary.BaseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           time.Now().Local().Format("2006-01-02T15:04"),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
+		Model3D:            model3D,
 	})
 }
 

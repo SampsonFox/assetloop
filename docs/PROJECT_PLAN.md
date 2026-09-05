@@ -1,7 +1,7 @@
 # AssetLoop / 物迹 项目计划
 
-状态：阶段 1、2A、2B、2C 已完成并通过双数据库自动化测试、UAT 打包验证和 SQLite 发布包手工全生命周期验收；下一阶段为附件系统
-最后更新：2026-09-01
+状态：阶段 1、2A、2B、2C 已完成；产品型号 3D 展示作为阶段 2B 增量实现，通用附件系统仍为下一阶段
+最后更新：2026-09-05
 
 本文只管理产品范围和实施阶段。非协商边界以 `../AGENTS.md` 为准，系统结构以 `ARCHITECTURE.md` 为准，当前路径导航以 `../CODEMAP.md` 为准。
 
@@ -36,6 +36,7 @@ Web 的主要用户入口是具体物品列表。类别、型号、价格规格�
 - 本地账号登录、租户成员和 Owner/Editor/Viewer 权限。
 - 面向 AI Harness 的语义化 MCP 工具。
 - SQLite/PostgreSQL、Local/OSS 的兼容层。
+- 型号级单一 GLB 的手工维护与物品详情交互展示。
 - 跨平台单二进制发布。
 
 ### 2.2 第一阶段不包含
@@ -82,6 +83,8 @@ SQLite PG   Local OSS    OneBound Other
 - MCP：Go MCP SDK，提供业务语义工具。
 
 不引入运行时 ORM、React、Node 构建链或微服务拆分。
+
+产品 3D 查看使用随二进制静态打包的同版本 Three.js、GLTFLoader 和 OrbitControls，不依赖 CDN 或部署时 Node 环境。
 
 ### 4.2 分发
 
@@ -285,6 +288,7 @@ AliyunOSSBlobStore
 ```text
 tenants/{tenant_id}/attachments/{yyyy}/{mm}/{attachment_id}/original.{ext}
 tenants/{tenant_id}/attachments/{yyyy}/{mm}/{attachment_id}/thumbnail.webp
+tenants/{tenant_id}/models/{product_model_id}/{sha256}.glb
 ```
 
 同一个对象键可以映射为：
@@ -540,8 +544,10 @@ docs/
 - 首页具体物品列表、列表/卡片视图、空状态、共享新建/编辑抽屉和详情页面。
 - 独立的类别、型号、规格管理页面；Viewer 不接收管理入口或表单。
 - SQLite/PostgreSQL Store 一致性和升级测试。
+- 型号可手工绑定一个当前 GLB；具体物品详情页支持旋转、缩放和重置视角，无模型或加载失败时回退类别图标。
+- GLB 来源 URL、作者和许可证作为描述信息保存；本期不含自动搜索、AI 建模、审批、版本目录、AR 或 MCP 上传。
 
-验收：用户可以在 Web 中建立类别、型号、不同价格规格及其下的具体物品，并保持完整租户隔离。
+验收：用户可以在 Web 中建立类别、型号、不同价格规格及其下的具体物品，并保持完整租户隔离；Owner/Editor 可维护型号 GLB，所有可读角色可在物品详情查看。
 
 ### 阶段 2C：核心资产生命周期
 
@@ -556,6 +562,7 @@ docs/
 
 ### 阶段 3：附件系统
 
+- 状态：BlobStore、Store Registry、共享 ObjectKeyMapper、Local 与 Aliyun OSS 适配器已由型号 3D 媒体切片先行落地；通用附件元数据与迁移命令待完成。
 - 实现统一 ObjectKeyMapper。
 - 实现 LocalBlobStore。
 - 实现 AliyunOSSBlobStore。

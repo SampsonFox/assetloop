@@ -79,11 +79,19 @@ type ItemCategory struct {
 }
 
 type ProductModel struct {
-	ID         string
-	TenantID   string
-	CategoryID string
-	Name       string
-	CreatedAt  string
+	ID               string
+	TenantID         string
+	CategoryID       string
+	Name             string
+	CreatedAt        string
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullString
 }
 
 type ProductVariant struct {

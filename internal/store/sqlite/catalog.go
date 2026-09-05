@@ -87,12 +87,61 @@ func (s *Store) ListModels(ctx context.Context, tenantID string) ([]domain.Produ
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, domain.ProductModel{
+		model := domain.ProductModel{
 			ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID,
 			CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: createdAt,
-		})
+		}
+		model.Model3D, err = sqliteModel3D(row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, model)
 	}
 	return result, nil
+}
+
+func (s *Store) GetProductModel(ctx context.Context, tenantID, modelID string) (domain.ProductModel, error) {
+	row, err := sqlitedb.New(s.db).GetProductModel(ctx, sqlitedb.GetProductModelParams{TenantID: tenantID, ID: modelID})
+	if err != nil {
+		return domain.ProductModel{}, err
+	}
+	createdAt, err := parseCatalogTime(row.CreatedAt)
+	if err != nil {
+		return domain.ProductModel{}, err
+	}
+	media, err := sqliteModel3D(row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
+	if err != nil {
+		return domain.ProductModel{}, err
+	}
+	return domain.ProductModel{ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID, CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: createdAt, Model3D: media}, nil
+}
+
+func (s *Store) UpdateProductModel3D(ctx context.Context, tenantID, modelID string, media domain.ProductModel3D) error {
+	count, err := sqlitedb.New(s.db).UpdateProductModel3D(ctx, sqlitedb.UpdateProductModel3DParams{
+		Model3dStoreID: nullString(media.StoreID), Model3dObjectKey: nullString(media.ObjectKey), Model3dSha256: nullString(media.SHA256),
+		Model3dSizeBytes: sql.NullInt64{Int64: media.SizeBytes, Valid: media.SizeBytes > 0}, Model3dSourceUrl: nullString(media.SourceURL),
+		Model3dAuthor: nullString(media.Author), Model3dLicense: nullString(media.License), Model3dUpdatedAt: nullString(sqliteTime(media.UpdatedAt)), TenantID: tenantID, ID: modelID,
+	})
+	return updatedRow(count, err)
+}
+
+func sqliteModel3D(storeID, objectKey, sha sql.NullString, size sql.NullInt64, source, author, license, updated sql.NullString) (*domain.ProductModel3D, error) {
+	if !storeID.Valid || !objectKey.Valid || !sha.Valid || !size.Valid {
+		return nil, nil
+	}
+	updatedAt := time.Time{}
+	var err error
+	if updated.Valid {
+		updatedAt, err = parseCatalogTime(updated.String)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &domain.ProductModel3D{StoreID: storeID.String, ObjectKey: objectKey.String, SHA256: sha.String, SizeBytes: size.Int64, SourceURL: source.String, Author: author.String, License: license.String, UpdatedAt: updatedAt}, nil
+}
+
+func nullString(value string) sql.NullString {
+	return sql.NullString{String: value, Valid: value != ""}
 }
 
 func (s *Store) ListVariants(ctx context.Context, tenantID string) ([]domain.ProductVariant, error) {

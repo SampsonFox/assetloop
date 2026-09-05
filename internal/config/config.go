@@ -14,22 +14,35 @@ type Database struct {
 	DSN    string
 }
 
+type Blob struct {
+	DefaultStore string
+	LocalRoot    string
+	OSS          OSS
+}
+
+type OSS struct{ Endpoint, Region, Bucket, AccessKeyID, AccessKeySecret, PathPrefix string }
+
 type Config struct {
 	Environment string
 	HTTPAddr    string
 	LogLevel    string
 	AuthMode    string
 	Database    Database
+	Blob        Blob
 }
 
 func Load(dotenvPath string) (Config, error) {
 	values := map[string]string{
-		"APP_ENV":   "local",
-		"HTTP_ADDR": "127.0.0.1:8080",
-		"LOG_LEVEL": "info",
-		"AUTH_MODE": "local",
-		"DB_DRIVER": "sqlite",
-		"DB_DSN":    "./data/assetloop.db",
+		"APP_ENV":                  "local",
+		"HTTP_ADDR":                "127.0.0.1:8080",
+		"LOG_LEVEL":                "info",
+		"AUTH_MODE":                "local",
+		"DB_DRIVER":                "sqlite",
+		"DB_DSN":                   "./data/assetloop.db",
+		"ATTACHMENT_DEFAULT_STORE": "local",
+		"ATTACHMENT_LOCAL_ROOT":    "./data/blobs",
+		"ALIYUN_OSS_ENDPOINT":      "", "ALIYUN_OSS_REGION": "", "ALIYUN_OSS_BUCKET": "",
+		"ALIYUN_OSS_ACCESS_KEY_ID": "", "ALIYUN_OSS_ACCESS_KEY_SECRET": "", "ALIYUN_OSS_PATH_PREFIX": "",
 	}
 	if err := loadDotenv(dotenvPath, values); err != nil {
 		return Config{}, err
@@ -57,6 +70,20 @@ func Load(dotenvPath string) (Config, error) {
 	if authMode == "disabled" && !isLoopbackAddress(values["HTTP_ADDR"]) {
 		return Config{}, errors.New("AUTH_MODE=disabled requires a loopback HTTP_ADDR")
 	}
+	defaultStore := strings.ToLower(strings.TrimSpace(values["ATTACHMENT_DEFAULT_STORE"]))
+	if defaultStore != "local" && defaultStore != "aliyun" {
+		return Config{}, errors.New("ATTACHMENT_DEFAULT_STORE must be local or aliyun")
+	}
+	if strings.TrimSpace(values["ATTACHMENT_LOCAL_ROOT"]) == "" {
+		return Config{}, errors.New("ATTACHMENT_LOCAL_ROOT must not be empty")
+	}
+	if defaultStore == "aliyun" {
+		for _, key := range []string{"ALIYUN_OSS_REGION", "ALIYUN_OSS_BUCKET", "ALIYUN_OSS_ACCESS_KEY_ID", "ALIYUN_OSS_ACCESS_KEY_SECRET"} {
+			if strings.TrimSpace(values[key]) == "" {
+				return Config{}, fmt.Errorf("%s is required for Aliyun OSS", key)
+			}
+		}
+	}
 
 	return Config{
 		Environment: values["APP_ENV"],
@@ -67,6 +94,7 @@ func Load(dotenvPath string) (Config, error) {
 			Driver: driver,
 			DSN:    values["DB_DSN"],
 		},
+		Blob: Blob{DefaultStore: defaultStore, LocalRoot: values["ATTACHMENT_LOCAL_ROOT"], OSS: OSS{Endpoint: values["ALIYUN_OSS_ENDPOINT"], Region: values["ALIYUN_OSS_REGION"], Bucket: values["ALIYUN_OSS_BUCKET"], AccessKeyID: values["ALIYUN_OSS_ACCESS_KEY_ID"], AccessKeySecret: values["ALIYUN_OSS_ACCESS_KEY_SECRET"], PathPrefix: values["ALIYUN_OSS_PATH_PREFIX"]}},
 	}, nil
 }
 

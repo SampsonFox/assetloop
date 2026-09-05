@@ -76,11 +76,26 @@ WHERE tenant_id = ?
 ORDER BY name, id;
 
 -- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
 FROM product_models m
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = ?
 ORDER BY c.name, m.name, m.id;
+
+-- name: GetProductModel :one
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
+FROM product_models m
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = ? AND m.id = ?;
+
+-- name: UpdateProductModel3D :execrows
+UPDATE product_models SET model_3d_store_id = ?, model_3d_object_key = ?, model_3d_sha256 = ?,
+ model_3d_size_bytes = ?, model_3d_source_url = ?, model_3d_author = ?, model_3d_license = ?, model_3d_updated_at = ?
+WHERE tenant_id = ? AND id = ?;
 
 -- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,

@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only lifecycle vertical slices are implemented. Attachment, market, MCP, and scheduler paths continue as later slices.
+Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. General attachments, market, MCP, and scheduler paths continue as later slices.
 
 ## Authority map
 
@@ -19,10 +19,10 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
-| `internal/web/` | HTTP transport; asset-list-first SSR UI, management drawers and category-icon sprite; auth/member, lifecycle, FX confirmation, and import review screens |
+| `internal/web/` | HTTP transport; asset-list-first SSR UI, product-model GLB viewer/upload, management drawers, auth/member, lifecycle, FX confirmation, and import review screens |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
-| `internal/application/` | Authentication, catalog, lifecycle/import use cases, validation, and inward ports |
+| `internal/application/` | Authentication, catalog, model-media, lifecycle/import use cases, validation, and inward ports |
 | `internal/domain/` | Pure catalog/lifecycle types plus exact minor-unit money and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
 | `.github/workflows/ci.yml` | Pull-request and branch validation, including full-history secret scanning |
@@ -37,6 +37,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `internal/store/postgres/` | PostgreSQL Store and committed sqlc output | application ports, domain |
 | `internal/blob/local/` | Local filesystem BlobStore | blob port |
 | `internal/blob/aliyun/` | Aliyun OSS BlobStore | blob port, Aliyun SDK |
+| `internal/blob/key_mapper.go` | Shared tenant-scoped logical object keys | application key-mapper port |
 | `internal/market/onebound/` | OneBound request/response adapter | market port |
 | `internal/market/manual/` | Manual/imported market observations | market port |
 | `migrations/sqlite/` | SQLite forward migrations | none |
@@ -54,6 +55,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `AuthStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `CatalogStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `LifecycleStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
+| `ModelMediaStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 
 ## Regression spine
 
@@ -63,7 +65,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `internal/store/storetest/` | shared dual-database auth/catalog/lifecycle behavior, FX evidence, append-only correction, locks, and tenant isolation |
 | `internal/store/migration_upgrade_test.go` | previous-schema upgrade without data loss |
 | `internal/web/*_test.go` | auth, CSRF, asset-list empty/list/card states, management separation, shared drawers, catalog, non-base FX confirmation, correction, import confirmation, totals, and role denial |
-| `internal/integration/full_element_test.go` | cumulative auth → catalog → foreign purchase → repair correction → sale scenario on both databases |
+| `internal/integration/full_element_test.go` | cumulative auth → catalog → GLB upload/read → foreign purchase → repair correction → sale scenario on both databases |
 
 ## Read paths by task
 
@@ -74,6 +76,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | Change asset catalog | `internal/application/catalog.go` | domain asset types, both catalog adapters, Web catalog templates |
 | Add database field | both migration directories | both sqlc query directories, Store conformance tests |
 | Add attachment behavior | blob port and key mapper | local and Aliyun adapters, attachment application service |
+| Change product 3D media | `internal/application/model_media.go` | Blob adapters, both Store mappings, Web asset/catalog templates |
 | Add market provider | market port | provider adapter plus shared normalization pipeline |
 | Change MCP tool | `internal/mcp/` | called application service; never inspect Store unless service contract changes |
 | Change Web screen | `internal/web/server.go` | affected template under `templates/`, then `static/app.css` or local `static/app.js`; called application service only when behavior changes |
@@ -97,6 +100,10 @@ Scheduler/CLI -> refresh use case -> MarketDataProvider
 Attachment read:
 Web/MCP -> attachment use case -> attachment metadata Store
         -> store registry by store_id -> BlobStore.Open(object_key)
+
+Product model media:
+Admin Web -> ModelMediaService -> BlobStore.Put + model metadata Store
+Asset detail -> ModelMediaService -> registry[store_id] -> BlobStore.Open
 ```
 
 ## Maintenance rule

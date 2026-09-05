@@ -3,6 +3,18 @@
   <div><p class="eyebrow">具体物品</p><h1>{{.Asset.DisplayName}}</h1></div>
 	<a href="/">返回物品列表</a>
 </div>
+<figure class="asset-product-visual{{if .Model3D}} has-model{{end}}"{{if .Model3D}} data-model-viewer data-model-url="/assets/{{.Asset.ID}}/model.glb"{{end}}>
+  <div class="asset-model-fallback" data-model-fallback>
+    <svg class="category-icon product-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>
+    <p>{{.Asset.Model}} · {{.Asset.Variant}}</p>
+  </div>
+  {{if .Model3D}}
+  <canvas class="asset-model-canvas" data-model-canvas aria-label="{{.Asset.Model}} 三维模型，可拖动旋转并滚动缩放" tabindex="0"></canvas>
+  <div class="asset-model-status" data-model-status role="status">正在载入 3D 模型…</div>
+  <div class="asset-model-controls"><span>拖动旋转 · 滚轮或双指缩放</span><button class="secondary auto" type="button" data-model-reset>重置视角</button></div>
+  <script type="module" src="/static/asset-model-viewer.js"></script>
+  {{end}}
+</figure>
 <section class="two-column">
   <article class="card">
     <h2>归属规格</h2>

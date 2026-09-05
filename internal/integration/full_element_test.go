@@ -1,10 +1,13 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,6 +16,8 @@ import (
 	"time"
 
 	"github.com/SampsonFox/assetloop/internal/application"
+	"github.com/SampsonFox/assetloop/internal/blob"
+	localblob "github.com/SampsonFox/assetloop/internal/blob/local"
 	"github.com/SampsonFox/assetloop/internal/config"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	basestore "github.com/SampsonFox/assetloop/internal/store"
@@ -25,6 +30,7 @@ type scenarioStore interface {
 	application.AuthStore
 	application.CatalogStore
 	application.LifecycleStore
+	application.ModelMediaStore
 }
 
 func TestFullElementScenario(t *testing.T) {
@@ -111,6 +117,28 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, application.CreateCategory{Name: "禁止写入"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer should not mutate catalog, got %v", err)
 	}
+	localStore, err := localblob.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelMedia := application.NewModelMediaService(store, blob.Registry{"local": localStore}, blob.ObjectKeyMapper{}, "local")
+	glb := fullElementGLB()
+	media, err := modelMedia.Update(ctx, owner, application.UpdateProductModel3D{ModelID: model.ID, File: glb, SourceURL: "https://example.com/source", License: "CC0"})
+	if err != nil {
+		t.Fatalf("upload product model GLB: %v", err)
+	}
+	if !strings.Contains(media.ObjectKey, "tenants/"+owner.TenantID+"/models/"+model.ID+"/") {
+		t.Fatalf("unexpected model object key: %q", media.ObjectKey)
+	}
+	opened, err := modelMedia.OpenForAsset(ctx, viewerSession.Principal, asset.ID)
+	if err != nil {
+		t.Fatalf("viewer open product model GLB: %v", err)
+	}
+	modelBytes, _ := io.ReadAll(opened.Reader)
+	_ = opened.Reader.Close()
+	if !bytes.Equal(modelBytes, glb) {
+		t.Fatal("resolved model GLB differs")
+	}
 
 	lifecycle := application.NewLifecycleService(store)
 	purchaseDraft, err := lifecycle.CreateDraft(ctx, owner, application.CreateImportDraft{
@@ -171,6 +199,21 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if auditCount < 4 {
 		t.Fatalf("expected setup, two membership and login audit events, got %d", auditCount)
 	}
+}
+
+func fullElementGLB() []byte {
+	jsonData := []byte(`{"asset":{"version":"2.0"}}`)
+	for len(jsonData)%4 != 0 {
+		jsonData = append(jsonData, ' ')
+	}
+	data := make([]byte, 20+len(jsonData))
+	copy(data, "glTF")
+	binary.LittleEndian.PutUint32(data[4:], 2)
+	binary.LittleEndian.PutUint32(data[8:], uint32(len(data)))
+	binary.LittleEndian.PutUint32(data[12:], uint32(len(jsonData)))
+	binary.LittleEndian.PutUint32(data[16:], 0x4e4f534a)
+	copy(data[20:], jsonData)
+	return data
 }
 
 func openAndMigrate(t *testing.T, cfg config.Database) *sql.DB {

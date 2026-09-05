@@ -758,6 +758,61 @@ func (q *Queries) GetImportDraft(ctx context.Context, arg GetImportDraftParams) 
 	return i, err
 }
 
+const getProductModel = `-- name: GetProductModel :one
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
+FROM product_models m
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = $1 AND m.id = $2
+`
+
+type GetProductModelParams struct {
+	TenantID uuid.UUID
+	ID       uuid.UUID
+}
+
+type GetProductModelRow struct {
+	ID               uuid.UUID
+	TenantID         uuid.UUID
+	CategoryID       uuid.UUID
+	CategoryName     string
+	CategoryIcon     string
+	Name             string
+	CreatedAt        time.Time
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullTime
+}
+
+func (q *Queries) GetProductModel(ctx context.Context, arg GetProductModelParams) (GetProductModelRow, error) {
+	row := q.db.QueryRowContext(ctx, getProductModel, arg.TenantID, arg.ID)
+	var i GetProductModelRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.CategoryID,
+		&i.CategoryName,
+		&i.CategoryIcon,
+		&i.Name,
+		&i.CreatedAt,
+		&i.Model3dStoreID,
+		&i.Model3dObjectKey,
+		&i.Model3dSha256,
+		&i.Model3dSizeBytes,
+		&i.Model3dSourceUrl,
+		&i.Model3dAuthor,
+		&i.Model3dLicense,
+		&i.Model3dUpdatedAt,
+	)
+	return i, err
+}
+
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
 SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
 FROM sessions s
@@ -1055,7 +1110,9 @@ func (q *Queries) ListMembers(ctx context.Context, tenantID uuid.UUID) ([]ListMe
 }
 
 const listModels = `-- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
 FROM product_models m
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1
@@ -1063,13 +1120,21 @@ ORDER BY c.name, m.name, m.id
 `
 
 type ListModelsRow struct {
-	ID           uuid.UUID
-	TenantID     uuid.UUID
-	CategoryID   uuid.UUID
-	CategoryName string
-	CategoryIcon string
-	Name         string
-	CreatedAt    time.Time
+	ID               uuid.UUID
+	TenantID         uuid.UUID
+	CategoryID       uuid.UUID
+	CategoryName     string
+	CategoryIcon     string
+	Name             string
+	CreatedAt        time.Time
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullTime
 }
 
 func (q *Queries) ListModels(ctx context.Context, tenantID uuid.UUID) ([]ListModelsRow, error) {
@@ -1089,6 +1154,14 @@ func (q *Queries) ListModels(ctx context.Context, tenantID uuid.UUID) ([]ListMod
 			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
+			&i.Model3dStoreID,
+			&i.Model3dObjectKey,
+			&i.Model3dSha256,
+			&i.Model3dSizeBytes,
+			&i.Model3dSourceUrl,
+			&i.Model3dAuthor,
+			&i.Model3dLicense,
+			&i.Model3dUpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1299,6 +1372,44 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (int64
 	result, err := q.db.ExecContext(ctx, updateModel,
 		arg.CategoryID,
 		arg.Name,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateProductModel3D = `-- name: UpdateProductModel3D :execrows
+UPDATE product_models SET model_3d_store_id = $1, model_3d_object_key = $2, model_3d_sha256 = $3,
+ model_3d_size_bytes = $4, model_3d_source_url = $5, model_3d_author = $6, model_3d_license = $7, model_3d_updated_at = $8
+WHERE tenant_id = $9 AND id = $10
+`
+
+type UpdateProductModel3DParams struct {
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullTime
+	TenantID         uuid.UUID
+	ID               uuid.UUID
+}
+
+func (q *Queries) UpdateProductModel3D(ctx context.Context, arg UpdateProductModel3DParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateProductModel3D,
+		arg.Model3dStoreID,
+		arg.Model3dObjectKey,
+		arg.Model3dSha256,
+		arg.Model3dSizeBytes,
+		arg.Model3dSourceUrl,
+		arg.Model3dAuthor,
+		arg.Model3dLicense,
+		arg.Model3dUpdatedAt,
 		arg.TenantID,
 		arg.ID,
 	)

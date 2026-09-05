@@ -16,6 +16,7 @@ type Store interface {
 	application.AuthStore
 	application.CatalogStore
 	application.LifecycleStore
+	application.ModelMediaStore
 }
 
 func Run(t *testing.T, store Store) {
@@ -168,6 +169,14 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
+	media := domain.ProductModel3D{StoreID: "local", ObjectKey: "tenants/" + owner.TenantID + "/models/" + model.ID + "/hash.glb", SHA256: "hash", SizeBytes: 42, SourceURL: "https://example.com/model", Author: "Author", License: "CC0", UpdatedAt: time.Now().UTC().Truncate(time.Microsecond)}
+	if err := store.UpdateProductModel3D(ctx, owner.TenantID, model.ID, media); err != nil {
+		t.Fatalf("bind model media: %v", err)
+	}
+	gotModel, err := store.GetProductModel(ctx, owner.TenantID, model.ID)
+	if err != nil || gotModel.Model3D == nil || gotModel.Model3D.ObjectKey != media.ObjectKey {
+		t.Fatalf("get model media: model=%+v err=%v", gotModel, err)
+	}
 	variant256, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB"})
 	if err != nil {
 		t.Fatalf("create 256GB variant: %v", err)
@@ -205,6 +214,9 @@ func runCatalog(t *testing.T, store Store) {
 	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 2 || len(snapshot.Assets) != 1 {
 		t.Fatalf("unexpected catalog counts: categories=%d models=%d variants=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Variants), len(snapshot.Assets))
 	}
+	if snapshot.Models[0].Model3D == nil || snapshot.Models[0].Model3D.SHA256 != "hash" {
+		t.Fatalf("snapshot omitted model media: %+v", snapshot.Models[0])
+	}
 	viewer := owner
 	viewer.Role = application.RoleViewer
 	if _, err := service.CreateCategory(ctx, viewer, application.CreateCategory{Name: "Forbidden"}); !errors.Is(err, application.ErrForbidden) {
@@ -218,6 +230,9 @@ func runCatalog(t *testing.T, store Store) {
 	}
 	foreign := owner
 	foreign.TenantID = "99999999-9999-4999-8999-999999999999"
+	if _, err := store.GetProductModel(ctx, foreign.TenantID, model.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("cross-tenant model read should be hidden, got %v", err)
+	}
 	if _, err := service.GetAsset(ctx, foreign, asset.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("cross-tenant catalog read should be hidden, got %v", err)
 	}
@@ -230,7 +245,7 @@ func runAsset(t *testing.T, store application.Store) {
 		ID: "11111111-1111-4111-8111-111111111111", TenantID: "22222222-2222-4222-8222-222222222222",
 		CategoryID: "33333333-3333-4333-8333-333333333333", Category: "Phone",
 		CategoryIcon: "package",
-		ModelID: "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
+		ModelID:      "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
 		VariantID: "55555555-5555-4555-8555-555555555555", Variant: "256GB",
 		DisplayName: "My Example Phone", CreatedAt: time.Date(2026, 9, 1, 1, 2, 3, 0, time.UTC),
 	}

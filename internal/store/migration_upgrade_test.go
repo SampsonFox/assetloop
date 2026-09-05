@@ -73,6 +73,13 @@ func runUpgradeTest(t *testing.T, cfg config.Database) {
 	if iconKey != "package" {
 		t.Fatalf("existing category should receive safe default icon, got %q", iconKey)
 	}
+	var modelMediaFields int
+	if err := db.QueryRow("SELECT (CASE WHEN model_3d_store_id IS NULL THEN 1 ELSE 0 END) + (CASE WHEN model_3d_object_key IS NULL THEN 1 ELSE 0 END) + (CASE WHEN model_3d_sha256 IS NULL THEN 1 ELSE 0 END) + (CASE WHEN model_3d_size_bytes IS NULL THEN 1 ELSE 0 END) + (CASE WHEN model_3d_source_url IS NULL THEN 1 ELSE 0 END) + (CASE WHEN model_3d_author IS NULL THEN 1 ELSE 0 END) + (CASE WHEN model_3d_license IS NULL THEN 1 ELSE 0 END) + (CASE WHEN model_3d_updated_at IS NULL THEN 1 ELSE 0 END) FROM product_models WHERE id = "+upgradePlaceholder(cfg.Driver), "44444444-4444-4444-8444-444444444444").Scan(&modelMediaFields); err != nil {
+		t.Fatalf("read upgraded model media: %v", err)
+	}
+	if modelMediaFields != 8 {
+		t.Fatalf("new model media fields must be null, got %d null fields", modelMediaFields)
+	}
 	var users int
 	if err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&users); err != nil {
 		t.Fatalf("new auth schema is unavailable after upgrade: %v", err)
