@@ -135,6 +135,13 @@ test('both viewer surfaces expose a keyboard-accessible autoplay toggle', () => 
     const html = readFileSync(new URL(`./templates/${template}.html`, import.meta.url), 'utf8');
     assert.match(html, /<button[^>]*data-model-rotate[^>]*aria-pressed="true"/);
     assert.match(html, /resource.auto_rotate/);
+    const reset = html.match(/<button[^>]*data-model-reset[\s\S]*?<\/button>/)?.[0];
+    assert.ok(reset, 'Reset button is present');
+    assert.match(reset, /class="icon-button"/);
+    assert.match(reset, /aria-label="{{t \$s "asset.model_3d_reset"}}"/);
+    assert.match(reset, /title="{{t \$s "asset.model_3d_reset"}}"/);
+    assert.match(reset, /<svg[^>]*aria-hidden="true"/);
+    assert.equal(reset.replace(/<[^>]*>/g, '').trim(), '', 'Reset is icon-only');
   }
 });
 
