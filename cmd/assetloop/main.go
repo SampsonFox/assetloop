@@ -14,6 +14,9 @@ import (
 	"time"
 
 	"github.com/SampsonFox/assetloop/internal/application"
+	"github.com/SampsonFox/assetloop/internal/blob"
+	aliyunblob "github.com/SampsonFox/assetloop/internal/blob/aliyun"
+	localblob "github.com/SampsonFox/assetloop/internal/blob/local"
 	"github.com/SampsonFox/assetloop/internal/config"
 	"github.com/SampsonFox/assetloop/internal/store"
 	postgresstore "github.com/SampsonFox/assetloop/internal/store/postgres"
@@ -84,6 +87,7 @@ func run(args []string) error {
 			application.AuthStore
 			application.CatalogStore
 			application.LifecycleStore
+			application.ModelMediaStore
 		}
 		if cfg.Database.Driver == "sqlite" {
 			appStore = sqlitestore.New(db)
@@ -93,7 +97,20 @@ func run(args []string) error {
 		auth := application.NewAuthService(appStore)
 		catalog := application.NewCatalogService(appStore)
 		lifecycle := application.NewLifecycleService(appStore)
-		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local"}
+		localStore, err := localblob.New(cfg.Blob.LocalRoot)
+		if err != nil {
+			return fmt.Errorf("initialize local blob store: %w", err)
+		}
+		blobStores := blob.Registry{"local": localStore}
+		if cfg.Blob.OSS.Region != "" || cfg.Blob.DefaultStore == "aliyun" {
+			ossStore, err := aliyunblob.New(aliyunblob.Config{Endpoint: cfg.Blob.OSS.Endpoint, Region: cfg.Blob.OSS.Region, Bucket: cfg.Blob.OSS.Bucket, AccessKeyID: cfg.Blob.OSS.AccessKeyID, AccessKeySecret: cfg.Blob.OSS.AccessKeySecret, PathPrefix: cfg.Blob.OSS.PathPrefix})
+			if err != nil {
+				return fmt.Errorf("initialize Aliyun OSS blob store: %w", err)
+			}
+			blobStores["aliyun"] = ossStore
+		}
+		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
+		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia}
 		if cfg.AuthMode == "disabled" {
 			_, err := auth.EnsureDisabledPrincipal(context.Background())
 			if err != nil {

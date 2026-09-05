@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/SampsonFox/assetloop/internal/domain"
@@ -115,6 +116,30 @@ type EventListResult struct {
 	Events  []domain.AssetEvent
 	Summary domain.AssetSummary
 	Total   int
+}
+
+type ModelMediaStore interface {
+	GetAsset(context.Context, string, string) (domain.Asset, error)
+	GetProductModel(context.Context, string, string) (domain.ProductModel, error)
+	UpdateProductModel3D(context.Context, string, string, domain.ProductModel3D) error
+}
+
+type BlobMetadata struct{ ContentType string }
+type BlobInfo struct{ Size int64 }
+
+type BlobStore interface {
+	Put(context.Context, string, io.Reader, BlobMetadata) error
+	Open(context.Context, string) (io.ReadCloser, BlobInfo, error)
+	Stat(context.Context, string) (BlobInfo, error)
+	Delete(context.Context, string) error
+}
+
+type BlobStores interface {
+	Get(string) (BlobStore, bool)
+}
+
+type ObjectKeyMapper interface {
+	ProductModel3D(string, string, string) (string, error)
 }
 
 type LifecycleStore interface {

@@ -16,6 +16,7 @@ type Store interface {
 	application.AuthStore
 	application.CatalogStore
 	application.LifecycleStore
+	application.ModelMediaStore
 }
 
 func Run(t *testing.T, store Store) {
@@ -245,6 +246,14 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
+	media := domain.ProductModel3D{StoreID: "local", ObjectKey: "tenants/" + owner.TenantID + "/models/" + model.ID + "/hash.glb", SHA256: "hash", SizeBytes: 42, SourceURL: "https://example.com/model", Author: "Author", License: "CC0", UpdatedAt: time.Now().UTC().Truncate(time.Microsecond)}
+	if err := store.UpdateProductModel3D(ctx, owner.TenantID, model.ID, media); err != nil {
+		t.Fatalf("bind model media: %v", err)
+	}
+	gotModel, err := store.GetProductModel(ctx, owner.TenantID, model.ID)
+	if err != nil || gotModel.Model3D == nil || gotModel.Model3D.ObjectKey != media.ObjectKey {
+		t.Fatalf("get model media: model=%+v err=%v", gotModel, err)
+	}
 	variant256, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB"})
 	if err != nil {
 		t.Fatalf("create 256GB variant: %v", err)
@@ -289,6 +298,9 @@ func runCatalog(t *testing.T, store Store) {
 	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 1 || len(snapshot.Assets) != 1 {
 		t.Fatalf("unexpected catalog counts: categories=%d models=%d variants=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Variants), len(snapshot.Assets))
 	}
+	if snapshot.Models[0].Model3D == nil || snapshot.Models[0].Model3D.SHA256 != "hash" {
+		t.Fatalf("snapshot omitted model media: %+v", snapshot.Models[0])
+	}
 	accessoryCategory, err := service.CreateCategory(ctx, owner, application.CreateCategory{Name: "Accessories", IconKey: "headphones"})
 	if err != nil {
 		t.Fatalf("create second category: %v", err)
@@ -305,7 +317,7 @@ func runCatalog(t *testing.T, store Store) {
 		t.Fatalf("bulk model page mismatch: result=%+v err=%v", modelPage, err)
 	}
 	filteredModels, err := service.ListModelsWithVariants(ctx, owner, application.ModelListOptions{Query: "Ultra", CategoryID: category.ID, Page: 1, PageSize: 25})
-	if err != nil || filteredModels.Total != 1 || len(filteredModels.Models) != 1 || filteredModels.Models[0].ID != model.ID || len(filteredModels.Variants) != 1 {
+	if err != nil || filteredModels.Total != 1 || len(filteredModels.Models) != 1 || filteredModels.Models[0].ID != model.ID || filteredModels.Models[0].Model3D == nil || filteredModels.Models[0].Model3D.SHA256 != "hash" || len(filteredModels.Variants) != 1 {
 		t.Fatalf("filtered model page mismatch: result=%+v err=%v", filteredModels, err)
 	}
 	viewer := owner
@@ -324,6 +336,9 @@ func runCatalog(t *testing.T, store Store) {
 	}
 	foreign := owner
 	foreign.TenantID = "99999999-9999-4999-8999-999999999999"
+	if _, err := store.GetProductModel(ctx, foreign.TenantID, model.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("cross-tenant model read should be hidden, got %v", err)
+	}
 	if _, err := service.GetAsset(ctx, foreign, asset.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("cross-tenant catalog read should be hidden, got %v", err)
 	}

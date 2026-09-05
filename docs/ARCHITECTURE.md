@@ -285,10 +285,10 @@ Predictable application validation crosses the transport boundary as language-ne
 `InputError` codes. Unexpected infrastructure errors are logged server-side and rendered only as
 a localized generic message.
 
-## 8. Attachment architecture
+## 8. Blob media architecture
 
 ```text
-Attachment use case
+Attachment or product-model media use case
        |
        +-> metadata Store: store_id + object_key + checksum
        |
@@ -301,11 +301,14 @@ Attachment use case
 
 ```text
 tenants/{tenant_id}/attachments/{yyyy}/{mm}/{attachment_id}/{variant}.{ext}
+tenants/{tenant_id}/models/{product_model_id}/{sha256}.glb
 ```
 
 The metadata row selects the store for reads. A configuration value selects the default store for new writes. Therefore a configuration switch never relocates or hides existing bytes.
 
 A store migration copies the object under the same key, verifies size and SHA-256, changes `store_id`, then optionally removes the old object.
+
+A `ProductModel` may bind one current self-contained GLB. Variants and concrete assets resolve that shared model through the application service. Replacement writes and verifies the new blob before changing model metadata, then removes the old blob on a best-effort basis. Authenticated reads are proxied by the Web transport; source URL, author, and license are descriptive metadata only.
 
 ## 9. Market data architecture
 

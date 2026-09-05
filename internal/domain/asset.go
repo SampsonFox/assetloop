@@ -18,6 +18,18 @@ type ProductModel struct {
 	CategoryIcon string
 	Name         string
 	CreatedAt    time.Time
+	Model3D      *ProductModel3D
+}
+
+type ProductModel3D struct {
+	StoreID   string
+	ObjectKey string
+	SHA256    string
+	SizeBytes int64
+	SourceURL string
+	Author    string
+	License   string
+	UpdatedAt time.Time
 }
 
 type ProductVariant struct {

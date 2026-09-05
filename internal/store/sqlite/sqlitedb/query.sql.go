@@ -916,6 +916,61 @@ func (q *Queries) GetPortfolioSummary(ctx context.Context, tenantID string) (Get
 	return i, err
 }
 
+const getProductModel = `-- name: GetProductModel :one
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
+FROM product_models m
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = ? AND m.id = ?
+`
+
+type GetProductModelParams struct {
+	TenantID string
+	ID       string
+}
+
+type GetProductModelRow struct {
+	ID               string
+	TenantID         string
+	CategoryID       string
+	CategoryName     string
+	CategoryIcon     string
+	Name             string
+	CreatedAt        string
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullString
+}
+
+func (q *Queries) GetProductModel(ctx context.Context, arg GetProductModelParams) (GetProductModelRow, error) {
+	row := q.db.QueryRowContext(ctx, getProductModel, arg.TenantID, arg.ID)
+	var i GetProductModelRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.CategoryID,
+		&i.CategoryName,
+		&i.CategoryIcon,
+		&i.Name,
+		&i.CreatedAt,
+		&i.Model3dStoreID,
+		&i.Model3dObjectKey,
+		&i.Model3dSha256,
+		&i.Model3dSizeBytes,
+		&i.Model3dSourceUrl,
+		&i.Model3dAuthor,
+		&i.Model3dLicense,
+		&i.Model3dUpdatedAt,
+	)
+	return i, err
+}
+
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
 SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
        u.locale, u.theme, u.accent
@@ -1655,7 +1710,9 @@ func (q *Queries) ListMembersPage(ctx context.Context, arg ListMembersPageParams
 }
 
 const listModels = `-- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
 FROM product_models m
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = ?
@@ -1663,13 +1720,21 @@ ORDER BY c.name, m.name, m.id
 `
 
 type ListModelsRow struct {
-	ID           string
-	TenantID     string
-	CategoryID   string
-	CategoryName string
-	CategoryIcon string
-	Name         string
-	CreatedAt    string
+	ID               string
+	TenantID         string
+	CategoryID       string
+	CategoryName     string
+	CategoryIcon     string
+	Name             string
+	CreatedAt        string
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullString
 }
 
 func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModelsRow, error) {
@@ -1689,6 +1754,14 @@ func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModels
 			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
+			&i.Model3dStoreID,
+			&i.Model3dObjectKey,
+			&i.Model3dSha256,
+			&i.Model3dSizeBytes,
+			&i.Model3dSourceUrl,
+			&i.Model3dAuthor,
+			&i.Model3dLicense,
+			&i.Model3dUpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1707,6 +1780,8 @@ const listModelsWithVariants = `-- name: ListModelsWithVariants :many
 WITH filtered_models AS (
     SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
            c.icon_key AS category_icon, m.name, m.created_at,
+           m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+           m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at,
            CAST(?1 AS TEXT) AS sort_key,
            CAST(?2 AS TEXT) AS sort_direction
     FROM product_models m
@@ -1718,7 +1793,7 @@ WITH filtered_models AS (
       AND (CAST(?5 AS TEXT) = '' OR m.category_id = CAST(?5 AS TEXT))
 ),
 paged_models AS (
-    SELECT id, tenant_id, category_id, category_name, category_icon, name, created_at, sort_key, sort_direction, COUNT(*) OVER () AS total_count,
+    SELECT id, tenant_id, category_id, category_name, category_icon, name, created_at, model_3d_store_id, model_3d_object_key, model_3d_sha256, model_3d_size_bytes, model_3d_source_url, model_3d_author, model_3d_license, model_3d_updated_at, sort_key, sort_direction, COUNT(*) OVER () AS total_count,
            ROW_NUMBER() OVER (ORDER BY
              CASE WHEN sort_key = 'category' AND sort_direction = 'asc' THEN LOWER(category_name) END ASC,
              CASE WHEN sort_key = 'category' AND sort_direction = 'desc' THEN LOWER(category_name) END DESC,
@@ -1731,7 +1806,10 @@ paged_models AS (
     LIMIT ?7 OFFSET ?6
 )
 SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
-       pm.name, pm.created_at, pm.total_count, pm.page_order,
+       pm.name, pm.created_at,
+       pm.model_3d_store_id, pm.model_3d_object_key, pm.model_3d_sha256, pm.model_3d_size_bytes,
+       pm.model_3d_source_url, pm.model_3d_author, pm.model_3d_license, pm.model_3d_updated_at,
+       pm.total_count, pm.page_order,
        v.id AS variant_id, v.name AS variant_name, v.created_at AS variant_created_at
 FROM paged_models pm
 LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
@@ -1756,6 +1834,14 @@ type ListModelsWithVariantsRow struct {
 	CategoryIcon     string
 	Name             string
 	CreatedAt        string
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullString
 	TotalCount       int64
 	PageOrder        interface{}
 	VariantID        sql.NullString
@@ -1788,6 +1874,14 @@ func (q *Queries) ListModelsWithVariants(ctx context.Context, arg ListModelsWith
 			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
+			&i.Model3dStoreID,
+			&i.Model3dObjectKey,
+			&i.Model3dSha256,
+			&i.Model3dSizeBytes,
+			&i.Model3dSourceUrl,
+			&i.Model3dAuthor,
+			&i.Model3dLicense,
+			&i.Model3dUpdatedAt,
 			&i.TotalCount,
 			&i.PageOrder,
 			&i.VariantID,
@@ -1991,6 +2085,44 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (int64
 	result, err := q.db.ExecContext(ctx, updateModel,
 		arg.CategoryID,
 		arg.Name,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateProductModel3D = `-- name: UpdateProductModel3D :execrows
+UPDATE product_models SET model_3d_store_id = ?, model_3d_object_key = ?, model_3d_sha256 = ?,
+ model_3d_size_bytes = ?, model_3d_source_url = ?, model_3d_author = ?, model_3d_license = ?, model_3d_updated_at = ?
+WHERE tenant_id = ? AND id = ?
+`
+
+type UpdateProductModel3DParams struct {
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullString
+	TenantID         string
+	ID               string
+}
+
+func (q *Queries) UpdateProductModel3D(ctx context.Context, arg UpdateProductModel3DParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateProductModel3D,
+		arg.Model3dStoreID,
+		arg.Model3dObjectKey,
+		arg.Model3dSha256,
+		arg.Model3dSizeBytes,
+		arg.Model3dSourceUrl,
+		arg.Model3dAuthor,
+		arg.Model3dLicense,
+		arg.Model3dUpdatedAt,
 		arg.TenantID,
 		arg.ID,
 	)

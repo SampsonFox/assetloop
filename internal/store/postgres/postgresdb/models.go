@@ -100,11 +100,19 @@ type LifecycleRequest struct {
 }
 
 type ProductModel struct {
-	ID         uuid.UUID
-	TenantID   uuid.UUID
-	CategoryID uuid.UUID
-	Name       string
-	CreatedAt  time.Time
+	ID               uuid.UUID
+	TenantID         uuid.UUID
+	CategoryID       uuid.UUID
+	Name             string
+	CreatedAt        time.Time
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullTime
 }
 
 type ProductVariant struct {

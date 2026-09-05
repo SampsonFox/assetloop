@@ -6,8 +6,17 @@
     modelId: "model_id",
     returnModelId: "return_model_id",
     eventType: "event_type",
+    model3dSourceUrl: "model_3d_source_url",
+    model3dAuthor: "model_3d_author",
+    model3dLicense: "model_3d_license",
   };
   const dialogOpeners = new WeakMap();
+
+  const resetForm = (form) => {
+    const hidden = [...form.querySelectorAll('input[type="hidden"]')].map((input) => [input, input.value]);
+    form.reset();
+    for (const [input, value] of hidden) input.value = value;
+  };
 
   const decimalProduct = (left, right, exponent) => {
     const parse = (value) => {
@@ -127,8 +136,13 @@
       const form = dialog?.querySelector("form");
       if (!dialog || !form) return;
       dialogOpeners.set(dialog, opener);
-      form.reset();
+      resetForm(form);
       form.dataset.dirty = "false";
+      const mediaForm = dialog.querySelector("[data-model-media-form]");
+      if (mediaForm) {
+        resetForm(mediaForm);
+        mediaForm.dataset.dirty = "false";
+      }
       form.action = opener.dataset.action;
       const title = dialog.querySelector("[data-dialog-title]");
       if (title) title.textContent = opener.dataset.title;
@@ -142,6 +156,18 @@
         if (manager) manager.hidden = !modelId;
         for (const group of dialog.querySelectorAll("[data-variant-group]")) {
           group.hidden = group.dataset.variantGroup !== modelId;
+        }
+        if (mediaForm) {
+          mediaForm.hidden = !modelId;
+          if (modelId) {
+            mediaForm.action = `/admin/catalog/models/${modelId}/3d`;
+            for (const [dataKey, fieldName] of Object.entries(fields)) {
+              const field = mediaForm.elements.namedItem(fieldName);
+              if (field) field.value = opener.dataset[dataKey] || "";
+            }
+            const state = mediaForm.querySelector("[data-model-media-state]");
+            if (state) state.textContent = opener.dataset.hasModel3d ? mediaForm.dataset.boundLabel : mediaForm.dataset.emptyLabel;
+          }
         }
       }
       const currency = form.querySelector("[data-currency-select]");

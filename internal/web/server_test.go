@@ -1,8 +1,13 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +18,8 @@ import (
 	"time"
 
 	"github.com/SampsonFox/assetloop/internal/application"
+	"github.com/SampsonFox/assetloop/internal/blob"
+	localblob "github.com/SampsonFox/assetloop/internal/blob/local"
 	"github.com/SampsonFox/assetloop/internal/config"
 	basestore "github.com/SampsonFox/assetloop/internal/store"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
@@ -898,6 +905,103 @@ func TestLoginLimiter(t *testing.T) {
 	}
 }
 
+func TestProductModel3DUploadViewerAndETag(t *testing.T) {
+	handler := newTestHandler(t)
+	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
+	csrf := responseCookie(t, setupPage, csrfCookie)
+	setup := request(t, handler, http.MethodPost, "/setup", url.Values{"csrf_token": {csrf.Value}, "tenant_name": {"3D Tenant"}, "base_currency": {"CNY"}, "username": {"owner"}, "password": {"owner secure password"}}, []*http.Cookie{csrf})
+	session := responseCookie(t, setup, sessionCookie)
+	request(t, handler, http.MethodPost, "/admin/catalog/categories", url.Values{"csrf_token": {csrf.Value}, "name": {"手机"}, "icon_key": {"smartphone"}}, []*http.Cookie{session, csrf})
+	page := request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{session, csrf})
+	categoryID := optionID(t, page.Body.String(), "手机")
+	request(t, handler, http.MethodPost, "/admin/catalog/models", url.Values{"csrf_token": {csrf.Value}, "category_id": {categoryID}, "name": {"Model 3D"}}, []*http.Cookie{session, csrf})
+	page = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{session, csrf})
+	modelID := optionID(t, page.Body.String(), "手机 / Model 3D")
+	request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"Standard"}}, []*http.Cookie{session, csrf})
+	page = request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
+	variantID := optionID(t, page.Body.String(), "手机 / Model 3D / Standard")
+	request(t, handler, http.MethodPost, "/assets", url.Values{"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"3D Device"}}, []*http.Cookie{session, csrf})
+	page = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
+	match := regexp.MustCompile(`/assets/([0-9a-f-]{36})`).FindStringSubmatch(page.Body.String())
+	if len(match) != 2 {
+		t.Fatal("asset link missing")
+	}
+	assetID := match[1]
+	before := request(t, handler, http.MethodGet, "/assets/"+assetID, nil, []*http.Cookie{session, csrf})
+	if strings.Contains(before.Body.String(), "data-model-viewer") {
+		t.Fatal("viewer rendered without model")
+	}
+	glb := webTestGLB()
+	upload := multipartRequest(t, handler, "/admin/catalog/models/"+modelID+"/3d", csrf.Value, glb, []*http.Cookie{session, csrf})
+	if upload.Code != http.StatusSeeOther {
+		t.Fatalf("upload status=%d body=%s", upload.Code, upload.Body.String())
+	}
+	catalogPage := request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{session, csrf})
+	if !strings.Contains(catalogPage.Body.String(), "已有 3D") {
+		t.Fatalf("catalog did not show the model binding: %s", catalogPage.Body.String())
+	}
+	detail := request(t, handler, http.MethodGet, "/assets/"+assetID, nil, []*http.Cookie{session, csrf})
+	if !strings.Contains(detail.Body.String(), "data-model-viewer") || !strings.Contains(detail.Body.String(), "asset-model-viewer.js") {
+		t.Fatalf("viewer markup missing: %s", detail.Body.String())
+	}
+	digest := sha256.Sum256(glb)
+	if want := "/assets/" + assetID + "/model.glb?v=" + hex.EncodeToString(digest[:]); !strings.Contains(detail.Body.String(), want) {
+		t.Fatalf("versioned model URL missing: %s", detail.Body.String())
+	}
+	model := request(t, handler, http.MethodGet, "/assets/"+assetID+"/model.glb", nil, []*http.Cookie{session, csrf})
+	if model.Code != http.StatusOK || model.Header().Get("Content-Type") != "model/gltf-binary" || !bytes.Equal(model.Body.Bytes(), glb) {
+		t.Fatalf("model response status=%d headers=%v", model.Code, model.Header())
+	}
+	if got := model.Header().Get("Cache-Control"); got != "private, max-age=86400" {
+		t.Fatalf("cache control=%q", got)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/assets/"+assetID+"/model.glb", nil)
+	req.Header.Set("If-None-Match", model.Header().Get("ETag"))
+	req.AddCookie(session)
+	req.AddCookie(csrf)
+	conditional := httptest.NewRecorder()
+	handler.ServeHTTP(conditional, req)
+	if conditional.Code != http.StatusNotModified {
+		t.Fatalf("conditional status=%d", conditional.Code)
+	}
+}
+
+func webTestGLB() []byte {
+	jsonData := []byte(`{"asset":{"version":"2.0"}}`)
+	for len(jsonData)%4 != 0 {
+		jsonData = append(jsonData, ' ')
+	}
+	data := make([]byte, 20+len(jsonData))
+	copy(data, "glTF")
+	binary.LittleEndian.PutUint32(data[4:], 2)
+	binary.LittleEndian.PutUint32(data[8:], uint32(len(data)))
+	binary.LittleEndian.PutUint32(data[12:], uint32(len(jsonData)))
+	binary.LittleEndian.PutUint32(data[16:], 0x4e4f534a)
+	copy(data[20:], jsonData)
+	return data
+}
+func multipartRequest(t *testing.T, handler http.Handler, target, csrf string, file []byte, cookies []*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	_ = writer.WriteField("csrf_token", csrf)
+	_ = writer.WriteField("model_3d_author", "Tester")
+	part, err := writer.CreateFormFile("model_3d", "model.glb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write(file)
+	_ = writer.Close()
+	req := httptest.NewRequest(http.MethodPost, target, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	return response
+}
+
 func newTestHandler(t *testing.T) http.Handler {
 	t.Helper()
 	cfg := config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "web.db")}
@@ -913,7 +1017,12 @@ func newTestHandler(t *testing.T) http.Handler {
 	auth := application.NewAuthService(adapter)
 	catalog := application.NewCatalogService(adapter)
 	lifecycle := application.NewLifecycleService(adapter)
-	server, err := New(auth, catalog, lifecycle, db, Options{AuthMode: "local"})
+	localStore, err := localblob.New(filepath.Join(t.TempDir(), "blobs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelMedia := application.NewModelMediaService(adapter, blob.Registry{"local": localStore}, blob.ObjectKeyMapper{}, "local")
+	server, err := New(auth, catalog, lifecycle, db, Options{AuthMode: "local", ModelMedia: modelMedia})
 	if err != nil {
 		t.Fatal(err)
 	}

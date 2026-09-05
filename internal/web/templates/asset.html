@@ -11,8 +11,16 @@
 	</div>
 </div>
 <section class="card asset-profile">
-  <figure class="asset-product-visual">
-    {{$productImage := productImage .Asset}}{{if $productImage}}<img class="asset-product-image" src="{{$productImage}}" alt="{{.Asset.Model}} · {{t $s "asset.model_image_caption"}}" width="1728" height="912" decoding="async" fetchpriority="high"><figcaption class="asset-product-caption">{{t $s "asset.model_image_caption"}}</figcaption>{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>{{end}}
+  <figure class="asset-product-visual{{if .Model3D}} has-model{{end}}"{{if .Model3D}} data-model-viewer data-model-url="/assets/{{.Asset.ID}}/model.glb?v={{.Model3D.SHA256}}"{{end}}>
+    <div class="asset-model-fallback" data-model-fallback>
+      {{$productImage := productImage .Asset}}{{if $productImage}}<img class="asset-product-image" src="{{$productImage}}" alt="{{.Asset.Model}} · {{t $s "asset.model_image_caption"}}" width="1728" height="912" decoding="async" fetchpriority="high"><figcaption class="asset-product-caption">{{t $s "asset.model_image_caption"}}</figcaption>{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>{{end}}
+    </div>
+    {{if .Model3D}}
+    <canvas class="asset-model-canvas" data-model-canvas aria-label="{{t $s "asset.model_3d_label"}}" tabindex="0"></canvas>
+    <div class="asset-model-status" data-model-status role="status">{{t $s "asset.model_3d_loading"}}</div>
+    <div class="asset-model-controls"><span>{{t $s "asset.model_3d_hint"}}</span><button class="secondary auto" type="button" data-model-reset>{{t $s "asset.model_3d_reset"}}</button></div>
+    <script type="module" src="/static/asset-model-viewer.js"></script>
+    {{end}}
   </figure>
   <div class="asset-profile-content">
     <p class="eyebrow">{{.Asset.Category}}</p>

@@ -85,7 +85,9 @@ WHERE tenant_id = ?
 ORDER BY name, id;
 
 -- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
 FROM product_models m
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = ?
@@ -95,6 +97,8 @@ ORDER BY c.name, m.name, m.id;
 WITH filtered_models AS (
     SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
            c.icon_key AS category_icon, m.name, m.created_at,
+           m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+           m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at,
            CAST(sqlc.arg(sort_key) AS TEXT) AS sort_key,
            CAST(sqlc.arg(sort_direction) AS TEXT) AS sort_direction
     FROM product_models m
@@ -119,11 +123,26 @@ paged_models AS (
     LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset)
 )
 SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
-       pm.name, pm.created_at, pm.total_count, pm.page_order,
+       pm.name, pm.created_at,
+       pm.model_3d_store_id, pm.model_3d_object_key, pm.model_3d_sha256, pm.model_3d_size_bytes,
+       pm.model_3d_source_url, pm.model_3d_author, pm.model_3d_license, pm.model_3d_updated_at,
+       pm.total_count, pm.page_order,
        v.id AS variant_id, v.name AS variant_name, v.created_at AS variant_created_at
 FROM paged_models pm
 LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
 ORDER BY pm.page_order, LOWER(v.name), v.id;
+-- name: GetProductModel :one
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
+       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
+       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
+FROM product_models m
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = ? AND m.id = ?;
+
+-- name: UpdateProductModel3D :execrows
+UPDATE product_models SET model_3d_store_id = ?, model_3d_object_key = ?, model_3d_sha256 = ?,
+ model_3d_size_bytes = ?, model_3d_source_url = ?, model_3d_author = ?, model_3d_license = ?, model_3d_updated_at = ?
+WHERE tenant_id = ? AND id = ?;
 
 -- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
