@@ -358,6 +358,9 @@ button[aria-busy="true"]::after { content:" …"; }
 .asset-model-status { position:absolute; top:16px; left:16px; padding:7px 10px; border-radius:8px; background:var(--paper); color:var(--muted); font-size:13px; }
 .asset-model-controls { position:absolute; right:14px; bottom:14px; left:14px; display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--muted); font-size:13px; pointer-events:none; }
 .asset-model-controls button { pointer-events:auto; }
+.asset-model-controls { flex-wrap:wrap; }
+.asset-model-controls span { flex-basis:100%; }
+.asset-model-controls button[aria-pressed="true"] { background:var(--accent); color:var(--accent-contrast); border-color:var(--accent); }
 .asset-model-controls span { padding:7px 10px; border-radius:8px; background:var(--paper); color:var(--ink); }
 .asset-product-visual:not(.is-ready) .asset-model-controls { display:none; }
 .asset-model-canvas:focus-visible { outline:3px solid var(--accent); outline-offset:-4px; }

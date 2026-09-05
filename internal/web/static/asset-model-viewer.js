@@ -6,11 +6,17 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   const canvas = root.querySelector('[data-model-canvas]');
   const status = root.querySelector('[data-model-status]');
   const reset = root.querySelector('[data-model-reset]');
+  const rotate = root.querySelector('[data-model-rotate]');
   let renderer;
   let controls;
   let observer;
   let frame = 0;
   let failed = false;
+  let visibilityObserver;
+  let visible = true;
+  let interacting = false;
+  let paused = false;
+  let previousTime = null;
 
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
@@ -29,6 +35,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   controls = new OrbitControls(camera, canvas);
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   controls.enableDamping = !reducedMotion.matches;
+  controls.autoRotateSpeed = 0.5; // One revolution in two minutes, independent of refresh rate.
   controls.dampingFactor = 0.08;
   controls.enablePan = false;
   controls.minDistance = 0.1;
@@ -42,17 +49,36 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   scene.add(fill);
 
   let home = null;
-  const render = () => {
+  const render = (time) => {
     frame = 0;
-    if (failed) return;
-    const moving = controls.update();
+    if (failed || !visible || document.hidden) { previousTime = null; return; }
+    const delta = previousTime === null ? 0 : Math.min((time - previousTime) / 1000, 0.05);
+    previousTime = time;
+    const moving = controls.update(delta);
     renderer.render(scene, camera);
-    if (moving && controls.enableDamping) requestRender();
+    if (controls.autoRotate || (moving && controls.enableDamping)) requestRender();
+    else previousTime = null;
   };
-  const requestRender = () => { if (!frame && !failed) frame = requestAnimationFrame(render); };
+  const requestRender = () => { if (!frame && !failed && visible && !document.hidden) frame = requestAnimationFrame(render); };
   controls.addEventListener('change', requestRender);
-  const motionChanged = () => { controls.enableDamping = !reducedMotion.matches; requestRender(); };
+  const motionChanged = () => {
+    controls.enableDamping = !reducedMotion.matches;
+    controls.autoRotate = !!home && !paused && !reducedMotion.matches && !interacting && visible && !document.hidden;
+    if (rotate) {
+      rotate.disabled = reducedMotion.matches;
+      rotate.setAttribute('aria-pressed', String(!paused && !reducedMotion.matches));
+    }
+    previousTime = null;
+    requestRender();
+  };
   reducedMotion.addEventListener('change', motionChanged);
+  rotate?.addEventListener('click', () => { paused = !paused; motionChanged(); });
+  controls.addEventListener('start', () => { interacting = true; motionChanged(); });
+  controls.addEventListener('end', () => { interacting = false; motionChanged(); });
+  document.addEventListener('visibilitychange', motionChanged);
+  visibilityObserver = new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; motionChanged(); });
+  visibilityObserver.observe(root);
+  motionChanged();
   const resize = () => {
     const { width, height } = root.getBoundingClientRect();
     if (!width || !height) return;
@@ -87,6 +113,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     controls.maxDistance = distance * 4;
     controls.update();
     home = { position: camera.position.clone(), target: controls.target.clone() };
+    motionChanged();
     root.classList.add('is-ready');
     status.textContent = root.dataset.modelLoaded;
     window.setTimeout(() => { if (!failed) status.hidden = true; }, 1200);
@@ -97,7 +124,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     if (!home) return;
     camera.position.copy(home.position);
     controls.target.copy(home.target);
-    controls.update();
+    controls.update(0);
     requestRender();
   };
   reset?.addEventListener('click', resetView);
@@ -119,13 +146,16 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     spherical.radius = Math.max(controls.minDistance, Math.min(controls.maxDistance, spherical.radius));
     spherical.makeSafe();
     camera.position.copy(controls.target).add(offset.setFromSpherical(spherical));
-    controls.update();
+    controls.update(0);
     requestRender();
   });
 
   window.addEventListener('pagehide', () => {
+    failed = true;
     cancelAnimationFrame(frame);
     observer.disconnect();
+    visibilityObserver.disconnect();
+    document.removeEventListener('visibilitychange', motionChanged);
     reducedMotion.removeEventListener('change', motionChanged);
     controls.dispose();
     renderer.dispose();
@@ -139,6 +169,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     status.hidden = false;
     canvas.hidden = true;
     observer?.disconnect();
+    visibilityObserver?.disconnect();
     controls?.dispose();
     if (renderer) renderer.dispose();
   }

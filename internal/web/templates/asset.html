@@ -19,7 +19,7 @@
     {{if .Model3D}}
     <canvas class="asset-model-canvas" data-model-canvas aria-label="{{t $s "asset.model_3d_label"}}" tabindex="0"></canvas>
     <div class="asset-model-status" data-model-status role="status">{{t $s "asset.model_3d_loading"}}</div>
-    <div class="asset-model-controls"><span>{{t $s "resource.viewer_hint"}}</span><button class="secondary auto" type="button" data-model-reset>{{t $s "asset.model_3d_reset"}}</button></div>
+    <div class="asset-model-controls"><span>{{t $s "resource.viewer_hint"}}</span><button class="secondary auto" type="button" data-model-rotate aria-pressed="true">{{t $s "resource.auto_rotate"}}</button><button class="secondary auto" type="button" data-model-reset>{{t $s "asset.model_3d_reset"}}</button></div>
     <script type="module" src="/static/asset-model-viewer.js"></script>
     {{end}}
   </figure>

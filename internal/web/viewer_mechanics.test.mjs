@@ -24,10 +24,11 @@ function viewer({ reduced = false, webgl = true, width = 500, height = 300, dime
   const canvas = { hidden: false, addEventListener: (name, callback) => listeners.set(name, callback) };
   const status = { hidden: false, textContent: '' };
   const reset = { addEventListener: (_name, callback) => { state.reset = callback; } };
+  const rotate = { addEventListener: (_name, callback) => { state.toggle = callback; }, setAttribute: (_name, value) => { state.pressed = value; } };
   const motion = { matches: reduced, addEventListener: (_name, fn) => { state.motion = fn; }, removeEventListener() {} };
   const root = {
     dataset: { modelUrl: '/selected.glb', modelError: 'Localized fallback', modelLoaded: 'Localized ready' },
-    querySelector: (selector) => ({ '[data-model-canvas]': canvas, '[data-model-status]': status, '[data-model-reset]': reset })[selector],
+    querySelector: (selector) => ({ '[data-model-canvas]': canvas, '[data-model-status]': status, '[data-model-reset]': reset, '[data-model-rotate]': rotate })[selector],
     getBoundingClientRect: () => ({ width, height }),
     classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name) },
   };
@@ -44,31 +45,38 @@ function viewer({ reduced = false, webgl = true, width = 500, height = 300, dime
   }
   class Controls {
     constructor() { this.target = new math.Vector3(); state.controls = this; }
-    update() { return false; }
-    addEventListener(_name, fn) { this.changed = fn; }
+    update(delta) { state.delta = delta; return false; }
+    addEventListener(name, fn) { this[name] = fn; }
     dispose() {}
   }
   class Loader {
     load(url, success, _progress, failure) { state.loads++; state.url = url; state.success = success; state.failure = failure; }
   }
   let nextFrame = 0;
+  let time = 0;
+  const doc = { hidden: false, querySelectorAll: () => [root], addEventListener: (_name, fn) => { state.visibility = fn; }, removeEventListener() {} };
   vm.runInNewContext(source, {
     THREE: { ...math, WebGLRenderer: Renderer }, OrbitControls: Controls, GLTFLoader: Loader,
-    document: { querySelectorAll: () => [root] },
+    document: doc,
     window: { devicePixelRatio: 1, matchMedia: () => motion, setTimeout() {}, addEventListener() {} },
     ResizeObserver: class { observe() {} disconnect() {} },
+    IntersectionObserver: class { constructor(fn) { state.intersection = fn; } observe() {} disconnect() {} },
     requestAnimationFrame: (fn) => { frames.set(++nextFrame, fn); return nextFrame; },
     cancelAnimationFrame: (id) => frames.delete(id),
   });
   const flush = () => {
     let iterations = 0;
     while (frames.size) {
-      if (++iterations > 10) throw new Error('Viewer never becomes idle');
-      const batch = [...frames.values()]; frames.clear(); batch.forEach((fn) => fn());
+      if (++iterations > 10) {
+        if (state.controls.autoRotate) break;
+        throw new Error('Viewer never becomes idle');
+      }
+      time += 16;
+      const batch = [...frames.values()]; frames.clear(); batch.forEach((fn) => fn(time));
     }
   };
   return {
-    state, status, canvas, classes, motion, flush,
+    state, status, canvas, classes, motion, flush, doc, rotate,
     ready() { state.success({ scene: new math.Mesh(new math.BoxGeometry(...dimensions)) }); flush(); },
     key(key) { let prevented = false; listeners.get('keydown')({ key, preventDefault() { prevented = true; } }); flush(); return prevented; },
   };
@@ -94,7 +102,40 @@ test('reduced motion disables damping, updates live, and rendering becomes idle'
   const before = v.state.draws; v.flush(); assert.equal(v.state.draws, before);
   v.motion.matches = false; v.state.motion(); v.flush();
   assert.equal(v.state.controls.enableDamping, true);
-  assert.equal(v.state.controls.autoRotate, undefined);
+  assert.equal(v.state.controls.autoRotate, true);
+  v.motion.matches = true; v.state.motion(); v.flush();
+  assert.equal(v.state.controls.autoRotate, false);
+  assert.equal(v.rotate.disabled, true);
+  const stopped = v.state.draws; v.flush(); assert.equal(v.state.draws, stopped);
+});
+
+test('slow autoplay pauses for user controls, offscreen and hidden pages', () => {
+  const v = viewer(); v.ready();
+  assert.equal(v.state.controls.autoRotate, true);
+  assert.equal(v.state.controls.autoRotateSpeed, 0.5);
+  assert.equal(v.state.delta, 0.016);
+  assert.equal(v.state.pressed, 'true');
+  v.state.toggle(); v.flush();
+  assert.equal(v.state.controls.autoRotate, false);
+  assert.equal(v.state.pressed, 'false');
+  const stopped = v.state.draws; v.flush(); assert.equal(v.state.draws, stopped);
+  v.state.toggle(); v.flush();
+  v.state.controls.start(); v.flush(); assert.equal(v.state.controls.autoRotate, false);
+  v.state.controls.end(); v.flush(); assert.equal(v.state.controls.autoRotate, true);
+  v.state.intersection([{ isIntersecting: false }]); v.flush();
+  assert.equal(v.state.controls.autoRotate, false);
+  const offscreen = v.state.draws; v.flush(); assert.equal(v.state.draws, offscreen);
+  v.state.intersection([{ isIntersecting: true }]); v.flush(); assert.equal(v.state.controls.autoRotate, true);
+  v.doc.hidden = true; v.state.visibility(); v.flush(); assert.equal(v.state.controls.autoRotate, false);
+  v.doc.hidden = false; v.state.visibility(); v.flush(); assert.equal(v.state.controls.autoRotate, true);
+});
+
+test('both viewer surfaces expose a keyboard-accessible autoplay toggle', () => {
+  for (const template of ['asset', 'resource']) {
+    const html = readFileSync(new URL(`./templates/${template}.html`, import.meta.url), 'utf8');
+    assert.match(html, /<button[^>]*data-model-rotate[^>]*aria-pressed="true"/);
+    assert.match(html, /resource.auto_rotate/);
+  }
 });
 
 test('selected-resource failure leaves the fallback and never loads another resource', () => {
