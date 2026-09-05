@@ -72,7 +72,7 @@
       <div class="money-input-group">
         <input id="event-amount" name="amount" inputmode="decimal" required placeholder="6999.00" value="{{.EventForm.Amount}}">
         <input class="currency-suffix" name="currency" value="{{.EventForm.Currency}}" list="event-currencies" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" spellcheck="false" required data-currency-select data-base-currency="{{.BaseCurrency}}" aria-label="{{t $s "asset.original_currency"}}">
-        <datalist id="event-currencies"><option value="CNY"></option><option value="USD"></option><option value="EUR"></option><option value="GBP"></option><option value="HKD"></option><option value="AUD"></option><option value="CAD"></option><option value="SGD"></option><option value="TWD"></option><option value="JPY"></option><option value="KRW"></option></datalist>
+        <datalist id="event-currencies">{{range currencyOptions}}<option value="{{.}}"></option>{{end}}</datalist>
       </div>
     </div>
     <label>{{t $s "asset.source"}}<input name="source" value="{{.EventForm.Source}}" maxlength="120"></label>

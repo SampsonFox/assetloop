@@ -23,7 +23,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
-| `internal/domain/` | Pure catalog/lifecycle types plus exact minor-unit money and fixed-point FX logic |
+| `internal/domain/` | Pure catalog/lifecycle types plus the versioned ISO 4217 catalog, exact minor-unit money, and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
 | `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation |
 | `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |

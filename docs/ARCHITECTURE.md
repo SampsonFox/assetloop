@@ -162,6 +162,12 @@ and FX evidence remain null; otherwise all evidence fields are mandatory. In Web
 currency and submitting its required rate evidence is the confirmation; the AI Harness confirms the
 same evidence in conversation before making a semantic MCP write.
 
+Currency validation, minor-unit parsing, setup, and Web currency selectors share one code-defined
+catalog snapshot sourced from the ISO 4217 Maintenance Agency's current List One. The snapshot is
+versioned in the domain package and never fetched at runtime. New records accept only current
+selectable currency codes. When a code is retired, its definition remains readable for persisted
+history but becomes non-selectable for new records.
+
 The first monetary record locks the tenant base currency. Changing it later requires a dedicated, audited migration operation, not a settings edit.
 
 ## 7. Persistence architecture

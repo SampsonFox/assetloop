@@ -269,7 +269,7 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	if eventType.Cashflow == domain.AssetEventNeutral && cmd.AmountMinor != 0 {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_zero")
 	}
-	currency, err := domain.NormalizeCurrency(cmd.Currency)
+	currency, err := domain.NormalizeSelectableCurrency(cmd.Currency)
 	if err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, err
 	}

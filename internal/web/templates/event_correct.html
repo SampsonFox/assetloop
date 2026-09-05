@@ -13,7 +13,7 @@
       <div class="money-input-group">
         <input id="correction-amount" name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required>
         <input class="currency-suffix" name="currency" value="{{.EventForm.Currency}}" list="correction-currencies" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" spellcheck="false" required data-currency-select data-base-currency="{{.BaseCurrency}}" aria-label="{{t $s "asset.original_currency"}}">
-        <datalist id="correction-currencies"><option value="CNY"></option><option value="USD"></option><option value="EUR"></option><option value="GBP"></option><option value="HKD"></option><option value="AUD"></option><option value="CAD"></option><option value="SGD"></option><option value="TWD"></option><option value="JPY"></option><option value="KRW"></option></datalist>
+        <datalist id="correction-currencies">{{range currencyOptions}}<option value="{{.}}"></option>{{end}}</datalist>
       </div>
     </div>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>

@@ -16,6 +16,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/SampsonFox/assetloop/internal/domain"
 )
 
 type Role string
@@ -398,16 +400,11 @@ func normalizeUsername(value string) (string, error) {
 }
 
 func normalizeCurrency(value string) (string, error) {
-	value = strings.ToUpper(strings.TrimSpace(value))
-	if len(value) != 3 {
-		return "", NewInputError("validation.currency_iso")
+	currency, err := domain.NormalizeSelectableCurrency(value)
+	if err != nil {
+		return "", NewInputError("validation.currency_supported")
 	}
-	for _, r := range value {
-		if r < 'A' || r > 'Z' {
-			return "", NewInputError("validation.currency_iso")
-		}
-	}
-	return value, nil
+	return currency, nil
 }
 
 func validRole(role Role) bool {

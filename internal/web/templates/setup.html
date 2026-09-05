@@ -7,7 +7,7 @@
   <form method="post" action="/setup" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <label>{{t $s "setup.tenant_name"}}<input name="tenant_name" required autocomplete="organization" value="{{t $s "setup.tenant_default"}}"></label>
-    <label>{{t $s "setup.base_currency"}}<input name="base_currency" required maxlength="3" value="CNY"></label>
+    <label>{{t $s "setup.base_currency"}}<input name="base_currency" value="CNY" list="setup-currencies" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" spellcheck="false" required><datalist id="setup-currencies">{{range currencyOptions}}<option value="{{.}}"></option>{{end}}</datalist></label>
     <label>{{t $s "setup.owner_username"}}<input name="username" required autocomplete="username"></label>
     <label>{{t $s "setup.password"}}<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
     <button type="submit">{{t $s "setup.submit"}}</button>

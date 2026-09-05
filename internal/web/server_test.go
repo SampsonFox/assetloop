@@ -28,6 +28,21 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 
 	setupPage := request(t, handler, http.MethodGet, "/setup", nil, nil)
 	csrf := responseCookie(t, setupPage, csrfCookie)
+	for _, want := range []string{`list="setup-currencies"`, `id="setup-currencies"`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`} {
+		if setupPage.Code != http.StatusOK || !strings.Contains(setupPage.Body.String(), want) {
+			t.Fatalf("setup currency catalog missing %q: status=%d body=%s", want, setupPage.Code, setupPage.Body.String())
+		}
+	}
+	if strings.Contains(setupPage.Body.String(), `<option value="BGN"></option>`) || strings.Contains(setupPage.Body.String(), `<option value="XAU"></option>`) {
+		t.Fatalf("setup must not offer retired or non-currency ISO codes: %s", setupPage.Body.String())
+	}
+	invalidCurrency := request(t, handler, http.MethodPost, "/setup", url.Values{
+		"csrf_token": {csrf.Value}, "tenant_name": {"My Assets"}, "base_currency": {"BGN"},
+		"username": {"owner"}, "password": {"owner secure password"},
+	}, []*http.Cookie{csrf})
+	if invalidCurrency.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidCurrency.Body.String(), "请选择当前支持的 ISO 4217 货币代码") {
+		t.Fatalf("retired base currency should be rejected: status=%d body=%s", invalidCurrency.Code, invalidCurrency.Body.String())
+	}
 	response = request(t, handler, http.MethodPost, "/setup", url.Values{
 		"csrf_token": {csrf.Value}, "tenant_name": {"My Assets"}, "base_currency": {"CNY"},
 		"username": {"owner"}, "password": {"owner secure password"},
@@ -633,7 +648,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以物品记录为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-summary"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以物品记录为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-summary"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}

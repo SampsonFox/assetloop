@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
-	"unicode"
 )
 
 type Money struct {
@@ -16,27 +15,6 @@ type Money struct {
 }
 
 const FXRateScale int64 = 100_000_000
-
-var currencyExponents = map[string]int{
-	"CNY": 2, "USD": 2, "EUR": 2, "GBP": 2, "HKD": 2, "AUD": 2,
-	"CAD": 2, "SGD": 2, "TWD": 2, "JPY": 0, "KRW": 0,
-}
-
-func NormalizeCurrency(value string) (string, error) {
-	value = strings.ToUpper(strings.TrimSpace(value))
-	if len(value) != 3 {
-		return "", errors.New("currency must be a three-letter ISO code")
-	}
-	for _, r := range value {
-		if r > unicode.MaxASCII || !unicode.IsLetter(r) {
-			return "", errors.New("currency must be a three-letter ISO code")
-		}
-	}
-	if _, ok := currencyExponents[value]; !ok {
-		return "", fmt.Errorf("unsupported currency %s", value)
-	}
-	return value, nil
-}
 
 func ParseMajorAmount(value, currency string) (int64, error) {
 	currency, err := NormalizeCurrency(currency)
