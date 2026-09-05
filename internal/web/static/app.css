@@ -241,6 +241,12 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .money-input-group input { min-width:0; border-radius:10px 0 0 10px; }
 .money-input-group .currency-suffix { position:relative; margin-left:-1px; border-radius:0 10px 10px 0; font-weight:750; text-transform:uppercase; }
 .money-input-group input:focus { position:relative; z-index:1; }
+.fx-rate-input-group { display:grid; grid-template-columns:auto minmax(0,1fr) auto; }
+.fx-rate-input-group input { min-width:0; margin:0 -1px; border-radius:0; }
+.fx-rate-addon { display:flex; min-width:76px; align-items:center; justify-content:center; padding:0 13px; border:1px solid var(--line); background:var(--paper); color:var(--muted); font-weight:700; white-space:nowrap; }
+.fx-rate-addon:first-child { gap:4px; border-radius:10px 0 0 10px; }
+.fx-rate-addon:last-child { min-width:64px; border-radius:0 10px 10px 0; }
+.fx-rate-input-group input:focus { position:relative; z-index:1; }
 .field-heading label { display:block; }
 .field-heading .link-button { width:auto; }
 .empty-inline { padding:18px; border-radius:10px; background:var(--paper); color:var(--muted); }

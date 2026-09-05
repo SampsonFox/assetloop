@@ -14,6 +14,7 @@
     const foreign = !neutral && select.value !== select.dataset.baseCurrency;
     for (const field of select.form.querySelectorAll("[data-fx-field]")) field.hidden = !foreign;
     for (const input of select.form.querySelectorAll("[data-fx-required]")) input.required = foreign;
+    for (const unit of select.form.querySelectorAll("[data-fx-rate-from]")) unit.textContent = select.value.toUpperCase();
   };
 
   const syncEventTypeFields = (select) => {
