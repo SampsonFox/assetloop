@@ -10,10 +10,7 @@ import (
 	"github.com/SampsonFox/assetloop/internal/domain"
 )
 
-var (
-	ErrAlreadyVoided   = errors.New("asset event is already voided")
-	ErrDraftNotPending = errors.New("import draft is not pending")
-)
+var ErrAlreadyVoided = errors.New("asset event is already voided")
 
 type LifecycleService struct {
 	store LifecycleStore
@@ -21,6 +18,7 @@ type LifecycleService struct {
 }
 
 type RecordEvent struct {
+	RequestKey        string
 	AssetID           string
 	Type              domain.AssetEventType
 	AmountMinor       int64
@@ -35,23 +33,9 @@ type RecordEvent struct {
 	Notes             string
 }
 
-type CreateImportDraft struct {
-	AssetID           string
-	Type              domain.AssetEventType
-	AmountMinor       int64
-	Currency          string
-	OccurredAt        time.Time
-	Source            string
-	ExternalReference string
-	Notes             string
-	RawText           string
-}
-
-type ConfirmImport struct {
-	FXRateScaled int64
-	FXRateDate   time.Time
-	FXRateSource string
-	FXConfirmed  bool
+type CreateAssetEventType struct {
+	Name     string
+	Cashflow domain.AssetEventCashflow
 }
 
 func NewLifecycleService(store LifecycleStore) *LifecycleService {
@@ -69,14 +53,39 @@ func (s *LifecycleService) BaseCurrency(ctx context.Context, actor Principal) (s
 	return currency, locked, nil
 }
 
+func (s *LifecycleService) PortfolioSummary(ctx context.Context, actor Principal) (PortfolioSummary, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return PortfolioSummary{}, err
+	}
+	summary, err := s.store.GetPortfolioSummary(ctx, actor.TenantID)
+	if err != nil {
+		return PortfolioSummary{}, fmt.Errorf("get portfolio summary: %w", err)
+	}
+	return summary, nil
+}
+
 func (s *LifecycleService) Record(ctx context.Context, actor Principal, cmd RecordEvent) (domain.AssetEvent, error) {
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEvent{}, err
 	}
-	if err := s.validateLifecycle(ctx, actor, cmd.AssetID, cmd.Type); err != nil {
+	var err error
+	if cmd, err = normalizeRecordAmount(cmd); err != nil {
 		return domain.AssetEvent{}, err
 	}
-	transaction, event, err := s.prepareEvent(ctx, actor, cmd, "", "")
+	return s.write(ctx, actor, "record", "", cmd, func(scoped *LifecycleService) (domain.AssetEvent, error) {
+		return scoped.record(ctx, actor, cmd)
+	})
+}
+
+func (s *LifecycleService) record(ctx context.Context, actor Principal, cmd RecordEvent) (domain.AssetEvent, error) {
+	eventType, err := s.resolveEventType(ctx, actor.TenantID, cmd.Type)
+	if err != nil {
+		return domain.AssetEvent{}, err
+	}
+	if err := s.validateLifecycle(ctx, actor, cmd.AssetID, domain.AssetEventType(eventType.Name)); err != nil {
+		return domain.AssetEvent{}, err
+	}
+	transaction, event, err := s.prepareEvent(ctx, actor, cmd, eventType, "")
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -90,6 +99,26 @@ func (s *LifecycleService) Correct(ctx context.Context, actor Principal, eventID
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEvent{}, err
 	}
+	var err error
+	if cmd, err = normalizeRecordAmount(cmd); err != nil {
+		return domain.AssetEvent{}, err
+	}
+	return s.write(ctx, actor, "correct", eventID, cmd, func(scoped *LifecycleService) (domain.AssetEvent, error) {
+		return scoped.correct(ctx, actor, eventID, cmd)
+	})
+}
+
+func normalizeRecordAmount(cmd RecordEvent) (RecordEvent, error) {
+	if cmd.AmountMinor == -1<<63 {
+		return RecordEvent{}, NewInputError("validation.amount_invalid")
+	}
+	if cmd.AmountMinor < 0 {
+		cmd.AmountMinor = -cmd.AmountMinor
+	}
+	return cmd, nil
+}
+
+func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID string, cmd RecordEvent) (domain.AssetEvent, error) {
 	if err := validID("event ID", eventID); err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -102,7 +131,11 @@ func (s *LifecycleService) Correct(ctx context.Context, actor Principal, eventID
 	}
 	cmd.AssetID = original.AssetID
 	cmd.Type = original.Type
-	transaction, replacement, err := s.prepareEvent(ctx, actor, cmd, "", original.ID)
+	eventType, err := s.resolveEventType(ctx, actor.TenantID, original.Type)
+	if err != nil {
+		return domain.AssetEvent{}, err
+	}
+	transaction, replacement, err := s.prepareEvent(ctx, actor, cmd, eventType, original.ID)
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -141,6 +174,42 @@ func (s *LifecycleService) Timeline(ctx context.Context, actor Principal, assetI
 	return events, summary, nil
 }
 
+func (s *LifecycleService) TimelinePage(ctx context.Context, actor Principal, assetID string, opts EventListOptions) (EventListResult, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return EventListResult{}, err
+	}
+	if err := validID("asset ID", assetID); err != nil {
+		return EventListResult{}, err
+	}
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
+	opts.Query = strings.TrimSpace(opts.Query)
+	opts.Type = strings.TrimSpace(opts.Type)
+	if opts.Type == string(domain.AssetEventVoid) {
+		return EventListResult{}, NewInputError("validation.filter_invalid")
+	}
+	if opts.Type != "" {
+		eventType, err := s.resolveEventType(ctx, actor.TenantID, domain.AssetEventType(opts.Type))
+		if err != nil {
+			return EventListResult{}, NewInputError("validation.filter_invalid")
+		}
+		opts.Type = eventType.Name
+	}
+	var err error
+	opts.Sort, opts.Direction, err = normalizeSort(opts.Sort, opts.Direction, "occurred", "asc", map[string]struct{}{"occurred": {}, "amount": {}, "type": {}})
+	if err != nil {
+		return EventListResult{}, err
+	}
+	events, total, err := s.store.ListAssetEventsPage(ctx, actor.TenantID, assetID, opts)
+	if err != nil {
+		return EventListResult{}, fmt.Errorf("list asset events page: %w", err)
+	}
+	summary, err := s.store.GetAssetSummary(ctx, actor.TenantID, assetID)
+	if err != nil {
+		return EventListResult{}, fmt.Errorf("get asset summary: %w", err)
+	}
+	return EventListResult{Events: events, Summary: summary, Total: total}, nil
+}
+
 func (s *LifecycleService) GetEvent(ctx context.Context, actor Principal, eventID string) (domain.AssetEvent, error) {
 	if err := actor.Require(CapabilityView); err != nil {
 		return domain.AssetEvent{}, err
@@ -155,117 +224,70 @@ func (s *LifecycleService) GetEvent(ctx context.Context, actor Principal, eventI
 	return event, nil
 }
 
-func (s *LifecycleService) CreateDraft(ctx context.Context, actor Principal, cmd CreateImportDraft) (domain.ImportDraft, error) {
-	if err := actor.Require(CapabilityManageLifecycle); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if err := validID("asset ID", cmd.AssetID); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if _, err := s.store.GetAsset(ctx, actor.TenantID, cmd.AssetID); err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("get asset: %w", err)
-	}
-	if err := validEconomicEventType(cmd.Type); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if cmd.AmountMinor <= 0 {
-		return domain.ImportDraft{}, errors.New("amount must be positive")
-	}
-	currency, err := domain.NormalizeCurrency(cmd.Currency)
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	occurredAt, err := s.validOccurredAt(cmd.OccurredAt)
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	source, err := catalogText("source", cmd.Source, 120, true)
-	if err != nil {
-		return domain.ImportDraft{}, err
-	}
-	draft := domain.ImportDraft{
-		ID: newID(), TenantID: actor.TenantID, AssetID: cmd.AssetID, EventType: cmd.Type,
-		AmountMinor: cmd.AmountMinor, Currency: currency, OccurredAt: occurredAt,
-		Source: source, ExternalReference: strings.TrimSpace(cmd.ExternalReference),
-		Notes: strings.TrimSpace(cmd.Notes), RawText: strings.TrimSpace(cmd.RawText), Status: "pending",
-		CreatedByUserID: actor.UserID, CreatedAt: s.now().UTC(),
-	}
-	if err := s.store.CreateImportDraft(ctx, draft); err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("create import draft: %w", err)
-	}
-	return draft, nil
-}
-
-func (s *LifecycleService) PendingDrafts(ctx context.Context, actor Principal) ([]domain.ImportDraft, error) {
+func (s *LifecycleService) EventTypes(ctx context.Context, actor Principal) ([]domain.AssetEventTypeDefinition, error) {
 	if err := actor.Require(CapabilityView); err != nil {
 		return nil, err
 	}
-	drafts, err := s.store.ListPendingImportDrafts(ctx, actor.TenantID)
+	custom, err := s.store.ListAssetEventTypes(ctx, actor.TenantID)
 	if err != nil {
-		return nil, fmt.Errorf("list import drafts: %w", err)
+		return nil, fmt.Errorf("list asset event types: %w", err)
 	}
-	return drafts, nil
+	return append(builtInEventTypes(), custom...), nil
 }
 
-func (s *LifecycleService) GetDraft(ctx context.Context, actor Principal, draftID string) (domain.ImportDraft, error) {
-	if err := actor.Require(CapabilityView); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	if err := validID("draft ID", draftID); err != nil {
-		return domain.ImportDraft{}, err
-	}
-	draft, err := s.store.GetImportDraft(ctx, actor.TenantID, draftID)
-	if err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("get import draft: %w", err)
-	}
-	return draft, nil
-}
-
-func (s *LifecycleService) ConfirmDraft(ctx context.Context, actor Principal, draftID string, confirmation ConfirmImport) (domain.AssetEvent, error) {
+func (s *LifecycleService) CreateEventType(ctx context.Context, actor Principal, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
-		return domain.AssetEvent{}, err
+		return domain.AssetEventTypeDefinition{}, err
 	}
-	draft, err := s.GetDraft(ctx, actor, draftID)
+	name, err := catalogText("event type", cmd.Name, 80, true)
 	if err != nil {
-		return domain.AssetEvent{}, err
+		return domain.AssetEventTypeDefinition{}, err
 	}
-	if draft.Status != "pending" {
-		return domain.AssetEvent{}, ErrDraftNotPending
+	normalized := strings.ToLower(name)
+	for _, builtIn := range builtInEventTypes() {
+		if normalized == builtIn.NormalizedName {
+			return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_type_exists")
+		}
 	}
-	if err := s.validateLifecycle(ctx, actor, draft.AssetID, draft.EventType); err != nil {
-		return domain.AssetEvent{}, err
+	if normalized == string(domain.AssetEventVoid) {
+		return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_type_exists")
 	}
-	cmd := RecordEvent{
-		AssetID: draft.AssetID, Type: draft.EventType, AmountMinor: draft.AmountMinor,
-		Currency: draft.Currency, FXRateScaled: confirmation.FXRateScaled,
-		FXRateDate: confirmation.FXRateDate, FXRateSource: confirmation.FXRateSource,
-		FXConfirmed: confirmation.FXConfirmed, OccurredAt: draft.OccurredAt,
-		Source: draft.Source, ExternalReference: draft.ExternalReference, Notes: draft.Notes,
-	}
-	transaction, event, err := s.prepareEvent(ctx, actor, cmd, draft.ID, "")
+	existing, err := s.store.ListAssetEventTypes(ctx, actor.TenantID)
 	if err != nil {
-		return domain.AssetEvent{}, err
+		return domain.AssetEventTypeDefinition{}, fmt.Errorf("list asset event types: %w", err)
 	}
-	if err := s.store.ConfirmImportDraft(ctx, draft.ID, transaction, event); err != nil {
-		return domain.AssetEvent{}, fmt.Errorf("confirm import draft: %w", err)
+	for _, eventType := range existing {
+		if normalized == eventType.NormalizedName {
+			return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_type_exists")
+		}
 	}
-	return event, nil
+	if cmd.Cashflow != domain.AssetEventExpense && cmd.Cashflow != domain.AssetEventIncome && cmd.Cashflow != domain.AssetEventNeutral {
+		return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_cashflow")
+	}
+	eventType := domain.AssetEventTypeDefinition{
+		ID: newID(), TenantID: actor.TenantID, Name: name, NormalizedName: normalized,
+		Cashflow: cmd.Cashflow, CreatedByUserID: actor.UserID, CreatedAt: s.now().UTC(),
+	}
+	if err := s.store.CreateAssetEventType(ctx, eventType); err != nil {
+		return domain.AssetEventTypeDefinition{}, fmt.Errorf("create asset event type: %w", err)
+	}
+	return eventType, nil
 }
 
-func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cmd RecordEvent, draftID, replacesID string) (domain.AssetTransaction, domain.AssetEvent, error) {
+func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cmd RecordEvent, eventType domain.AssetEventTypeDefinition, replacesID string) (domain.AssetTransaction, domain.AssetEvent, error) {
 	if err := validID("asset ID", cmd.AssetID); err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, err
 	}
 	if _, err := s.store.GetAsset(ctx, actor.TenantID, cmd.AssetID); err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, fmt.Errorf("get asset: %w", err)
 	}
-	if err := validEconomicEventType(cmd.Type); err != nil {
-		return domain.AssetTransaction{}, domain.AssetEvent{}, err
+	if eventType.Cashflow != domain.AssetEventNeutral && cmd.AmountMinor <= 0 {
+		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_positive")
 	}
-	if cmd.AmountMinor <= 0 {
-		return domain.AssetTransaction{}, domain.AssetEvent{}, errors.New("amount must be positive")
+	if eventType.Cashflow == domain.AssetEventNeutral && cmd.AmountMinor != 0 {
+		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_zero")
 	}
-	currency, err := domain.NormalizeCurrency(cmd.Currency)
+	currency, err := domain.NormalizeSelectableCurrency(cmd.Currency)
 	if err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, err
 	}
@@ -279,12 +301,12 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	}
 	baseAmount := cmd.AmountMinor
 	var fx *domain.FXEvidence
-	if currency != baseCurrency {
+	if eventType.Cashflow != domain.AssetEventNeutral && currency != baseCurrency {
 		if !cmd.FXConfirmed {
-			return domain.AssetTransaction{}, domain.AssetEvent{}, errors.New("FX conversion must be confirmed")
+			return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.fx_confirm")
 		}
 		if cmd.FXRateDate.IsZero() || strings.TrimSpace(cmd.FXRateSource) == "" {
-			return domain.AssetTransaction{}, domain.AssetEvent{}, errors.New("FX rate date and source are required")
+			return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.fx_evidence")
 		}
 		baseAmount, err = domain.ConvertMinor(cmd.AmountMinor, currency, baseCurrency, cmd.FXRateScaled)
 		if err != nil {
@@ -295,7 +317,7 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 			RateScaled: cmd.FXRateScaled, RateDate: cmd.FXRateDate.UTC(), RateSource: strings.TrimSpace(cmd.FXRateSource),
 		}
 	}
-	if cmd.Type == domain.AssetEventPurchase || cmd.Type == domain.AssetEventRepair {
+	if eventType.Cashflow == domain.AssetEventExpense {
 		baseAmount = -baseAmount
 	}
 	occurredAt, err := s.validOccurredAt(cmd.OccurredAt)
@@ -312,12 +334,9 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 		ExternalReference: strings.TrimSpace(cmd.ExternalReference), Notes: strings.TrimSpace(cmd.Notes),
 		CreatedByUserID: actor.UserID, CreatedAt: createdAt,
 	}
-	if draftID != "" {
-		transaction.ExternalReference = strings.TrimSpace(transaction.ExternalReference + " import:" + draftID)
-	}
 	event := domain.AssetEvent{
 		ID: newID(), TenantID: actor.TenantID, AssetID: cmd.AssetID, TransactionID: transaction.ID,
-		Type: cmd.Type, BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency, FX: fx,
+		Type: domain.AssetEventType(eventType.Name), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency, FX: fx,
 		Notes: strings.TrimSpace(cmd.Notes), ReplacesEventID: replacesID, OccurredAt: occurredAt,
 		CreatedByUserID: actor.UserID, CreatedAt: createdAt,
 	}
@@ -325,9 +344,6 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 }
 
 func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principal, assetID string, eventType domain.AssetEventType) error {
-	if err := validEconomicEventType(eventType); err != nil {
-		return err
-	}
 	if err := validID("asset ID", assetID); err != nil {
 		return err
 	}
@@ -350,14 +366,14 @@ func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principa
 	switch eventType {
 	case domain.AssetEventPurchase:
 		if hasPurchase {
-			return errors.New("asset already has an active purchase event")
+			return NewInputError("validation.event_purchase_exists")
 		}
 	case domain.AssetEventRepair, domain.AssetEventSale:
 		if !hasPurchase {
-			return errors.New("asset must be purchased before repair or sale")
+			return NewInputError("validation.event_purchase_first")
 		}
 		if sold {
-			return errors.New("sold asset cannot receive another repair or sale event")
+			return NewInputError("validation.event_after_sale")
 		}
 	}
 	return nil
@@ -365,26 +381,47 @@ func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principa
 
 func (s *LifecycleService) validOccurredAt(value time.Time) (time.Time, error) {
 	if value.IsZero() {
-		return time.Time{}, errors.New("occurred time is required")
+		return time.Time{}, NewInputError("validation.occurred_required")
 	}
 	value = value.UTC()
 	if value.After(s.now().UTC().Add(5 * time.Minute)) {
-		return time.Time{}, errors.New("occurred time cannot be in the future")
+		return time.Time{}, NewInputError("validation.occurred_future")
 	}
 	return value, nil
 }
 
-func validEconomicEventType(value domain.AssetEventType) error {
-	switch value {
-	case domain.AssetEventPurchase, domain.AssetEventRepair, domain.AssetEventSale:
-		return nil
-	default:
-		return errors.New("event type must be purchase, repair, or sale")
+func (s *LifecycleService) resolveEventType(ctx context.Context, tenantID string, value domain.AssetEventType) (domain.AssetEventTypeDefinition, error) {
+	normalized := strings.ToLower(strings.TrimSpace(string(value)))
+	for _, eventType := range builtInEventTypes() {
+		if normalized == eventType.NormalizedName {
+			return eventType, nil
+		}
+	}
+	if normalized == "" || normalized == string(domain.AssetEventVoid) {
+		return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_type")
+	}
+	eventTypes, err := s.store.ListAssetEventTypes(ctx, tenantID)
+	if err != nil {
+		return domain.AssetEventTypeDefinition{}, fmt.Errorf("list asset event types: %w", err)
+	}
+	for _, eventType := range eventTypes {
+		if normalized == eventType.NormalizedName {
+			return eventType, nil
+		}
+	}
+	return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_type")
+}
+
+func builtInEventTypes() []domain.AssetEventTypeDefinition {
+	return []domain.AssetEventTypeDefinition{
+		{Name: string(domain.AssetEventPurchase), NormalizedName: string(domain.AssetEventPurchase), Cashflow: domain.AssetEventExpense, BuiltIn: true},
+		{Name: string(domain.AssetEventRepair), NormalizedName: string(domain.AssetEventRepair), Cashflow: domain.AssetEventExpense, BuiltIn: true},
+		{Name: string(domain.AssetEventSale), NormalizedName: string(domain.AssetEventSale), Cashflow: domain.AssetEventIncome, BuiltIn: true},
 	}
 }
 
 func summarizeEvents(baseCurrency string, events []domain.AssetEvent) domain.AssetSummary {
-	summary := domain.AssetSummary{BaseCurrency: baseCurrency, Status: "未入账"}
+	summary := domain.AssetSummary{BaseCurrency: baseCurrency, Status: "unacquired"}
 	activePurchase, sold := false, false
 	for _, event := range events {
 		if event.IsVoided || event.Type == domain.AssetEventVoid {
@@ -404,10 +441,10 @@ func summarizeEvents(baseCurrency string, events []domain.AssetEvent) domain.Ass
 		}
 	}
 	if activePurchase {
-		summary.Status = "持有中"
+		summary.Status = "active"
 	}
 	if sold {
-		summary.Status = "已卖出"
+		summary.Status = "sold"
 	}
 	return summary
 }

@@ -23,13 +23,20 @@ func TestStoreConformanceAndSafeRemigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	storetest.Run(t, sqlite.New(db))
+	other, err := basestore.Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	storetest.RunLifecycleRetries(t, sqlite.New(db), sqlite.New(other))
 	storetest.AssertAssetEventsAppendOnly(t, db, "sqlite")
 	storetest.AssertBaseCurrencyLocked(t, db, "sqlite")
+	storetest.RunModelResources(t, sqlite.New(db), sqlite.New(other), db, "sqlite")
 	if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
 		t.Fatalf("repeat migration: %v", err)
 	}
 	backups, err := filepath.Glob(path + ".backup-*")
-	if err != nil || len(backups) == 0 {
-		t.Fatalf("expected verified pre-upgrade backup, files=%v err=%v", backups, err)
+	if err != nil || len(backups) != 0 {
+		t.Fatalf("unchanged schema must not create upgrade backups, files=%v err=%v", backups, err)
 	}
 }

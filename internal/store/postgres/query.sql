@@ -13,8 +13,8 @@ ON CONFLICT (tenant_id, category_id, name) DO UPDATE SET name = excluded.name
 RETURNING id;
 
 -- name: EnsureVariant :one
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at) VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (tenant_id, model_id, name) DO UPDATE SET name = excluded.name
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color) VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tenant_id, model_id, name, color) DO UPDATE SET name = excluded.name
 RETURNING id;
 
 -- name: CreateAsset :exec
@@ -24,7 +24,7 @@ INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES 
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -51,23 +51,32 @@ SET category_id = $1, name = $2
 WHERE tenant_id = $3 AND id = $4;
 
 -- name: CreateVariant :exec
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: UpdateVariant :execrows
 UPDATE product_variants
-SET model_id = $1, name = $2
+SET model_id = $1, name = $2, color = $5
 WHERE tenant_id = $3 AND id = $4;
+
+-- name: DeleteVariant :execrows
+DELETE FROM product_variants AS variant
+WHERE variant.tenant_id = $1 AND variant.id = $2
+  AND NOT EXISTS (
+    SELECT 1 FROM assets
+    WHERE assets.tenant_id = variant.tenant_id
+      AND assets.variant_id = variant.id
+  );
 
 -- name: CreateCatalogAsset :exec
 INSERT INTO assets
-    (id, tenant_id, variant_id, display_name, serial_number, color, purchase_channel, notes, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+    (id, tenant_id, variant_id, display_name, serial_number, purchase_channel, notes, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: UpdateCatalogAsset :execrows
 UPDATE assets
-SET variant_id = $1, display_name = $2, serial_number = $3, color = $4, purchase_channel = $5, notes = $6
-WHERE tenant_id = $7 AND id = $8;
+SET variant_id = $1, display_name = $2, serial_number = $3, purchase_channel = $4, notes = $5
+WHERE tenant_id = $6 AND id = $7;
 
 -- name: ListCategories :many
 SELECT id, tenant_id, name, icon_key, created_at
@@ -76,15 +85,67 @@ WHERE tenant_id = $1
 ORDER BY name, id;
 
 -- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+       r.store_id AS model_3d_store_id, r.object_key AS model_3d_object_key, r.sha256 AS model_3d_sha256, r.size_bytes AS model_3d_size_bytes,
+       r.source_url AS model_3d_source_url, r.author AS model_3d_author, r.license AS model_3d_license, r.updated_at AS model_3d_updated_at
 FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1
 ORDER BY c.name, m.name, m.id;
 
+-- name: ListModelsWithVariants :many
+WITH filtered_models AS (
+    SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
+           c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+           r.store_id AS model_3d_store_id, r.object_key AS model_3d_object_key, r.sha256 AS model_3d_sha256, r.size_bytes AS model_3d_size_bytes,
+           r.source_url AS model_3d_source_url, r.author AS model_3d_author, r.license AS model_3d_license, r.updated_at AS model_3d_updated_at
+    FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
+    JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+    WHERE m.tenant_id = sqlc.arg(tenant_id)
+      AND (sqlc.arg(search_query)::text = '' OR m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR c.name ILIKE '%' || sqlc.arg(search_query)::text || '%')
+      AND (sqlc.arg(category_filter)::text = '' OR m.category_id::text = sqlc.arg(category_filter)::text)
+),
+paged_models AS (
+    SELECT *, COUNT(*) OVER () AS total_count,
+           ROW_NUMBER() OVER (ORDER BY
+             CASE WHEN sqlc.arg(sort_key)::text = 'category' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(category_name) END ASC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'category' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(category_name) END DESC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(name) END ASC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(name) END DESC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'asc' THEN created_at END ASC,
+             CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'desc' THEN created_at END DESC,
+             LOWER(category_name), LOWER(name), id) AS page_order
+    FROM filtered_models
+    LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint
+)
+SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
+       pm.name, pm.created_at, pm.model_3d_resource_id,
+       pm.model_3d_store_id, pm.model_3d_object_key, pm.model_3d_sha256, pm.model_3d_size_bytes,
+       pm.model_3d_source_url, pm.model_3d_author, pm.model_3d_license, pm.model_3d_updated_at,
+       pm.total_count, pm.page_order,
+       v.id AS variant_id, v.name AS variant_name, v.color AS variant_color, v.model_3d_resource_id AS variant_model_3d_resource_id, v.created_at AS variant_created_at
+FROM paged_models pm
+LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
+ORDER BY pm.page_order, LOWER(v.name), v.id;
+-- name: GetProductModel :one
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+       r.store_id AS model_3d_store_id, r.object_key AS model_3d_object_key, r.sha256 AS model_3d_sha256, r.size_bytes AS model_3d_size_bytes,
+       r.source_url AS model_3d_source_url, r.author AS model_3d_author, r.license AS model_3d_license, r.updated_at AS model_3d_updated_at
+FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = $1 AND m.id = $2;
+
+-- name: UpdateProductModel3D :execrows
+UPDATE product_models SET model_3d_store_id = $1, model_3d_object_key = $2, model_3d_sha256 = $3,
+ model_3d_size_bytes = $4, model_3d_source_url = $5, model_3d_author = $6, model_3d_license = $7, model_3d_updated_at = $8
+WHERE tenant_id = $9 AND id = $10;
+
 -- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
-       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.created_at
+       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.color, v.model_3d_resource_id, v.created_at
 FROM product_variants v
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
@@ -95,7 +156,7 @@ ORDER BY c.name, m.name, v.name, v.id;
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -104,6 +165,152 @@ JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = $1
 ORDER BY a.created_at DESC, a.id;
 
+-- name: ListAssetsWithSummary :many
+WITH effective_events AS (
+SELECT e.*
+FROM asset_events e
+WHERE e.tenant_id = sqlc.arg(tenant_id)
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       SUM(CASE WHEN base_amount_minor < 0 THEN -base_amount_minor ELSE 0 END)::bigint AS expense_minor,
+       SUM(CASE WHEN base_amount_minor > 0 THEN base_amount_minor ELSE 0 END)::bigint AS income_minor,
+       SUM(base_amount_minor)::bigint AS net_minor,
+       BOOL_OR(event_type = 'purchase') AS has_purchase,
+       BOOL_OR(event_type = 'sale') AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
+),
+asset_rows AS (
+SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
+       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
+       a.purchase_channel, a.notes, a.created_at,
+       COALESCE(er.expense_minor, 0)::bigint AS expense_minor,
+       COALESCE(er.income_minor, 0)::bigint AS income_minor,
+       COALESCE(er.net_minor, 0)::bigint AS net_minor,
+       COALESCE(er.has_purchase, FALSE) AS has_purchase,
+       COALESCE(er.has_sale, FALSE) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type,
+       CASE
+           WHEN COALESCE(er.has_sale, FALSE) THEN 'sold'
+           WHEN COALESCE(er.has_purchase, FALSE) AND re.event_type = 'repair' THEN 'repairing'
+           WHEN COALESCE(er.has_purchase, FALSE) THEN 'active'
+           ELSE 'unacquired'
+       END::text AS status,
+       t.base_currency::text AS base_currency
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+JOIN tenants t ON t.id = a.tenant_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = sqlc.arg(tenant_id)
+  AND (sqlc.arg(search_query)::text = '' OR (
+       a.display_name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.serial_number ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.color ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.purchase_channel ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       v.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       c.name ILIKE '%' || sqlc.arg(search_query)::text || '%'
+  ))
+)
+SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
+       variant_id, variant_name, display_name, serial_number, color, model_3d_resource_id, purchase_channel, notes, created_at,
+       expense_minor, income_minor, net_minor,
+       status,
+       base_currency
+FROM asset_rows
+WHERE sqlc.arg(status_filter)::text IN ('', 'all')
+   OR (sqlc.arg(status_filter)::text = 'sold' AND has_sale)
+   OR (sqlc.arg(status_filter)::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
+   OR (sqlc.arg(status_filter)::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
+   OR (sqlc.arg(status_filter)::text = 'unacquired' AND NOT has_sale AND NOT has_purchase)
+ORDER BY
+  CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(display_name) END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(display_name) END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(model_name || ' ' || variant_name) END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(model_name || ' ' || variant_name) END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'status' AND sqlc.arg(sort_direction)::text = 'asc' THEN status END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'status' AND sqlc.arg(sort_direction)::text = 'desc' THEN status END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'net' AND sqlc.arg(sort_direction)::text = 'asc' THEN net_minor END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'net' AND sqlc.arg(sort_direction)::text = 'desc' THEN net_minor END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'cost' AND sqlc.arg(sort_direction)::text = 'asc' THEN expense_minor END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'cost' AND sqlc.arg(sort_direction)::text = 'desc' THEN expense_minor END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'asc' THEN created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'desc' THEN created_at END DESC,
+  id
+LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint;
+
+-- name: CountAssetsWithSummary :one
+WITH effective_events AS (
+SELECT e.*
+FROM asset_events e
+WHERE e.tenant_id = sqlc.arg(tenant_id)
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       BOOL_OR(event_type = 'purchase') AS has_purchase,
+       BOOL_OR(event_type = 'sale') AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
+),
+asset_rows AS (
+SELECT a.id,
+       COALESCE(er.has_purchase, FALSE) AS has_purchase,
+       COALESCE(er.has_sale, FALSE) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = sqlc.arg(tenant_id)
+  AND (sqlc.arg(search_query)::text = '' OR (
+       a.display_name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.serial_number ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.color ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.purchase_channel ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       a.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       v.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR
+       c.name ILIKE '%' || sqlc.arg(search_query)::text || '%'
+  ))
+)
+SELECT COUNT(*) FROM asset_rows
+WHERE sqlc.arg(status_filter)::text IN ('', 'all')
+   OR (sqlc.arg(status_filter)::text = 'sold' AND has_sale)
+   OR (sqlc.arg(status_filter)::text = 'repairing' AND NOT has_sale AND has_purchase AND latest_event_type = 'repair')
+   OR (sqlc.arg(status_filter)::text = 'active' AND NOT has_sale AND has_purchase AND latest_event_type != 'repair')
+   OR (sqlc.arg(status_filter)::text = 'unacquired' AND NOT has_sale AND NOT has_purchase);
+
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;
 
@@ -111,15 +318,15 @@ SELECT COUNT(*) FROM users;
 INSERT INTO tenants (id, name, base_currency, created_at) VALUES ($1, $2, $3, $4);
 
 -- name: CreateUser :exec
-INSERT INTO users (id, username, username_normalized, password_hash, created_at)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO users (id, username, username_normalized, password_hash, locale, theme, accent, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: CreateMembership :exec
 INSERT INTO tenant_memberships (tenant_id, user_id, role, created_at)
 VALUES ($1, $2, $3, $4);
 
 -- name: FindAccountByUsername :one
-SELECT u.id AS user_id, u.username, u.password_hash,
+SELECT u.id AS user_id, u.username, u.password_hash, u.locale, u.theme, u.accent,
        tm.tenant_id, tm.role, t.name AS tenant_name
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
@@ -129,7 +336,8 @@ ORDER BY tm.created_at
 LIMIT 1;
 
 -- name: FirstPrincipal :one
-SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name
+SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme, u.accent
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
 JOIN tenants t ON t.id = tm.tenant_id
@@ -141,7 +349,8 @@ INSERT INTO sessions (token_hash, tenant_id, user_id, expires_at, created_at)
 VALUES ($1, $2, $3, $4, $5);
 
 -- name: GetSessionPrincipal :one
-SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
+SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme, u.accent
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 JOIN tenant_memberships tm ON tm.tenant_id = s.tenant_id AND tm.user_id = s.user_id
@@ -151,12 +360,32 @@ WHERE s.token_hash = $1 AND s.expires_at > $2;
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = $1;
 
+-- name: UpdateUserPreferences :exec
+UPDATE users SET locale = $1, theme = $2, accent = $3 WHERE id = $4;
+
 -- name: ListMembers :many
 SELECT u.id AS user_id, u.username, tm.role, tm.created_at
 FROM tenant_memberships tm
 JOIN users u ON u.id = tm.user_id
 WHERE tm.tenant_id = $1
 ORDER BY u.username_normalized;
+
+-- name: ListMembersPage :many
+SELECT u.id AS user_id, u.username, tm.role, tm.created_at, COUNT(*) OVER () AS total_count
+FROM tenant_memberships tm
+JOIN users u ON u.id = tm.user_id
+WHERE tm.tenant_id = sqlc.arg(tenant_id)
+  AND (sqlc.arg(search_query)::text = '' OR u.username ILIKE '%' || sqlc.arg(search_query)::text || '%')
+  AND (sqlc.arg(role_filter)::text = '' OR tm.role = sqlc.arg(role_filter)::text)
+ORDER BY
+  CASE WHEN sqlc.arg(sort_key)::text = 'username' AND sqlc.arg(sort_direction)::text = 'asc' THEN u.username_normalized END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'username' AND sqlc.arg(sort_direction)::text = 'desc' THEN u.username_normalized END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'role' AND sqlc.arg(sort_direction)::text = 'asc' THEN tm.role END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'role' AND sqlc.arg(sort_direction)::text = 'desc' THEN tm.role END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'asc' THEN tm.created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'created' AND sqlc.arg(sort_direction)::text = 'desc' THEN tm.created_at END DESC,
+  u.id
+LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint;
 
 -- name: CreateSecurityAuditEvent :exec
 INSERT INTO security_audit_events
@@ -167,6 +396,28 @@ VALUES ($1, $2, $3, $4, $5, $6, $7);
 SELECT base_currency, base_currency_locked
 FROM tenants
 WHERE id = $1;
+
+-- name: GetPortfolioSummary :one
+WITH effective_events AS (
+    SELECT e.*
+    FROM asset_events e
+    WHERE e.tenant_id = sqlc.arg(tenant_id)
+      AND e.event_type != 'void'
+      AND NOT EXISTS (
+          SELECT 1 FROM asset_events void_event
+          WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+      )
+)
+SELECT COUNT(DISTINCT a.id)::bigint AS asset_count,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0)::bigint AS expense_minor,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0)::bigint AS income_minor,
+       COALESCE(SUM(e.base_amount_minor), 0)::bigint AS net_minor,
+       t.base_currency::text AS base_currency
+FROM tenants t
+LEFT JOIN assets a ON a.tenant_id = t.id
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = sqlc.arg(tenant_id)
+GROUP BY t.base_currency;
 
 -- name: LockTenantBaseCurrency :exec
 UPDATE tenants
@@ -185,6 +436,17 @@ INSERT INTO asset_events
      fx_rate_date, fx_rate_source, notes, voids_event_id, replaces_event_id,
      occurred_at, created_by_user_id, created_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18);
+
+-- name: CreateAssetEventType :exec
+INSERT INTO asset_event_types
+    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: ListAssetEventTypes :many
+SELECT id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at
+FROM asset_event_types
+WHERE tenant_id = $1
+ORDER BY normalized_name, id;
 
 -- name: GetAssetEvent :one
 SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
@@ -213,28 +475,162 @@ FROM asset_events e
 WHERE e.tenant_id = $1 AND e.asset_id = $2
 ORDER BY e.occurred_at, e.created_at, e.id;
 
--- name: CreateImportDraft :exec
-INSERT INTO import_drafts
-    (id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-     source, external_reference, notes, raw_text, status, created_by_user_id, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+-- name: ListAssetEventsPage :many
+WITH RECURSIVE event_lineage (id, root_created_at) AS (
+    SELECT id, created_at
+    FROM asset_events
+    WHERE tenant_id = sqlc.arg(tenant_id) AND asset_id = sqlc.arg(asset_id) AND replaces_event_id IS NULL
+    UNION ALL
+    SELECT e.id, lineage.root_created_at
+    FROM asset_events e
+    JOIN event_lineage lineage ON lineage.id = e.replaces_event_id
+    WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+)
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided,
+       COUNT(*) OVER ()::bigint AS total_count
+FROM asset_events e
+JOIN event_lineage lineage ON lineage.id = e.id
+WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+  AND e.event_type != 'void'
+  AND (sqlc.arg(show_voided)::boolean OR NOT EXISTS (
+      SELECT 1 FROM asset_events v
+      WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+  ))
+  AND (sqlc.arg(search_query)::text = '' OR e.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || sqlc.arg(search_query)::text || '%')
+  AND (sqlc.arg(event_type_filter)::text = '' OR e.event_type = sqlc.arg(event_type_filter)::text)
+ORDER BY
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.occurred_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.occurred_at END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN lineage.root_created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN lineage.root_created_at END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.created_at END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.created_at END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'amount' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.base_amount_minor END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'amount' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.base_amount_minor END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'type' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.event_type END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'type' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.event_type END DESC,
+  e.created_at DESC, e.id DESC
+LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint;
 
--- name: ListPendingImportDrafts :many
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = $1 AND status = 'pending'
-ORDER BY created_at, id;
+-- name: GetAssetSummary :one
+WITH effective_events AS (
+    SELECT e.*
+    FROM asset_events e
+    WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
+      AND e.event_type != 'void'
+      AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
+), latest_event AS (
+    SELECT event_type FROM effective_events
+    WHERE event_type IN ('purchase', 'repair', 'sale')
+    ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
+)
+SELECT t.base_currency::text AS base_currency,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0)::bigint AS expense_minor,
+       COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0)::bigint AS income_minor,
+       COALESCE(SUM(e.base_amount_minor), 0)::bigint AS net_minor,
+       CASE
+         WHEN COALESCE(BOOL_OR(e.event_type = 'sale'), FALSE) THEN 'sold'
+         WHEN NOT COALESCE(BOOL_OR(e.event_type = 'purchase'), FALSE) THEN 'unacquired'
+         WHEN COALESCE((SELECT event_type FROM latest_event), '') = 'repair' THEN 'repairing'
+         ELSE 'active'
+       END::text AS status
+FROM tenants t
+JOIN assets a ON a.tenant_id = t.id AND a.id = sqlc.arg(asset_id)
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = sqlc.arg(tenant_id)
+GROUP BY t.base_currency;
 
--- name: GetImportDraft :one
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = $1 AND id = $2;
+-- name: LockLifecycleTenant :execrows
+UPDATE tenants SET id = id WHERE id = sqlc.arg(tenant_id);
 
--- name: ConfirmImportDraft :execrows
-UPDATE import_drafts
-SET status = 'confirmed', confirmed_transaction_id = $1
-WHERE tenant_id = $2 AND id = $3 AND status = 'pending';
+-- name: FindLifecycleRequest :one
+SELECT request_hash, event_id FROM lifecycle_requests
+WHERE tenant_id = sqlc.arg(tenant_id) AND user_id = sqlc.arg(user_id) AND request_key = sqlc.arg(request_key);
+
+-- name: SaveLifecycleRequest :exec
+INSERT INTO lifecycle_requests (tenant_id, user_id, request_key, request_hash, event_id)
+VALUES (sqlc.arg(tenant_id), sqlc.arg(user_id), sqlc.arg(request_key), sqlc.arg(request_hash), sqlc.arg(event_id));
+
+-- name: CreateModel3DResource :exec
+INSERT INTO model_3d_resources(id,tenant_id,name,status,store_id,object_key,sha256,size_bytes,source_url,author,license,created_at,updated_at)
+VALUES(sqlc.arg(id),sqlc.arg(tenant_id),sqlc.arg(name),sqlc.arg(status),sqlc.arg(store_id),sqlc.arg(object_key),sqlc.arg(sha256),sqlc.arg(size_bytes),sqlc.arg(source_url),sqlc.arg(author),sqlc.arg(license),sqlc.arg(created_at),sqlc.arg(updated_at));
+
+-- name: GetModel3DResource :one
+SELECT * FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: ListModel3DResources :many
+SELECT r.*,
+ (SELECT COUNT(*) FROM product_models m WHERE m.tenant_id=r.tenant_id AND m.model_3d_resource_id=r.id)
+ +(SELECT COUNT(*) FROM product_variants v WHERE v.tenant_id=r.tenant_id AND v.model_3d_resource_id=r.id)
+ +(SELECT COUNT(*) FROM assets a WHERE a.tenant_id=r.tenant_id AND a.model_3d_resource_id=r.id) AS reference_count
+FROM model_3d_resources r WHERE r.tenant_id=sqlc.arg(tenant_id)
+ AND (CAST(sqlc.arg(search_query) AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')
+ORDER BY created_at DESC,id LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
+
+-- name: CountModel3DResources :one
+SELECT COUNT(*) FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id)
+ AND (CAST(sqlc.arg(search_query) AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%');
+
+-- name: UpdateModel3DResource :execrows
+UPDATE model_3d_resources SET name=sqlc.arg(name),source_url=sqlc.arg(source_url),author=sqlc.arg(author),license=sqlc.arg(license),updated_at=sqlc.arg(updated_at)
+WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id) AND status='ready';
+
+-- name: MarkModel3DResourcePendingDelete :execrows
+UPDATE model_3d_resources SET status='pending-delete'
+WHERE model_3d_resources.tenant_id=sqlc.arg(tenant_id) AND model_3d_resources.id=sqlc.arg(id)
+ AND NOT EXISTS(SELECT 1 FROM product_models WHERE product_models.tenant_id=sqlc.arg(tenant_id) AND product_models.model_3d_resource_id=sqlc.arg(id))
+ AND NOT EXISTS(SELECT 1 FROM product_variants WHERE product_variants.tenant_id=sqlc.arg(tenant_id) AND product_variants.model_3d_resource_id=sqlc.arg(id))
+ AND NOT EXISTS(SELECT 1 FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id));
+
+-- name: FinishModel3DResourceDelete :execrows
+DELETE FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id) AND status='pending-delete';
+
+-- name: Model3DReferences :many
+SELECT CAST('model' AS TEXT) AS kind,id,name FROM product_models WHERE product_models.tenant_id=sqlc.arg(tenant_id) AND product_models.model_3d_resource_id=sqlc.arg(id)
+UNION ALL
+SELECT CAST('variant' AS TEXT),id,name || CASE WHEN color<>'' THEN ' (' || color || ')' ELSE '' END FROM product_variants WHERE product_variants.tenant_id=sqlc.arg(tenant_id) AND product_variants.model_3d_resource_id=sqlc.arg(id)
+UNION ALL
+SELECT CAST('asset' AS TEXT),id,display_name FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id);
+
+-- name: BindModel3D :execrows
+UPDATE product_models SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: BindVariant3D :execrows
+UPDATE product_variants SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: BindAsset3D :execrows
+UPDATE assets SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: ResolveAssetModel3D :one
+SELECT r.* FROM assets a
+JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
+JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+JOIN model_3d_resources r ON r.tenant_id=a.tenant_id AND r.id=COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id)
+WHERE a.tenant_id=sqlc.arg(tenant_id) AND a.id=sqlc.arg(id) AND r.status='ready';
+
+-- name: GetModel3DBinding :one
+SELECT m.name, COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS resource_id,
+ COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS effective_resource_id,
+ CASE WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END AS source
+FROM product_models m WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='model'
+UNION ALL
+SELECT v.name || CASE WHEN v.color<>'' THEN ' (' || v.color || ')' ELSE '' END, COALESCE(CAST(v.model_3d_resource_id AS TEXT),''),
+ COALESCE(CAST(COALESCE(v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
+ CASE WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
+FROM product_variants v JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+WHERE v.tenant_id=sqlc.arg(tenant_id) AND v.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='variant'
+UNION ALL
+SELECT a.display_name, COALESCE(CAST(a.model_3d_resource_id AS TEXT),''),
+ COALESCE(CAST(COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
+ CASE WHEN a.model_3d_resource_id IS NOT NULL THEN 'asset' WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
+FROM assets a JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
+JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+WHERE a.tenant_id=sqlc.arg(tenant_id) AND a.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='asset';

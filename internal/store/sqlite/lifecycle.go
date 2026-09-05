@@ -3,17 +3,52 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite/sqlitedb"
 )
 
+func (s *Store) GetPortfolioSummary(ctx context.Context, tenantID string) (application.PortfolioSummary, error) {
+	row, err := s.queries().GetPortfolioSummary(ctx, tenantID)
+	if err != nil {
+		return application.PortfolioSummary{}, err
+	}
+	return application.PortfolioSummary{
+		AssetCount: int(row.AssetCount), ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetMinor: row.NetMinor, BaseCurrency: row.BaseCurrency,
+	}, nil
+}
+
 func (s *Store) TenantBaseCurrency(ctx context.Context, tenantID string) (string, bool, error) {
-	row, err := sqlitedb.New(s.db).GetTenantBaseCurrency(ctx, tenantID)
+	row, err := s.queries().GetTenantBaseCurrency(ctx, tenantID)
 	return row.BaseCurrency, row.BaseCurrencyLocked != 0, err
+}
+
+func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.AssetEventTypeDefinition) error {
+	return s.queries().CreateAssetEventType(ctx, sqlitedb.CreateAssetEventTypeParams{
+		ID: eventType.ID, TenantID: eventType.TenantID, Name: eventType.Name,
+		NormalizedName: eventType.NormalizedName, CashflowDirection: string(eventType.Cashflow),
+		CreatedByUserID: eventType.CreatedByUserID, CreatedAt: sqliteTime(eventType.CreatedAt),
+	})
+}
+
+func (s *Store) ListAssetEventTypes(ctx context.Context, tenantID string) ([]domain.AssetEventTypeDefinition, error) {
+	rows, err := s.queries().ListAssetEventTypes(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.AssetEventTypeDefinition, 0, len(rows))
+	for _, row := range rows {
+		eventType, err := sqliteEventType(row)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, eventType)
+	}
+	return result, nil
 }
 
 func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTransaction, event domain.AssetEvent) error {
@@ -23,6 +58,9 @@ func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTr
 		}
 		if err := q.CreateAssetEvent(ctx, sqliteEventParams(event)); err != nil {
 			return err
+		}
+		if event.BaseAmountMinor == 0 {
+			return nil
 		}
 		return q.LockTenantBaseCurrency(ctx, sqlitedb.LockTenantBaseCurrencyParams{ID: event.TenantID, BaseCurrency: event.BaseCurrency})
 	})
@@ -39,12 +77,26 @@ func (s *Store) CorrectAssetEvent(ctx context.Context, transaction domain.AssetT
 		if err := q.CreateAssetEvent(ctx, sqliteEventParams(replacement)); err != nil {
 			return err
 		}
+		if replacement.BaseAmountMinor == 0 {
+			return nil
+		}
 		return q.LockTenantBaseCurrency(ctx, sqlitedb.LockTenantBaseCurrencyParams{ID: replacement.TenantID, BaseCurrency: replacement.BaseCurrency})
 	})
 }
 
+func sqliteEventType(row sqlitedb.AssetEventType) (domain.AssetEventTypeDefinition, error) {
+	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
+	if err != nil {
+		return domain.AssetEventTypeDefinition{}, fmt.Errorf("parse event type created_at: %w", err)
+	}
+	return domain.AssetEventTypeDefinition{
+		ID: row.ID, TenantID: row.TenantID, Name: row.Name, NormalizedName: row.NormalizedName,
+		Cashflow: domain.AssetEventCashflow(row.CashflowDirection), CreatedByUserID: row.CreatedByUserID, CreatedAt: createdAt,
+	}, nil
+}
+
 func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (domain.AssetEvent, error) {
-	row, err := sqlitedb.New(s.db).GetAssetEvent(ctx, sqlitedb.GetAssetEventParams{TenantID: tenantID, ID: eventID})
+	row, err := s.queries().GetAssetEvent(ctx, sqlitedb.GetAssetEventParams{TenantID: tenantID, ID: eventID})
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -55,7 +107,7 @@ func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (do
 }
 
 func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) ([]domain.AssetEvent, error) {
-	rows, err := sqlitedb.New(s.db).ListAssetEvents(ctx, sqlitedb.ListAssetEventsParams{TenantID: tenantID, AssetID: assetID})
+	rows, err := s.queries().ListAssetEvents(ctx, sqlitedb.ListAssetEventsParams{TenantID: tenantID, AssetID: assetID})
 	if err != nil {
 		return nil, err
 	}
@@ -73,63 +125,50 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 	return result, nil
 }
 
-func (s *Store) CreateImportDraft(ctx context.Context, draft domain.ImportDraft) error {
-	return sqlitedb.New(s.db).CreateImportDraft(ctx, sqlitedb.CreateImportDraftParams{
-		ID: draft.ID, TenantID: draft.TenantID, AssetID: draft.AssetID, EventType: string(draft.EventType),
-		AmountMinor: draft.AmountMinor, Currency: draft.Currency, OccurredAt: sqliteTime(draft.OccurredAt),
-		Source: draft.Source, ExternalReference: draft.ExternalReference, Notes: draft.Notes,
-		RawText: draft.RawText, Status: draft.Status, CreatedByUserID: draft.CreatedByUserID,
-		CreatedAt: sqliteTime(draft.CreatedAt),
-	})
-}
-
-func (s *Store) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]domain.ImportDraft, error) {
-	rows, err := sqlitedb.New(s.db).ListPendingImportDrafts(ctx, tenantID)
-	if err != nil {
-		return nil, err
+func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID string, opts application.EventListOptions) ([]domain.AssetEvent, int, error) {
+	showVoided := int64(0)
+	if opts.ShowVoided {
+		showVoided = 1
 	}
-	result := make([]domain.ImportDraft, 0, len(rows))
+	rows, err := s.queries().ListAssetEventsPage(ctx, sqlitedb.ListAssetEventsPageParams{
+		TenantID: tenantID, AssetID: assetID, SearchQuery: opts.Query, EventTypeFilter: opts.Type,
+		SortKey: opts.Sort, SortDirection: opts.Direction, ShowVoided: showVoided,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	result := make([]domain.AssetEvent, 0, len(rows))
+	total := 0
 	for _, row := range rows {
-		draft, err := sqliteDraft(row)
+		total = int(row.TotalCount)
+		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
+			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		result = append(result, draft)
+		result = append(result, event)
 	}
-	return result, nil
+	return result, total, nil
 }
 
-func (s *Store) GetImportDraft(ctx context.Context, tenantID, draftID string) (domain.ImportDraft, error) {
-	row, err := sqlitedb.New(s.db).GetImportDraft(ctx, sqlitedb.GetImportDraftParams{TenantID: tenantID, ID: draftID})
+func (s *Store) GetAssetSummary(ctx context.Context, tenantID, assetID string) (domain.AssetSummary, error) {
+	row, err := s.queries().GetAssetSummary(ctx, sqlitedb.GetAssetSummaryParams{TenantID: tenantID, AssetID: assetID})
 	if err != nil {
-		return domain.ImportDraft{}, err
+		return domain.AssetSummary{}, err
 	}
-	return sqliteDraft(row)
-}
-
-func (s *Store) ConfirmImportDraft(ctx context.Context, draftID string, transaction domain.AssetTransaction, event domain.AssetEvent) error {
-	return s.lifecycleTx(ctx, func(q *sqlitedb.Queries) error {
-		if err := createSQLiteTransaction(ctx, q, transaction); err != nil {
-			return err
-		}
-		if err := q.CreateAssetEvent(ctx, sqliteEventParams(event)); err != nil {
-			return err
-		}
-		rows, err := q.ConfirmImportDraft(ctx, sqlitedb.ConfirmImportDraftParams{
-			ConfirmedTransactionID: sql.NullString{String: transaction.ID, Valid: true},
-			TenantID:               transaction.TenantID, ID: draftID,
-		})
-		if err != nil {
-			return err
-		}
-		if rows != 1 {
-			return errors.New("import draft is not pending")
-		}
-		return q.LockTenantBaseCurrency(ctx, sqlitedb.LockTenantBaseCurrencyParams{ID: event.TenantID, BaseCurrency: event.BaseCurrency})
-	})
+	return domain.AssetSummary{
+		BaseCurrency: row.BaseCurrency, ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetCashflowMinor: row.NetMinor, Status: row.Status,
+	}, nil
 }
 
 func (s *Store) lifecycleTx(ctx context.Context, fn func(*sqlitedb.Queries) error) error {
+	if s.tx != nil {
+		return fn(s.queries())
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -195,22 +234,4 @@ func sqliteEvent(id, tenantID, assetID, transactionID, eventType string, baseAmo
 		}
 	}
 	return event, nil
-}
-
-func sqliteDraft(row sqlitedb.ImportDraft) (domain.ImportDraft, error) {
-	occurredAt, err := time.Parse(time.RFC3339Nano, row.OccurredAt)
-	if err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("parse draft occurred_at: %w", err)
-	}
-	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
-	if err != nil {
-		return domain.ImportDraft{}, fmt.Errorf("parse draft created_at: %w", err)
-	}
-	return domain.ImportDraft{
-		ID: row.ID, TenantID: row.TenantID, AssetID: row.AssetID, EventType: domain.AssetEventType(row.EventType),
-		AmountMinor: row.AmountMinor, Currency: row.Currency, OccurredAt: occurredAt, Source: row.Source,
-		ExternalReference: row.ExternalReference, Notes: row.Notes, RawText: row.RawText, Status: row.Status,
-		CreatedByUserID: row.CreatedByUserID, CreatedAt: createdAt,
-		ConfirmedTransactionID: row.ConfirmedTransactionID.String,
-	}, nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -8,10 +9,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/SampsonFox/assetloop/internal/application"
+	"github.com/SampsonFox/assetloop/internal/blob"
+	aliyunblob "github.com/SampsonFox/assetloop/internal/blob/aliyun"
+	localblob "github.com/SampsonFox/assetloop/internal/blob/local"
 	"github.com/SampsonFox/assetloop/internal/config"
 	"github.com/SampsonFox/assetloop/internal/store"
 	postgresstore "github.com/SampsonFox/assetloop/internal/store/postgres"
@@ -20,15 +25,38 @@ import (
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	args := os.Args[1:]
+	doubleClicked := len(args) == 0 && ownsConsole()
+	err := launch(args, doubleClicked)
+	if err != nil {
 		slog.Error("assetloop stopped", "error", err)
+		if doubleClicked {
+			fmt.Fprintln(os.Stderr, "Press Enter to close / 按回车键关闭")
+			_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+		}
 		os.Exit(1)
 	}
 }
 
+func launch(args []string, doubleClicked bool) error {
+	if doubleClicked {
+		path, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		if err := os.Chdir(filepath.Dir(path)); err != nil {
+			return err
+		}
+	}
+	return run(args)
+}
+
 func run(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: assetloop <serve|migrate>")
+	if len(args) == 0 {
+		args = []string{"serve"}
+	}
+	if len(args) != 1 || (args[0] != "serve" && args[0] != "migrate") {
+		return errors.New("usage: assetloop [serve|migrate] (default: serve)")
 	}
 
 	cfg, err := config.Load(".env")
@@ -51,11 +79,15 @@ func run(args []string) error {
 				return err
 			}
 		}
+		if err := store.CheckSchema(context.Background(), db, cfg.Database.Driver); err != nil {
+			return err
+		}
 		var appStore interface {
 			application.Store
 			application.AuthStore
 			application.CatalogStore
 			application.LifecycleStore
+			application.ModelMediaStore
 		}
 		if cfg.Database.Driver == "sqlite" {
 			appStore = sqlitestore.New(db)
@@ -65,13 +97,25 @@ func run(args []string) error {
 		auth := application.NewAuthService(appStore)
 		catalog := application.NewCatalogService(appStore)
 		lifecycle := application.NewLifecycleService(appStore)
-		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local"}
+		localStore, err := localblob.New(cfg.Blob.LocalRoot)
+		if err != nil {
+			return fmt.Errorf("initialize local blob store: %w", err)
+		}
+		blobStores := blob.Registry{"local": localStore}
+		if cfg.Blob.OSS.Region != "" || cfg.Blob.DefaultStore == "aliyun" {
+			ossStore, err := aliyunblob.New(aliyunblob.Config{Endpoint: cfg.Blob.OSS.Endpoint, Region: cfg.Blob.OSS.Region, Bucket: cfg.Blob.OSS.Bucket, AccessKeyID: cfg.Blob.OSS.AccessKeyID, AccessKeySecret: cfg.Blob.OSS.AccessKeySecret, PathPrefix: cfg.Blob.OSS.PathPrefix})
+			if err != nil {
+				return fmt.Errorf("initialize Aliyun OSS blob store: %w", err)
+			}
+			blobStores["aliyun"] = ossStore
+		}
+		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
+		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia}
 		if cfg.AuthMode == "disabled" {
-			principal, err := auth.EnsureDisabledPrincipal(context.Background())
+			_, err := auth.EnsureDisabledPrincipal(context.Background())
 			if err != nil {
 				return fmt.Errorf("initialize disabled authentication: %w", err)
 			}
-			options.DisabledPrincipal = principal
 		}
 		webServer, err := webtransport.New(auth, catalog, lifecycle, db, options)
 		if err != nil {

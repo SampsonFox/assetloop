@@ -89,8 +89,9 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 ### 10. Keep the AI outside the application core
 
 - The application MUST NOT require a model API key for its core operation.
-- The AI Harness owns screenshot understanding and conversation.
-- The application owns validation, confirmation, persistence, valuation, and audit history.
+- The AI Harness owns screenshot understanding and MUST confirm extracted fields with the user before invoking a write MCP tool.
+- A semantic MCP mutation is a confirmed user command; the application MUST validate authorization, inputs, invariants, and transaction boundaries, then persist it without a second pending-review step.
+- Later corrections through Web or MCP MUST use the same append-only lifecycle correction use case.
 
 ### 11. Test every compatibility boundary
 
@@ -112,12 +113,17 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 - The GitHub repository default branch MUST be `prod`, so public visitors land on published production history; this does not make `prod` a development baseline.
 - Substantial work MUST use a short-lived `dev-<scope>` branch. Focused follow-ups MAY use `feature/<scope>` or `fix/<scope>`. Production promotion MUST use a short-lived `release/<scope>` branch based on the current `prod`.
 - Commit and push each independently verified checkpoint. Do not accumulate unrelated work in one commit.
+- During a user-declared rapid local iteration phase, related changes MUST stay on the active work branch and appear in the local development instance immediately after the narrowest relevant test or smoke check passes.
+- A passing development checkpoint MUST NOT trigger UAT promotion. The agent MUST NOT open or merge a UAT pull request, run the UAT packaging chain, or delete the active work branch until the user explicitly identifies the current batch as a UAT checkpoint.
+- Work-branch pushes run secret scanning but MAY defer the full suite, dual-database full-element run, sqlc verification, and packaging until UAT promotion. Required regression tests still MUST be written with the behavior and run at their narrowest relevant layer during development.
 - Promote tested work to `uat` through a squash-merged pull request, then delete the short-lived branch and fast-forward permanent `dev` to the accepted `uat` baseline.
 - A successful UAT build is only an acceptance candidate. The agent MUST stop after UAT verification and MUST NOT create a production release branch or pull request until the user explicitly authorizes that specific UAT result for production.
 - Promote only accepted UAT content to `prod`: reconcile the tested UAT tree into a `release/<scope>` branch based on current `prod`, verify that its application tree matches the accepted UAT commit except explicit release metadata, and squash-merge its pull request to `prod`. `uat` and `prod` MUST reject direct pushes, force pushes, deletion, and non-linear history.
 - `uat` and `prod` MUST use the same packaging workflow with separate GitHub environments. Production publication MUST consume artifacts produced and smoke-tested by that workflow.
 - Windows release archives MUST be `.zip`; Linux and macOS release archives MUST be `.tar.gz`.
 - A production defect follows `fix/<scope> -> uat -> prod`; it MUST NOT bypass UAT validation.
+- Ordinary work branches start from `dev`; a production defect or production rollback starts from current `prod` on `fix/<scope>`, then follows the same explicit UAT and production approval gates. The production starting point is an exception to the ordinary development baseline, not to validation.
+- Before UAT merge, verify permanent `dev` can fast-forward to the expected accepted baseline. Preserve any divergent commits on a work branch and reconcile through a pull request; never force-update or silently discard permanent-branch history.
 
 ### 14. Grow regression coverage with every feature
 

@@ -55,7 +55,7 @@ func (s *Store) FindAccount(ctx context.Context, usernameNormalized string) (app
 	if err != nil {
 		return application.Account{}, err
 	}
-	return application.Account{Principal: application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role)}, PasswordHash: row.PasswordHash}, nil
+	return application.Account{Principal: application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), Locale: application.Locale(row.Locale), Theme: application.Theme(row.Theme), Accent: application.Accent(row.Accent)}, PasswordHash: row.PasswordHash}, nil
 }
 
 func (s *Store) FirstPrincipal(ctx context.Context) (application.Principal, error) {
@@ -63,7 +63,7 @@ func (s *Store) FirstPrincipal(ctx context.Context) (application.Principal, erro
 	if err != nil {
 		return application.Principal{}, err
 	}
-	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role)}, nil
+	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), Locale: application.Locale(row.Locale), Theme: application.Theme(row.Theme), Accent: application.Accent(row.Accent)}, nil
 }
 
 func (s *Store) CreateSession(ctx context.Context, session application.Session) error {
@@ -79,11 +79,19 @@ func (s *Store) GetSessionPrincipal(ctx context.Context, tokenHash string, now t
 	if err != nil {
 		return application.Principal{}, err
 	}
-	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role)}, nil
+	return application.Principal{TenantID: row.TenantID.String(), TenantName: row.TenantName, UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), Locale: application.Locale(row.Locale), Theme: application.Theme(row.Theme), Accent: application.Accent(row.Accent)}, nil
 }
 
 func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
 	return postgresdb.New(s.db).DeleteSession(ctx, tokenHash)
+}
+
+func (s *Store) UpdateUserPreferences(ctx context.Context, userID string, locale application.Locale, theme application.Theme, accent application.Accent) error {
+	id, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("parse user ID: %w", err)
+	}
+	return postgresdb.New(s.db).UpdateUserPreferences(ctx, postgresdb.UpdateUserPreferencesParams{ID: id, Locale: string(locale), Theme: string(theme), Accent: string(accent)})
 }
 
 func (s *Store) CreateMember(ctx context.Context, user application.User, membership application.Membership, event application.SecurityEvent) error {
@@ -106,20 +114,26 @@ func (s *Store) CreateMember(ctx context.Context, user application.User, members
 	return tx.Commit()
 }
 
-func (s *Store) ListMembers(ctx context.Context, tenantID string) ([]application.Member, error) {
+func (s *Store) ListMembers(ctx context.Context, tenantID string, opts application.MemberListOptions) (application.MemberListResult, error) {
 	id, err := uuid.Parse(tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("parse tenant ID: %w", err)
+		return application.MemberListResult{}, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	rows, err := postgresdb.New(s.db).ListMembers(ctx, id)
+	rows, err := postgresdb.New(s.db).ListMembersPage(ctx, postgresdb.ListMembersPageParams{
+		TenantID: id, SearchQuery: opts.Query, RoleFilter: opts.Role,
+		SortKey: opts.Sort, SortDirection: opts.Direction,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
+	})
 	if err != nil {
-		return nil, err
+		return application.MemberListResult{}, err
 	}
 	members := make([]application.Member, 0, len(rows))
+	total := 0
 	for _, row := range rows {
+		total = int(row.TotalCount)
 		members = append(members, application.Member{UserID: row.UserID.String(), Username: row.Username, Role: application.Role(row.Role), CreatedAt: row.CreatedAt})
 	}
-	return members, nil
+	return application.MemberListResult{Members: members, Total: total}, nil
 }
 
 func (s *Store) RecordSecurityEvent(ctx context.Context, event application.SecurityEvent) error {
@@ -135,7 +149,7 @@ func createUserAndMembershipPostgres(ctx context.Context, q *postgresdb.Queries,
 	if err != nil {
 		return err
 	}
-	if err := q.CreateUser(ctx, postgresdb.CreateUserParams{ID: userID, Username: user.Username, UsernameNormalized: user.UsernameNormalized, PasswordHash: user.PasswordHash, CreatedAt: user.CreatedAt}); err != nil {
+	if err := q.CreateUser(ctx, postgresdb.CreateUserParams{ID: userID, Username: user.Username, UsernameNormalized: user.UsernameNormalized, PasswordHash: user.PasswordHash, Locale: string(user.Locale), Theme: string(user.Theme), Accent: string(user.Accent), CreatedAt: user.CreatedAt}); err != nil {
 		return err
 	}
 	return q.CreateMembership(ctx, postgresdb.CreateMembershipParams{TenantID: tenantID, UserID: userID, Role: string(membership.Role), CreatedAt: membership.CreatedAt})

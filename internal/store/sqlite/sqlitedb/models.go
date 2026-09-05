@@ -9,15 +9,16 @@ import (
 )
 
 type Asset struct {
-	ID              string
-	TenantID        string
-	VariantID       string
-	DisplayName     string
-	CreatedAt       string
-	SerialNumber    string
-	Color           string
-	PurchaseChannel string
-	Notes           string
+	ID                string
+	TenantID          string
+	VariantID         string
+	DisplayName       string
+	CreatedAt         string
+	SerialNumber      string
+	Color             string
+	PurchaseChannel   string
+	Notes             string
+	Model3dResourceID sql.NullString
 }
 
 type AssetEvent struct {
@@ -39,6 +40,16 @@ type AssetEvent struct {
 	OccurredAt          string
 	CreatedByUserID     string
 	CreatedAt           string
+}
+
+type AssetEventType struct {
+	ID                string
+	TenantID          string
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	CreatedByUserID   string
+	CreatedAt         string
 }
 
 type AssetTransaction struct {
@@ -78,20 +89,55 @@ type ItemCategory struct {
 	IconKey   string
 }
 
+type LifecycleRequest struct {
+	TenantID    string
+	UserID      string
+	RequestKey  string
+	RequestHash string
+	EventID     string
+}
+
+type Model3dResource struct {
+	ID        string
+	TenantID  string
+	Name      string
+	Status    string
+	StoreID   string
+	ObjectKey string
+	Sha256    string
+	SizeBytes int64
+	SourceUrl string
+	Author    string
+	License   string
+	CreatedAt string
+	UpdatedAt string
+}
+
 type ProductModel struct {
-	ID         string
-	TenantID   string
-	CategoryID string
-	Name       string
-	CreatedAt  string
+	ID                string
+	TenantID          string
+	CategoryID        string
+	Name              string
+	CreatedAt         string
+	Model3dStoreID    sql.NullString
+	Model3dObjectKey  sql.NullString
+	Model3dSha256     sql.NullString
+	Model3dSizeBytes  sql.NullInt64
+	Model3dSourceUrl  sql.NullString
+	Model3dAuthor     sql.NullString
+	Model3dLicense    sql.NullString
+	Model3dUpdatedAt  sql.NullString
+	Model3dResourceID sql.NullString
 }
 
 type ProductVariant struct {
-	ID        string
-	TenantID  string
-	ModelID   string
-	Name      string
-	CreatedAt string
+	ID                string
+	TenantID          string
+	ModelID           string
+	Name              string
+	CreatedAt         string
+	Color             string
+	Model3dResourceID sql.NullString
 }
 
 type SecurityAuditEvent struct {
@@ -133,4 +179,7 @@ type User struct {
 	UsernameNormalized string
 	PasswordHash       string
 	CreatedAt          string
+	Locale             string
+	Theme              string
+	Accent             string
 }

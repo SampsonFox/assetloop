@@ -4,12 +4,29 @@ import "time"
 
 type AssetEventType string
 
+type AssetEventCashflow string
+
 const (
 	AssetEventPurchase AssetEventType = "purchase"
 	AssetEventRepair   AssetEventType = "repair"
 	AssetEventSale     AssetEventType = "sale"
 	AssetEventVoid     AssetEventType = "void"
+
+	AssetEventExpense AssetEventCashflow = "expense"
+	AssetEventIncome  AssetEventCashflow = "income"
+	AssetEventNeutral AssetEventCashflow = "neutral"
 )
+
+type AssetEventTypeDefinition struct {
+	ID              string
+	TenantID        string
+	Name            string
+	NormalizedName  string
+	Cashflow        AssetEventCashflow
+	BuiltIn         bool
+	CreatedByUserID string
+	CreatedAt       time.Time
+}
 
 type AssetTransaction struct {
 	ID                string
@@ -54,22 +71,4 @@ type AssetSummary struct {
 	IncomeMinor      int64
 	NetCashflowMinor int64
 	Status           string
-}
-
-type ImportDraft struct {
-	ID                     string
-	TenantID               string
-	AssetID                string
-	EventType              AssetEventType
-	AmountMinor            int64
-	Currency               string
-	OccurredAt             time.Time
-	Source                 string
-	ExternalReference      string
-	Notes                  string
-	RawText                string
-	Status                 string
-	CreatedByUserID        string
-	CreatedAt              time.Time
-	ConfirmedTransactionID string
 }

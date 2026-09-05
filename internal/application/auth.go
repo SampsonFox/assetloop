@@ -16,6 +16,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/SampsonFox/assetloop/internal/domain"
 )
 
 type Role string
@@ -24,6 +26,31 @@ const (
 	RoleOwner  Role = "owner"
 	RoleEditor Role = "editor"
 	RoleViewer Role = "viewer"
+)
+
+type Locale string
+
+const (
+	LocaleZhCN Locale = "zh-CN"
+	LocaleEn   Locale = "en"
+)
+
+type Theme string
+
+const (
+	ThemeSystem Theme = "system"
+	ThemeLight  Theme = "light"
+	ThemeDark   Theme = "dark"
+)
+
+type Accent string
+
+const (
+	AccentEmerald Accent = "emerald"
+	AccentBlue    Accent = "blue"
+	AccentViolet  Accent = "violet"
+	AccentAmber   Accent = "amber"
+	AccentRose    Accent = "rose"
 )
 
 type Capability string
@@ -49,6 +76,9 @@ type Principal struct {
 	UserID     string
 	Username   string
 	Role       Role
+	Locale     Locale
+	Theme      Theme
+	Accent     Accent
 }
 
 func (p Principal) Can(capability Capability) bool {
@@ -86,6 +116,9 @@ type User struct {
 	Username           string
 	UsernameNormalized string
 	PasswordHash       string
+	Locale             Locale
+	Theme              Theme
+	Accent             Accent
 	CreatedAt          time.Time
 }
 
@@ -137,6 +170,7 @@ type SetupAuth struct {
 	BaseCurrency string
 	Username     string
 	Password     string
+	Locale       Locale
 }
 
 type Login struct {
@@ -148,6 +182,12 @@ type AddMember struct {
 	Username string
 	Password string
 	Role     Role
+}
+
+type UpdatePreferences struct {
+	Locale Locale
+	Theme  Theme
+	Accent Accent
 }
 
 type AuthService struct {
@@ -174,7 +214,7 @@ func (s *AuthService) Setup(ctx context.Context, cmd SetupAuth) (SessionCredenti
 	}
 	tenantName := strings.TrimSpace(cmd.TenantName)
 	if tenantName == "" {
-		return SessionCredential{}, errors.New("tenant name is required")
+		return SessionCredential{}, NewInputError("validation.tenant_name_required")
 	}
 	baseCurrency, err := normalizeCurrency(cmd.BaseCurrency)
 	if err != nil {
@@ -184,13 +224,16 @@ func (s *AuthService) Setup(ctx context.Context, cmd SetupAuth) (SessionCredenti
 	if err != nil {
 		return SessionCredential{}, err
 	}
+	if validLocale(cmd.Locale) {
+		user.Locale = cmd.Locale
+	}
 	tenant := Tenant{ID: newID(), Name: tenantName, BaseCurrency: baseCurrency, CreatedAt: user.CreatedAt}
 	membership := Membership{TenantID: tenant.ID, UserID: user.ID, Role: RoleOwner, CreatedAt: user.CreatedAt}
 	event := SecurityEvent{ID: newID(), TenantID: tenant.ID, ActorUserID: user.ID, Action: "auth.setup", TargetUserID: user.ID, OccurredAt: user.CreatedAt}
 	if err := s.store.BootstrapAuth(ctx, tenant, user, membership, event); err != nil {
 		return SessionCredential{}, fmt.Errorf("bootstrap authentication: %w", err)
 	}
-	return s.issueSession(ctx, Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: RoleOwner})
+	return s.issueSession(ctx, Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: RoleOwner, Locale: user.Locale, Theme: user.Theme, Accent: user.Accent})
 }
 
 func (s *AuthService) EnsureDisabledPrincipal(ctx context.Context) (Principal, error) {
@@ -201,13 +244,17 @@ func (s *AuthService) EnsureDisabledPrincipal(ctx context.Context) (Principal, e
 	if needsSetup {
 		now := s.now().UTC()
 		tenant := Tenant{ID: "00000000-0000-4000-8000-000000000001", Name: "Local", BaseCurrency: "CNY", CreatedAt: now}
-		user := User{ID: "00000000-0000-4000-8000-000000000002", Username: "local", UsernameNormalized: "local", PasswordHash: "disabled", CreatedAt: now}
+		user := User{ID: "00000000-0000-4000-8000-000000000002", Username: "local", UsernameNormalized: "local", PasswordHash: "disabled", Locale: LocaleZhCN, Theme: ThemeSystem, Accent: AccentEmerald, CreatedAt: now}
 		membership := Membership{TenantID: tenant.ID, UserID: user.ID, Role: RoleOwner, CreatedAt: now}
 		event := SecurityEvent{ID: newID(), TenantID: tenant.ID, ActorUserID: user.ID, Action: "auth.disabled_bootstrap", TargetUserID: user.ID, OccurredAt: now}
 		if err := s.store.BootstrapAuth(ctx, tenant, user, membership, event); err != nil {
 			return Principal{}, err
 		}
 	}
+	return s.store.FirstPrincipal(ctx)
+}
+
+func (s *AuthService) LocalPrincipal(ctx context.Context) (Principal, error) {
 	return s.store.FirstPrincipal(ctx)
 }
 
@@ -257,12 +304,32 @@ func (s *AuthService) Logout(ctx context.Context, token string) error {
 	return s.store.DeleteSession(ctx, tokenHash(token))
 }
 
+func (s *AuthService) UpdatePreferences(ctx context.Context, actor Principal, cmd UpdatePreferences) (Principal, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return Principal{}, err
+	}
+	if !validLocale(cmd.Locale) {
+		return Principal{}, NewInputError("validation.locale_invalid")
+	}
+	if !validTheme(cmd.Theme) {
+		return Principal{}, NewInputError("validation.theme_invalid")
+	}
+	if !validAccent(cmd.Accent) {
+		return Principal{}, NewInputError("validation.accent_invalid")
+	}
+	if err := s.store.UpdateUserPreferences(ctx, actor.UserID, cmd.Locale, cmd.Theme, cmd.Accent); err != nil {
+		return Principal{}, fmt.Errorf("update user preferences: %w", err)
+	}
+	actor.Locale, actor.Theme, actor.Accent = cmd.Locale, cmd.Theme, cmd.Accent
+	return actor, nil
+}
+
 func (s *AuthService) AddMember(ctx context.Context, actor Principal, cmd AddMember) (Member, error) {
 	if err := actor.Require(CapabilityManageMembers); err != nil {
 		return Member{}, err
 	}
 	if !validRole(cmd.Role) {
-		return Member{}, errors.New("role must be owner, editor, or viewer")
+		return Member{}, NewInputError("validation.role_invalid")
 	}
 	now := s.now().UTC()
 	user, err := newUser(cmd.Username, cmd.Password, now)
@@ -277,11 +344,22 @@ func (s *AuthService) AddMember(ctx context.Context, actor Principal, cmd AddMem
 	return Member{UserID: user.ID, Username: user.Username, Role: cmd.Role, CreatedAt: now}, nil
 }
 
-func (s *AuthService) ListMembers(ctx context.Context, actor Principal) ([]Member, error) {
+func (s *AuthService) ListMembers(ctx context.Context, actor Principal, opts MemberListOptions) (MemberListResult, error) {
 	if err := actor.Require(CapabilityManageMembers); err != nil {
-		return nil, err
+		return MemberListResult{}, err
 	}
-	return s.store.ListMembers(ctx, actor.TenantID)
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
+	opts.Query = strings.TrimSpace(opts.Query)
+	opts.Role = strings.TrimSpace(strings.ToLower(opts.Role))
+	if opts.Role != "" && opts.Role != string(RoleOwner) && opts.Role != string(RoleEditor) && opts.Role != string(RoleViewer) {
+		return MemberListResult{}, NewInputError("validation.filter_invalid")
+	}
+	var err error
+	opts.Sort, opts.Direction, err = normalizeSort(opts.Sort, opts.Direction, "username", "asc", map[string]struct{}{"username": {}, "role": {}, "created": {}})
+	if err != nil {
+		return MemberListResult{}, err
+	}
+	return s.store.ListMembers(ctx, actor.TenantID, opts)
 }
 
 func (s *AuthService) issueSession(ctx context.Context, principal Principal) (SessionCredential, error) {
@@ -306,40 +384,47 @@ func newUser(username, password string, now time.Time) (User, error) {
 		return User{}, err
 	}
 	if utf8.RuneCountInString(password) < 12 {
-		return User{}, errors.New("password must contain at least 12 characters")
+		return User{}, NewInputError("validation.password_length", 12)
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
 		return User{}, err
 	}
-	return User{ID: newID(), Username: strings.TrimSpace(username), UsernameNormalized: normalized, PasswordHash: hash, CreatedAt: now}, nil
+	return User{ID: newID(), Username: strings.TrimSpace(username), UsernameNormalized: normalized, PasswordHash: hash, Locale: LocaleZhCN, Theme: ThemeSystem, Accent: AccentEmerald, CreatedAt: now}, nil
+}
+
+func validLocale(locale Locale) bool {
+	return locale == LocaleZhCN || locale == LocaleEn
+}
+
+func validTheme(theme Theme) bool {
+	return theme == ThemeSystem || theme == ThemeLight || theme == ThemeDark
+}
+
+func validAccent(accent Accent) bool {
+	return accent == AccentEmerald || accent == AccentBlue || accent == AccentViolet || accent == AccentAmber || accent == AccentRose
 }
 
 func normalizeUsername(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	count := utf8.RuneCountInString(value)
 	if count < 3 || count > 64 {
-		return "", errors.New("username must contain 3 to 64 characters")
+		return "", NewInputError("validation.username_length", 3, 64)
 	}
 	for _, r := range value {
 		if unicode.IsSpace(r) || unicode.IsControl(r) {
-			return "", errors.New("username must not contain whitespace or control characters")
+			return "", NewInputError("validation.username_characters")
 		}
 	}
 	return strings.ToLower(value), nil
 }
 
 func normalizeCurrency(value string) (string, error) {
-	value = strings.ToUpper(strings.TrimSpace(value))
-	if len(value) != 3 {
-		return "", errors.New("base currency must be a three-letter ISO code")
+	currency, err := domain.NormalizeSelectableCurrency(value)
+	if err != nil {
+		return "", NewInputError("validation.currency_supported")
 	}
-	for _, r := range value {
-		if r < 'A' || r > 'Z' {
-			return "", errors.New("base currency must be a three-letter ISO code")
-		}
-	}
-	return value, nil
+	return currency, nil
 }
 
 func validRole(role Role) bool {

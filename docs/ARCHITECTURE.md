@@ -34,7 +34,7 @@ The architecture optimizes for:
         SQLite/Postgres  Local/Aliyun OSS  OneBound/others
 ```
 
-The AI Harness interprets images and conversation. The application does not trust extracted data until application validation and required user confirmation have completed.
+The AI Harness interprets images and conversation and confirms every extracted field with the user before invoking a write MCP tool. A semantic MCP mutation therefore represents confirmed intent, but the application still validates identity, tenant scope, input shape, lifecycle invariants, money evidence, and transaction boundaries before writing.
 
 ## 3. Architectural style
 
@@ -78,7 +78,7 @@ It performs no I/O.
 
 Owns use cases and ports:
 
-- confirm an AI-generated import draft;
+- persist user-confirmed semantic commands received from Web or MCP;
 - create or resolve category/model/variant;
 - record purchase, repair, sale, void, and replacement;
 - attach evidence;
@@ -123,12 +123,28 @@ Tenant
                           +-- AssetEvent[]
 ```
 
-`ProductVariant` contains only attributes that affect market identity and price, such as storage capacity. `Asset` contains instance attributes such as serial number and normally color. Category-specific condition schemes map assets and market listings to comparable condition codes.
+`ProductVariant` contains product specifications, including storage capacity and color. Its identity is unique within a tenant and product model by specification name and color. `Asset` contains instance attributes such as serial number and personal notes, and derives its displayed color from its variant. Historical asset color text is retained for compatibility, not used as the active color source. Category-specific condition schemes map assets and market listings to comparable condition codes.
 
 Transactions group related cash and lifecycle effects, while asset events remain the append-only lifecycle record.
 Confirmed events cannot be updated or deleted at either Store or database level. A correction
 atomically appends a zero-value void event plus a replacement economic event that references the
 original; the original row remains unchanged and queryable.
+User-facing lifecycle collections never render the technical void row as a separate event. Their
+default effective view excludes voided originals; an explicit history option adds those originals
+back with a voided marker while preserving the same server-side filtering, sorting, and pagination.
+
+Each tenant may register additional event types without changing the fixed meanings of purchase,
+repair, sale, and void. A custom type records a stable display name and exactly one cash-flow effect:
+expense, income, or neutral. The event row keeps that name and the resulting signed base amount, so
+later configuration cannot rewrite history. Neutral events persist a zero amount and do not lock the
+tenant base currency. Custom types do not implicitly change the built-in acquired, repairing, or sold
+status transitions.
+
+Lifecycle commands treat a supplied monetary amount as an unsigned magnitude. Before idempotency
+fingerprinting, conversion, or persistence, the application service takes its absolute value and then
+derives the stored sign exclusively from the resolved event type's cash-flow effect: expenses are
+negative, income is positive, and neutral events are zero. Web controls accept only positive input,
+while MCP and other transport adapters receive the same normalization through the shared use case.
 
 ## 6. Money architecture
 
@@ -148,8 +164,15 @@ Rates are stored as signed-safe fixed-point integers scaled by `100,000,000` and
 units per original major unit.” Conversion applies the ISO minor-unit exponent for both currencies
 and rounds once to the nearest base minor unit. Floating point is never used for persisted or
 calculated money. When the original currency equals the base currency, original amount/currency
-and FX evidence remain null; otherwise all evidence fields are mandatory and user confirmation is
-required. The confirmation screen defaults the rate date to the current date.
+and FX evidence remain null; otherwise all evidence fields are mandatory. In Web, choosing a foreign
+currency and submitting its required rate evidence is the confirmation; the AI Harness confirms the
+same evidence in conversation before making a semantic MCP write.
+
+Currency validation, minor-unit parsing, setup, and Web currency selectors share one code-defined
+catalog snapshot sourced from the ISO 4217 Maintenance Agency's current List One. The snapshot is
+versioned in the domain package and never fetched at runtime. New records accept only current
+selectable currency codes. When a code is retired, its definition remains readable for persisted
+history but becomes non-selectable for new records.
 
 The first monetary record locks the tenant base currency. Changing it later requires a dedicated, audited migration operation, not a settings edit.
 
@@ -161,10 +184,39 @@ The first monetary record locks the tenant base currency. Changing it later requ
 
 SQLite and PostgreSQL have independent SQL and sqlc output, with a shared conformance suite. Vendor-specific SQL stays inside its adapter.
 
+User-facing collection queries use resource-specific application options and results. The
+application layer trims filters, caps page sizes, and validates sort keys and directions against a
+fixed allowlist. SQLite and PostgreSQL then perform filtering, sorting, and pagination in SQL.
+Related rows required by one page are loaded in bulk joins or CTEs (for example, a page of product
+models and all of those models' variants); aggregate screens use aggregate Store operations rather
+than calling a detail query once per row. Query count therefore remains bounded as result counts
+grow. Web handlers never assemble SQL and do not implement in-memory pagination as a fallback.
+
+The current collection contract covers assets with lifecycle summaries, models with variants,
+tenant members, asset lifecycle records, and tenant-scoped custom event-type options. Both Store
+adapters run the same conformance tests for search, filters, sorting, paging, related-row hydration,
+aggregate totals, and custom event-type isolation.
+
 The lifecycle Store atomically creates the grouping transaction and event, locks the base currency,
-and—for corrections or import confirmation—writes every related row in the same database
-transaction. `import_drafts` holds untrusted AI/manual extraction proposals; only an explicit
-confirmation can promote one pending draft into a confirmed lifecycle transaction.
+and, for corrections, writes the void and replacement rows in the same database transaction.
+`WithLifecycleWrite` supplies a transaction-bound Store to the application policy. It acquires a
+tenant write lock before any lifecycle state read (a PostgreSQL row lock or SQLite write
+reservation), so concurrent commands cannot both validate the same pre-write state. Money and
+correction policy remain in the application layer; adapters only supply isolation and persistence.
+
+Lifecycle commands accept an optional `RequestKey`. Web forms generate it automatically and retain
+it on validation errors; semantic clients must reuse it when retrying a confirmed command. The
+receipt is scoped to tenant, user, and key, and stores a SHA-256 fingerprint of the command plus the
+result event ID in `lifecycle_requests`. The fingerprint includes the operation and corrected event
+ID, with timestamps normalized to UTC. Same-key/same-command retries return the original economic
+event (with its current void status); changed payloads are rejected. Authorization is checked before
+replay. Receipt, transaction, economic event, and correction rows commit together, so failed commands
+leave no reserved key or partial write. Callers omitting a key retain the original command behavior
+and receive concurrency protection, but cannot replay a successful request idempotently.
+Harness-confirmed MCP commands append formal lifecycle events directly through this same application
+use case. Historical installations may retain a dormant `import_drafts` compatibility table from an
+older migration; active code neither reads nor writes it, and a later contract migration may remove it
+only after an explicit data-retention decision.
 
 ### 7.2 Migration rules
 
@@ -173,6 +225,18 @@ confirmation can promote one pending draft into a confirmed lifecycle transactio
 - SQLite upgrades take a verified backup before schema changes.
 - PostgreSQL production upgrades run once as a release job under an advisory lock.
 - Destructive changes use expand-contract across releases.
+
+Startup checks the complete applied migration history against the embedded versions and rejects
+unknown versions, missing earlier migrations, and (for PostgreSQL) pending migrations without
+changing database state. The explicit migration command takes a PostgreSQL session advisory lock
+scoped to the database and schema. SQLite takes a kernel file lock beside the canonical database
+path across inspection, backup, migration, and verification; a process crash releases this lock.
+An unchanged schema creates no backup. An existing SQLite schema is backed up with `VACUUM INTO`
+and the backup integrity is verified before an upgrade; this is a consistent database snapshot,
+not a filesystem copy. After migration, integrity and foreign-key checks must pass. Failure stops
+startup and retains the pre-upgrade backup for recovery.
+SQLite also verifies integrity and foreign keys on an unchanged schema, so a failed post-migration
+check cannot be bypassed by restarting once the migration version has advanced.
 
 ### 7.3 Tenant boundary
 
@@ -206,10 +270,25 @@ Every Store query remains tenant-scoped even after authorization. Hiding a Web c
 treated as authorization. State-changing Web requests require CSRF validation, and membership or
 authentication changes produce security audit events.
 
-## 8. Attachment architecture
+User interface preferences belong to the global user identity. `users.locale` selects a registered
+code-defined language pack, `users.theme` selects `system`, `light`, or `dark`, and `users.accent`
+selects a code-defined accessible accent palette; all values are
+resolved again with every authenticated request, including local disabled-auth mode. Anonymous
+setup and login pages resolve locale from a same-site cookie, then `Accept-Language`, and finally
+fall back to `zh-CN`. Locale changes are application validation, not database enums, so adding a
+language does not require a schema migration.
+
+The SSR response owns first paint: `<html lang>`, `<html data-theme>`, and `<html data-accent>` are emitted by Go before
+the page loads. CSS uses semantic variables, with `system` delegated to
+`prefers-color-scheme`; no client-side theme bootstrap or runtime translation service is required.
+Predictable application validation crosses the transport boundary as language-neutral
+`InputError` codes. Unexpected infrastructure errors are logged server-side and rendered only as
+a localized generic message.
+
+## 8. Blob media architecture
 
 ```text
-Attachment use case
+Attachment or product-model media use case
        |
        +-> metadata Store: store_id + object_key + checksum
        |
@@ -222,11 +301,18 @@ Attachment use case
 
 ```text
 tenants/{tenant_id}/attachments/{yyyy}/{mm}/{attachment_id}/{variant}.{ext}
+tenants/{tenant_id}/model-3d-resources/{resource_id}/{sha256}.glb
 ```
 
 The metadata row selects the store for reads. A configuration value selects the default store for new writes. Therefore a configuration switch never relocates or hides existing bytes.
 
 A store migration copies the object under the same key, verifies size and SHA-256, changes `store_id`, then optionally removes the old object.
+
+A tenant-owned `Model3DResource` holds an immutable self-contained GLB and editable name and attribution. Product models, variants, and assets reference resources independently; multiple records can share a resource. Effective media is resolved in the application layer in asset override, variant default, then product-model default order. Only absent bindings inherit; a selected file that fails to load falls back to the static image or category icon. The resource table contains no color or capacity fields.
+
+Uploads write and verify new resource-specific blobs before transactionally creating metadata and binding the target. Replacing a binding never deletes the previous resource. A referenced resource cannot be deleted: binding and deletion share a transaction isolation protocol, and pending-deletion resources reject new bindings. Unreferenced deletion first persists pending state, then removes the blob and finally the row; failures remain visible and retryable. No distributed transaction or background cleanup service is introduced. Authenticated reads are proxied by Web; source URL, author, and license remain descriptive metadata.
+
+Migration 00011 expands existing metadata into resource references, retaining legacy fields and existing `tenants/{tenant_id}/models/{product_model_id}/{sha256}.glb` keys without moving bytes. Asset colors split existing variants into name/color combinations while preserving asset IDs and lifecycle references. Backups must cover both the database and the selected Local/OSS objects.
 
 ## 9. Market data architecture
 
@@ -323,9 +409,13 @@ dev baseline
     |
     +-- dev-<scope> | feature/<scope> | fix/<scope>
                     |
-                    +-- checkpoint commits + tests + secret scan
+                    +-- rapid edits + narrow tests + live local instance
                     |
-                    +-- squash PR --> uat (protected)
+                    +-- checkpoint commits + work-branch secret scan
+                    |
+                    +-- user marks UAT checkpoint
+                    |
+                    +-- full validation + squash PR --> uat (protected)
                                          |
                                   package + smoke test
                                          |
@@ -334,7 +424,7 @@ dev baseline
                                   package + GitHub release
 ```
 
-`dev`, `uat`, and `prod` are permanent. Work branches are disposable; permanent branches are not. GitHub uses `prod` as the repository default branch so public visitors see published production history, while `dev` remains the baseline for new development work. UAT and production builds share one workflow and differ only by GitHub environment, retention, and the final production-release step. This prevents a separately maintained production build path from drifting away from the artifact tested in UAT.
+`dev`, `uat`, and `prod` are permanent. Work branches are disposable; permanent branches are not. GitHub uses `prod` as the repository default branch so public visitors see published production history, while `dev` remains the baseline for new development work. During dense product iteration, the local development instance follows the active work branch: each accepted edit is smoke-tested at the narrowest useful layer and reflected locally without invoking the full release suite. Work-branch pushes retain secret scanning, but UAT promotion begins only when the user identifies the accumulated batch as a checkpoint. UAT and production builds share one workflow and differ only by GitHub environment, retention, and the final production-release step. This prevents a separately maintained production build path from drifting away from the artifact tested in UAT.
 
 Delivery stops after every UAT build and artifact verification. Production promotion is a separate user-authorized action tied to one identified UAT commit and its evidence; workflow success alone never grants that authorization. Cross-platform packaging uses `.zip` for Windows and `.tar.gz` for Linux and macOS.
 

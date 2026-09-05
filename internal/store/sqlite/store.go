@@ -12,6 +12,14 @@ import (
 
 type Store struct {
 	db *sql.DB
+	tx *sql.Tx
+}
+
+func (s *Store) queries() *sqlitedb.Queries {
+	if s.tx != nil {
+		return sqlitedb.New(s.tx)
+	}
+	return sqlitedb.New(s.db)
 }
 
 func New(db *sql.DB) *Store { return &Store{db: db} }
@@ -35,7 +43,7 @@ func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Ass
 	if err != nil {
 		return domain.Asset{}, err
 	}
-	asset.VariantID, err = q.EnsureVariant(ctx, sqlitedb.EnsureVariantParams{ID: asset.VariantID, TenantID: asset.TenantID, ModelID: asset.ModelID, Name: asset.Variant, CreatedAt: createdAt})
+	asset.VariantID, err = q.EnsureVariant(ctx, sqlitedb.EnsureVariantParams{ID: asset.VariantID, TenantID: asset.TenantID, ModelID: asset.ModelID, Name: asset.Variant, Color: asset.Color, CreatedAt: createdAt})
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -49,7 +57,7 @@ func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Ass
 }
 
 func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.Asset, error) {
-	row, err := sqlitedb.New(s.db).GetAsset(ctx, sqlitedb.GetAssetParams{TenantID: tenantID, ID: assetID})
+	row, err := s.queries().GetAsset(ctx, sqlitedb.GetAssetParams{TenantID: tenantID, ID: assetID})
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -62,7 +70,8 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 		CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 		ModelID: row.ModelID, Model: row.ModelName,
 		VariantID: row.VariantID, Variant: row.VariantName,
-		DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+		Model3DResourceID: row.Model3dResourceID.String,
+		DisplayName:       row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
 		PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
 	}, nil
 }

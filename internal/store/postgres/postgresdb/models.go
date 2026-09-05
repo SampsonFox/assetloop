@@ -12,15 +12,17 @@ import (
 )
 
 type Asset struct {
-	ID              uuid.UUID
-	TenantID        uuid.UUID
-	VariantID       uuid.UUID
-	DisplayName     string
-	CreatedAt       time.Time
-	SerialNumber    string
-	Color           string
-	PurchaseChannel string
-	Notes           string
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	VariantID             uuid.UUID
+	DisplayName           string
+	CreatedAt             time.Time
+	SerialNumber          string
+	Color                 string
+	PurchaseChannel       string
+	Notes                 string
+	Model3dResourceID     uuid.NullUUID
+	Model3dResourceStatus string
 }
 
 type AssetEvent struct {
@@ -42,6 +44,16 @@ type AssetEvent struct {
 	OccurredAt          time.Time
 	CreatedByUserID     uuid.UUID
 	CreatedAt           time.Time
+}
+
+type AssetEventType struct {
+	ID                uuid.UUID
+	TenantID          uuid.UUID
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	CreatedByUserID   uuid.UUID
+	CreatedAt         time.Time
 }
 
 type AssetTransaction struct {
@@ -81,20 +93,57 @@ type ItemCategory struct {
 	IconKey   string
 }
 
+type LifecycleRequest struct {
+	TenantID    uuid.UUID
+	UserID      uuid.UUID
+	RequestKey  string
+	RequestHash string
+	EventID     uuid.UUID
+}
+
+type Model3dResource struct {
+	ID        uuid.UUID
+	TenantID  uuid.UUID
+	Name      string
+	Status    string
+	StoreID   string
+	ObjectKey string
+	Sha256    string
+	SizeBytes int64
+	SourceUrl string
+	Author    string
+	License   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type ProductModel struct {
-	ID         uuid.UUID
-	TenantID   uuid.UUID
-	CategoryID uuid.UUID
-	Name       string
-	CreatedAt  time.Time
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	CategoryID            uuid.UUID
+	Name                  string
+	CreatedAt             time.Time
+	Model3dStoreID        sql.NullString
+	Model3dObjectKey      sql.NullString
+	Model3dSha256         sql.NullString
+	Model3dSizeBytes      sql.NullInt64
+	Model3dSourceUrl      sql.NullString
+	Model3dAuthor         sql.NullString
+	Model3dLicense        sql.NullString
+	Model3dUpdatedAt      sql.NullTime
+	Model3dResourceID     uuid.NullUUID
+	Model3dResourceStatus string
 }
 
 type ProductVariant struct {
-	ID        uuid.UUID
-	TenantID  uuid.UUID
-	ModelID   uuid.UUID
-	Name      string
-	CreatedAt time.Time
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	ModelID               uuid.UUID
+	Name                  string
+	CreatedAt             time.Time
+	Color                 string
+	Model3dResourceID     uuid.NullUUID
+	Model3dResourceStatus string
 }
 
 type SecurityAuditEvent struct {
@@ -136,4 +185,7 @@ type User struct {
 	UsernameNormalized string
 	PasswordHash       string
 	CreatedAt          time.Time
+	Locale             string
+	Theme              string
+	Accent             string
 }

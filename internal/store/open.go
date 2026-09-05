@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -42,7 +43,22 @@ func Open(cfg config.Database) (*sql.DB, error) {
 }
 
 func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
-	if cfg.Driver == "sqlite" {
+	unlock, err := migrationLock(ctx, db, cfg.Driver)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	current, target, err := schemaVersions(ctx, db, cfg.Driver)
+	if err != nil {
+		return err
+	}
+	if current == target {
+		if cfg.Driver == "sqlite" {
+			return verifySQLite(ctx, db)
+		}
+		return nil
+	}
+	if cfg.Driver == "sqlite" && current > 0 {
 		if err := backupSQLite(ctx, db, cfg.DSN); err != nil {
 			return err
 		}
@@ -59,10 +75,62 @@ func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
 	if err != nil {
 		return fmt.Errorf("initialize migrations: %w", err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
+	if cfg.Driver == "sqlite" {
+		// Rebuild migrations need FK enforcement suspended outside Goose's transaction.
+		// Goose commits the schema and version together and rolls both back on failure.
+		for current < target {
+			if current == 10 {
+				if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+					return err
+				}
+			}
+			result, migrateErr := provider.UpByOne(ctx)
+			_, restoreErr := db.ExecContext(context.WithoutCancel(ctx), "PRAGMA foreign_keys = ON")
+			if err := errors.Join(migrateErr, restoreErr); err != nil {
+				return fmt.Errorf("migrate SQLite and restore foreign keys: %w", err)
+			}
+			current = result.Source.Version
+		}
+	} else if _, err := provider.Up(ctx); err != nil {
 		return fmt.Errorf("migrate %s: %w", cfg.Driver, err)
 	}
+	if cfg.Driver == "sqlite" {
+		if err := verifySQLite(ctx, db); err != nil {
+			return err
+		}
+	}
+	return CheckSchema(ctx, db, cfg.Driver)
+}
+
+// CheckSchema is read-only: application startup never initializes PostgreSQL tables.
+func CheckSchema(ctx context.Context, db *sql.DB, driver string) error {
+	current, target, err := schemaVersions(ctx, db, driver)
+	if err != nil {
+		return err
+	}
+	if current != target {
+		return fmt.Errorf("database schema %d requires migration to %d; run assetloop migrate", current, target)
+	}
 	return nil
+}
+
+func verifySQLite(ctx context.Context, db *sql.DB) error {
+	var result string
+	if err := db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&result); err != nil {
+		return fmt.Errorf("check SQLite integrity: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("SQLite integrity check: %s", result)
+	}
+	rows, err := db.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return fmt.Errorf("check SQLite foreign keys: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return fmt.Errorf("SQLite foreign key check failed")
+	}
+	return rows.Err()
 }
 
 func sqlitePath(dsn string) string {

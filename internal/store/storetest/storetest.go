@@ -16,6 +16,7 @@ type Store interface {
 	application.AuthStore
 	application.CatalogStore
 	application.LifecycleStore
+	application.ModelMediaStore
 }
 
 func Run(t *testing.T, store Store) {
@@ -24,6 +25,7 @@ func Run(t *testing.T, store Store) {
 	t.Run("auth", func(t *testing.T) { runAuth(t, store) })
 	t.Run("catalog", func(t *testing.T) { runCatalog(t, store) })
 	t.Run("lifecycle", func(t *testing.T) { runLifecycle(t, store) })
+	t.Run("concurrent lifecycle", func(t *testing.T) { runConcurrentLifecycle(t, store) })
 }
 
 func runLifecycle(t *testing.T, store Store) {
@@ -41,7 +43,7 @@ func runLifecycle(t *testing.T, store Store) {
 	asset := snapshot.Assets[0]
 	service := application.NewLifecycleService(store)
 	purchase, err := service.Record(ctx, owner, application.RecordEvent{
-		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 10_000, Currency: "USD",
+		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: -10_000, Currency: "USD",
 		FXRateScaled: 710_000_000, FXRateDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
 		FXRateSource: "store-test", FXConfirmed: true, OccurredAt: time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC),
 		Source: "manual", ExternalReference: "ORDER-001", Notes: "purchase",
@@ -49,22 +51,41 @@ func runLifecycle(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("record foreign-currency purchase: %v", err)
 	}
-	if purchase.BaseAmountMinor != -71_000 || purchase.FX == nil || purchase.FX.OriginalCurrency != "USD" {
+	if purchase.BaseAmountMinor != -71_000 || purchase.FX == nil || purchase.FX.OriginalAmountMinor != 10_000 || purchase.FX.OriginalCurrency != "USD" {
 		t.Fatalf("purchase conversion evidence mismatch: %+v", purchase)
+	}
+	maintenanceType, err := service.CreateEventType(ctx, owner, application.CreateAssetEventType{Name: "保养", Cashflow: domain.AssetEventNeutral})
+	if err != nil || maintenanceType.Name != "保养" || maintenanceType.Cashflow != domain.AssetEventNeutral {
+		t.Fatalf("create custom event type: type=%+v err=%v", maintenanceType, err)
+	}
+	if _, err := service.CreateEventType(ctx, owner, application.CreateAssetEventType{Name: "保养", Cashflow: domain.AssetEventExpense}); err == nil {
+		t.Fatal("duplicate custom event type should fail")
+	}
+	eventTypes, err := service.EventTypes(ctx, owner)
+	if err != nil || len(eventTypes) != 4 || eventTypes[3].Name != "保养" {
+		t.Fatalf("list built-in and custom event types: types=%+v err=%v", eventTypes, err)
+	}
+	maintenance, err := service.Record(ctx, owner, application.RecordEvent{
+		AssetID: asset.ID, Type: domain.AssetEventType("保养"), AmountMinor: 0, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "cleaned and inspected",
+	})
+	if err != nil || maintenance.BaseAmountMinor != 0 || maintenance.Type != domain.AssetEventType("保养") {
+		t.Fatalf("record custom no-amount event: event=%+v err=%v", maintenance, err)
 	}
 	_, locked, err := service.BaseCurrency(ctx, owner)
 	if err != nil || !locked {
 		t.Fatalf("base currency should lock after first money event: locked=%v err=%v", locked, err)
 	}
 	repair, err := service.Record(ctx, owner, application.RecordEvent{
-		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: 20_000, Currency: "CNY",
-		OccurredAt: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), Notes: "screen repair",
+		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: -20_000, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "screen repair",
 	})
 	if err != nil {
 		t.Fatalf("record repair: %v", err)
 	}
+	time.Sleep(time.Millisecond)
 	replacement, err := service.Correct(ctx, owner, repair.ID, application.RecordEvent{
-		AmountMinor: 15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC), Notes: "corrected repair",
+		AmountMinor: -15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "corrected repair",
 	})
 	if err != nil {
 		t.Fatalf("correct repair: %v", err)
@@ -72,32 +93,66 @@ func runLifecycle(t *testing.T, store Store) {
 	if replacement.ReplacesEventID != repair.ID || replacement.BaseAmountMinor != -15_000 {
 		t.Fatalf("replacement mismatch: %+v", replacement)
 	}
-	draft, err := service.CreateDraft(ctx, owner, application.CreateImportDraft{
-		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: 800_000, Currency: "CNY",
-		OccurredAt: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), Source: "ai-import",
-		ExternalReference: "SALE-001", Notes: "sale", RawText: "recognized sale receipt",
+	stableOrder, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Page: 1, PageSize: 10})
+	if err != nil || len(stableOrder.Events) != 3 || stableOrder.Events[0].ID != purchase.ID || stableOrder.Events[1].ID != maintenance.ID || stableOrder.Events[2].ID != replacement.ID {
+		t.Fatalf("correction must retain the original event's position when occurrence times match: result=%+v err=%v", stableOrder, err)
+	}
+	repairingList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Status: "repairing", Page: 1, PageSize: 25})
+	if err != nil || repairingList.Total != 1 || len(repairingList.Assets) != 1 || repairingList.Assets[0].Summary.Status != "repairing" || repairingList.Assets[0].Summary.NetCashflowMinor != -86_000 {
+		t.Fatalf("repairing asset list mismatch: result=%+v err=%v", repairingList, err)
+	}
+	sale, err := service.Record(ctx, owner, application.RecordEvent{
+		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: -800_000, Currency: "CNY",
+		OccurredAt: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), Source: "ai-harness",
+		ExternalReference: "SALE-001", Notes: "user-confirmed sale",
 	})
 	if err != nil {
-		t.Fatalf("create import draft: %v", err)
+		t.Fatalf("record Agent-confirmed sale: %v", err)
 	}
-	if _, err := service.ConfirmDraft(ctx, owner, draft.ID, application.ConfirmImport{}); err != nil {
-		t.Fatalf("confirm base-currency import draft: %v", err)
-	}
-	if _, err := service.ConfirmDraft(ctx, owner, draft.ID, application.ConfirmImport{}); !errors.Is(err, application.ErrDraftNotPending) {
-		t.Fatalf("confirmed draft must not be confirmed twice, got %v", err)
-	}
-	if drafts, err := service.PendingDrafts(ctx, owner); err != nil || len(drafts) != 0 {
-		t.Fatalf("confirmed draft should leave pending list: drafts=%d err=%v", len(drafts), err)
+	if sale.BaseAmountMinor != 800_000 || sale.FX != nil {
+		t.Fatalf("Agent-confirmed base-currency sale mismatch: %+v", sale)
 	}
 	events, summary, err := service.Timeline(ctx, owner, asset.ID)
 	if err != nil {
 		t.Fatalf("timeline: %v", err)
 	}
-	if len(events) != 5 || summary.ExpenseMinor != 86_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 714_000 || summary.Status != "已卖出" {
+	if len(events) != 6 || summary.ExpenseMinor != 86_000 || summary.IncomeMinor != 800_000 || summary.NetCashflowMinor != 714_000 || summary.Status != "sold" {
 		t.Fatalf("unexpected lifecycle result: events=%d summary=%+v", len(events), summary)
 	}
 	if events[len(events)-1].FX != nil {
 		t.Fatalf("base-currency sale should keep original-currency evidence nullable: %+v", events[len(events)-1])
+	}
+	eventPage, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "repair", Sort: "amount", Direction: "desc", Page: 1, PageSize: 1})
+	if err != nil || eventPage.Total != 1 || len(eventPage.Events) != 1 || eventPage.Events[0].ID != replacement.ID || eventPage.Summary.NetCashflowMinor != 714_000 {
+		t.Fatalf("server-paged lifecycle result mismatch: result=%+v err=%v", eventPage, err)
+	}
+	fullHistory, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "repair", ShowVoided: true, Sort: "amount", Direction: "desc", Page: 1, PageSize: 10})
+	if err != nil || fullHistory.Total != 2 || len(fullHistory.Events) != 2 || fullHistory.Events[0].ID != replacement.ID || fullHistory.Events[1].ID != repair.ID || !fullHistory.Events[1].IsVoided {
+		t.Fatalf("full lifecycle history should add the voided original without exposing the technical void event: result=%+v err=%v", fullHistory, err)
+	}
+	var inputErr application.InputError
+	if _, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "void", Page: 1, PageSize: 25}); !errors.As(err, &inputErr) {
+		t.Fatalf("technical void event must not be a user-facing filter, got %v", err)
+	}
+	searchedEvents, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Query: "corrected", Page: 1, PageSize: 25})
+	if err != nil || searchedEvents.Total != 1 || len(searchedEvents.Events) != 1 || searchedEvents.Events[0].ID != replacement.ID {
+		t.Fatalf("lifecycle search mismatch: result=%+v err=%v", searchedEvents, err)
+	}
+	customEvents, err := service.TimelinePage(ctx, owner, asset.ID, application.EventListOptions{Type: "保养", Page: 1, PageSize: 25})
+	if err != nil || customEvents.Total != 1 || len(customEvents.Events) != 1 || customEvents.Events[0].ID != maintenance.ID {
+		t.Fatalf("custom event type filter mismatch: result=%+v err=%v", customEvents, err)
+	}
+	portfolio, err := service.PortfolioSummary(ctx, owner)
+	if err != nil || portfolio.AssetCount != 1 || portfolio.ExpenseMinor != 86_000 || portfolio.IncomeMinor != 800_000 || portfolio.NetMinor != 714_000 || portfolio.BaseCurrency != "CNY" {
+		t.Fatalf("bulk portfolio summary mismatch: summary=%+v err=%v", portfolio, err)
+	}
+	soldList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Query: "Example Ultra", Status: "sold", Page: 1, PageSize: 1})
+	if err != nil || soldList.Total != 1 || len(soldList.Assets) != 1 || soldList.Assets[0].Summary.NetCashflowMinor != 714_000 {
+		t.Fatalf("sold asset search mismatch: result=%+v err=%v", soldList, err)
+	}
+	missingList, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Query: "does-not-exist", Page: 1, PageSize: 1})
+	if err != nil || missingList.Total != 0 || len(missingList.Assets) != 0 {
+		t.Fatalf("empty asset search mismatch: result=%+v err=%v", missingList, err)
 	}
 	originalRepair, err := store.GetAssetEvent(ctx, owner.TenantID, repair.ID)
 	if err != nil || !originalRepair.IsVoided || originalRepair.Notes != "screen repair" {
@@ -108,11 +163,34 @@ func runLifecycle(t *testing.T, store Store) {
 	}
 	viewer := owner
 	viewer.Role = application.RoleViewer
+	if _, err := service.CreateEventType(ctx, viewer, application.CreateAssetEventType{Name: "借出", Cashflow: domain.AssetEventNeutral}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer custom event type write should be forbidden, got %v", err)
+	}
 	if _, _, err := service.Timeline(ctx, viewer, asset.ID); err != nil {
 		t.Fatalf("viewer should read lifecycle: %v", err)
 	}
 	if _, err := service.Record(ctx, viewer, application.RecordEvent{}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer lifecycle write should be forbidden, got %v", err)
+	}
+	secondAsset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: snapshot.Variants[0].ID, DisplayName: "Pagination Phone", SerialNumber: "SERIAL-002"})
+	if err != nil {
+		t.Fatalf("create pagination asset: %v", err)
+	}
+	pageOne, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Page: 1, PageSize: 1})
+	if err != nil || pageOne.Total != 2 || len(pageOne.Assets) != 1 || pageOne.Assets[0].Asset.ID != secondAsset.ID {
+		t.Fatalf("first asset page mismatch: result=%+v err=%v", pageOne, err)
+	}
+	pageTwo, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Page: 2, PageSize: 1})
+	if err != nil || pageTwo.Total != 2 || len(pageTwo.Assets) != 1 || pageTwo.Assets[0].Asset.ID == secondAsset.ID {
+		t.Fatalf("second asset page mismatch: result=%+v err=%v", pageTwo, err)
+	}
+	byName, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Sort: "name", Direction: "asc", Page: 1, PageSize: 25})
+	if err != nil || len(byName.Assets) != 2 || byName.Assets[0].Asset.ID != secondAsset.ID {
+		t.Fatalf("asset name sort mismatch: result=%+v err=%v", byName, err)
+	}
+	byNet, err := catalog.ListAssetsWithSummary(ctx, owner, application.AssetListOptions{Sort: "net", Direction: "desc", Page: 1, PageSize: 25})
+	if err != nil || len(byNet.Assets) != 2 || byNet.Assets[0].Asset.ID != asset.ID {
+		t.Fatalf("asset net sort mismatch: result=%+v err=%v", byNet, err)
 	}
 }
 
@@ -168,11 +246,20 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
+	media := domain.ProductModel3D{StoreID: "local", ObjectKey: "tenants/" + owner.TenantID + "/models/" + model.ID + "/hash.glb", SHA256: "hash", SizeBytes: 42, SourceURL: "https://example.com/model", Author: "Author", License: "CC0", UpdatedAt: time.Now().UTC().Truncate(time.Microsecond)}
+	if err := store.UpdateProductModel3D(ctx, owner.TenantID, model.ID, media); err != nil {
+		t.Fatalf("bind model media: %v", err)
+	}
+	gotModel, err := store.GetProductModel(ctx, owner.TenantID, model.ID)
+	if err != nil || gotModel.Model3D == nil || gotModel.Model3D.ObjectKey != media.ObjectKey {
+		t.Fatalf("get model media: model=%+v err=%v", gotModel, err)
+	}
 	variant256, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB"})
 	if err != nil {
 		t.Fatalf("create 256GB variant: %v", err)
 	}
-	if _, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"}); err != nil {
+	variant512, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"})
+	if err != nil {
 		t.Fatalf("create 512GB variant: %v", err)
 	}
 	asset, err := service.CreateAsset(ctx, owner, application.CreateCatalogAsset{
@@ -198,17 +285,48 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil || updatedAsset.DisplayName != "Updated Phone" || updatedAsset.CategoryIcon != "tablet" || updatedAsset.Category != "Phones" || updatedAsset.Model != "Example Ultra" || updatedAsset.Variant != "256 GB" {
 		t.Fatalf("updated catalog hierarchy mismatch: asset=%+v err=%v", updatedAsset, err)
 	}
+	if err := service.DeleteVariant(ctx, owner, variant512.ID); err != nil {
+		t.Fatalf("delete unused variant: %v", err)
+	}
+	if err := service.DeleteVariant(ctx, owner, variant256.ID); err == nil {
+		t.Fatal("variant used by an asset must not be deleted")
+	}
 	snapshot, err := service.Snapshot(ctx, owner)
 	if err != nil {
 		t.Fatalf("catalog snapshot: %v", err)
 	}
-	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 2 || len(snapshot.Assets) != 1 {
+	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 1 || len(snapshot.Assets) != 1 {
 		t.Fatalf("unexpected catalog counts: categories=%d models=%d variants=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Variants), len(snapshot.Assets))
+	}
+	if snapshot.Models[0].Model3D == nil || snapshot.Models[0].Model3D.SHA256 != "hash" {
+		t.Fatalf("snapshot omitted model media: %+v", snapshot.Models[0])
+	}
+	accessoryCategory, err := service.CreateCategory(ctx, owner, application.CreateCategory{Name: "Accessories", IconKey: "headphones"})
+	if err != nil {
+		t.Fatalf("create second category: %v", err)
+	}
+	accessoryModel, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: accessoryCategory.ID, Name: "Audio One"})
+	if err != nil {
+		t.Fatalf("create second model: %v", err)
+	}
+	if _, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: accessoryModel.ID, Name: "Black"}); err != nil {
+		t.Fatalf("create second model variant: %v", err)
+	}
+	modelPage, err := service.ListModelsWithVariants(ctx, owner, application.ModelListOptions{Sort: "name", Direction: "asc", Page: 1, PageSize: 1})
+	if err != nil || modelPage.Total != 2 || len(modelPage.Models) != 1 || modelPage.Models[0].ID != accessoryModel.ID || len(modelPage.Variants) != 1 || modelPage.Variants[0].ModelID != accessoryModel.ID {
+		t.Fatalf("bulk model page mismatch: result=%+v err=%v", modelPage, err)
+	}
+	filteredModels, err := service.ListModelsWithVariants(ctx, owner, application.ModelListOptions{Query: "Ultra", CategoryID: category.ID, Page: 1, PageSize: 25})
+	if err != nil || filteredModels.Total != 1 || len(filteredModels.Models) != 1 || filteredModels.Models[0].ID != model.ID || filteredModels.Models[0].Model3D == nil || filteredModels.Models[0].Model3D.SHA256 != "hash" || len(filteredModels.Variants) != 1 {
+		t.Fatalf("filtered model page mismatch: result=%+v err=%v", filteredModels, err)
 	}
 	viewer := owner
 	viewer.Role = application.RoleViewer
 	if _, err := service.CreateCategory(ctx, viewer, application.CreateCategory{Name: "Forbidden"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer catalog write should be forbidden, got %v", err)
+	}
+	if err := service.DeleteVariant(ctx, viewer, variant256.ID); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer variant delete should be forbidden, got %v", err)
 	}
 	if _, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: "99999999-9999-4999-8999-999999999999", Name: "Cross tenant"}); err == nil {
 		t.Fatal("model with unavailable category should fail")
@@ -218,6 +336,9 @@ func runCatalog(t *testing.T, store Store) {
 	}
 	foreign := owner
 	foreign.TenantID = "99999999-9999-4999-8999-999999999999"
+	if _, err := store.GetProductModel(ctx, foreign.TenantID, model.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("cross-tenant model read should be hidden, got %v", err)
+	}
 	if _, err := service.GetAsset(ctx, foreign, asset.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("cross-tenant catalog read should be hidden, got %v", err)
 	}
@@ -230,7 +351,7 @@ func runAsset(t *testing.T, store application.Store) {
 		ID: "11111111-1111-4111-8111-111111111111", TenantID: "22222222-2222-4222-8222-222222222222",
 		CategoryID: "33333333-3333-4333-8333-333333333333", Category: "Phone",
 		CategoryIcon: "package",
-		ModelID: "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
+		ModelID:      "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
 		VariantID: "55555555-5555-4555-8555-555555555555", Variant: "256GB",
 		DisplayName: "My Example Phone", CreatedAt: time.Date(2026, 9, 1, 1, 2, 3, 0, time.UTC),
 	}
@@ -286,12 +407,24 @@ func runAuth(t *testing.T, store Store) {
 	if err != nil || got != credential.Principal {
 		t.Fatalf("session principal mismatch: got=%+v want=%+v err=%v", got, credential.Principal, err)
 	}
+	got, err = service.UpdatePreferences(ctx, got, application.UpdatePreferences{Locale: application.LocaleEn, Theme: application.ThemeDark, Accent: application.AccentBlue})
+	if err != nil {
+		t.Fatalf("update preferences: %v", err)
+	}
+	got, err = service.Authenticate(ctx, credential.Token)
+	if err != nil || got.Locale != application.LocaleEn || got.Theme != application.ThemeDark || got.Accent != application.AccentBlue {
+		t.Fatalf("stored preferences mismatch: principal=%+v err=%v", got, err)
+	}
 	if _, err := service.AddMember(ctx, got, application.AddMember{Username: "store-viewer", Password: "store viewer password", Role: application.RoleViewer}); err != nil {
 		t.Fatalf("create member: %v", err)
 	}
-	members, err := service.ListMembers(ctx, got)
-	if err != nil || len(members) != 2 {
-		t.Fatalf("list members: count=%d err=%v", len(members), err)
+	members, err := service.ListMembers(ctx, got, application.MemberListOptions{})
+	if err != nil || len(members.Members) != 2 || members.Total != 2 {
+		t.Fatalf("list members: count=%d total=%d err=%v", len(members.Members), members.Total, err)
+	}
+	viewerMembers, err := service.ListMembers(ctx, got, application.MemberListOptions{Query: "viewer", Role: "viewer", Sort: "created", Direction: "desc", Page: 1, PageSize: 1})
+	if err != nil || viewerMembers.Total != 1 || len(viewerMembers.Members) != 1 || viewerMembers.Members[0].Username != "store-viewer" {
+		t.Fatalf("filtered member page mismatch: result=%+v err=%v", viewerMembers, err)
 	}
 	err = store.CreateSession(ctx, application.Session{
 		TokenHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

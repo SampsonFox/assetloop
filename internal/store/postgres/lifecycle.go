@@ -3,22 +3,68 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	"github.com/SampsonFox/assetloop/internal/store/postgres/postgresdb"
 	"github.com/google/uuid"
 )
+
+func (s *Store) GetPortfolioSummary(ctx context.Context, tenantID string) (application.PortfolioSummary, error) {
+	id, err := uuid.Parse(tenantID)
+	if err != nil {
+		return application.PortfolioSummary{}, fmt.Errorf("parse tenant ID: %w", err)
+	}
+	row, err := s.queries().GetPortfolioSummary(ctx, id)
+	if err != nil {
+		return application.PortfolioSummary{}, err
+	}
+	return application.PortfolioSummary{
+		AssetCount: int(row.AssetCount), ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetMinor: row.NetMinor, BaseCurrency: row.BaseCurrency,
+	}, nil
+}
 
 func (s *Store) TenantBaseCurrency(ctx context.Context, tenantID string) (string, bool, error) {
 	id, err := uuid.Parse(tenantID)
 	if err != nil {
 		return "", false, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	row, err := postgresdb.New(s.db).GetTenantBaseCurrency(ctx, id)
+	row, err := s.queries().GetTenantBaseCurrency(ctx, id)
 	return row.BaseCurrency, row.BaseCurrencyLocked, err
+}
+
+func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.AssetEventTypeDefinition) error {
+	id, tenantID, err := catalogIDs(eventType.ID, eventType.TenantID)
+	if err != nil {
+		return err
+	}
+	userID, err := uuid.Parse(eventType.CreatedByUserID)
+	if err != nil {
+		return fmt.Errorf("parse event type user ID: %w", err)
+	}
+	return s.queries().CreateAssetEventType(ctx, postgresdb.CreateAssetEventTypeParams{
+		ID: id, TenantID: tenantID, Name: eventType.Name, NormalizedName: eventType.NormalizedName,
+		CashflowDirection: string(eventType.Cashflow), CreatedByUserID: userID, CreatedAt: eventType.CreatedAt,
+	})
+}
+
+func (s *Store) ListAssetEventTypes(ctx context.Context, tenantID string) ([]domain.AssetEventTypeDefinition, error) {
+	id, err := uuid.Parse(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("parse tenant ID: %w", err)
+	}
+	rows, err := s.queries().ListAssetEventTypes(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]domain.AssetEventTypeDefinition, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, postgresEventType(row))
+	}
+	return result, nil
 }
 
 func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTransaction, event domain.AssetEvent) error {
@@ -36,6 +82,9 @@ func (s *Store) AppendAssetEvent(ctx context.Context, transaction domain.AssetTr
 		tenantID, err := uuid.Parse(event.TenantID)
 		if err != nil {
 			return err
+		}
+		if event.BaseAmountMinor == 0 {
+			return nil
 		}
 		return q.LockTenantBaseCurrency(ctx, postgresdb.LockTenantBaseCurrencyParams{ID: tenantID, BaseCurrency: event.BaseCurrency})
 	})
@@ -61,8 +110,18 @@ func (s *Store) CorrectAssetEvent(ctx context.Context, transaction domain.AssetT
 			return err
 		}
 		tenantID, _ := uuid.Parse(replacement.TenantID)
+		if replacement.BaseAmountMinor == 0 {
+			return nil
+		}
 		return q.LockTenantBaseCurrency(ctx, postgresdb.LockTenantBaseCurrencyParams{ID: tenantID, BaseCurrency: replacement.BaseCurrency})
 	})
+}
+
+func postgresEventType(row postgresdb.AssetEventType) domain.AssetEventTypeDefinition {
+	return domain.AssetEventTypeDefinition{
+		ID: row.ID.String(), TenantID: row.TenantID.String(), Name: row.Name, NormalizedName: row.NormalizedName,
+		Cashflow: domain.AssetEventCashflow(row.CashflowDirection), CreatedByUserID: row.CreatedByUserID.String(), CreatedAt: row.CreatedAt,
+	}
 }
 
 func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (domain.AssetEvent, error) {
@@ -70,7 +129,7 @@ func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (do
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
-	row, err := postgresdb.New(s.db).GetAssetEvent(ctx, postgresdb.GetAssetEventParams{TenantID: tenantUUID, ID: eventUUID})
+	row, err := s.queries().GetAssetEvent(ctx, postgresdb.GetAssetEventParams{TenantID: tenantUUID, ID: eventUUID})
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -85,7 +144,7 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 	if err != nil {
 		return nil, err
 	}
-	rows, err := postgresdb.New(s.db).ListAssetEvents(ctx, postgresdb.ListAssetEventsParams{TenantID: tenantUUID, AssetID: assetUUID})
+	rows, err := s.queries().ListAssetEvents(ctx, postgresdb.ListAssetEventsParams{TenantID: tenantUUID, AssetID: assetUUID})
 	if err != nil {
 		return nil, err
 	}
@@ -99,86 +158,50 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 	return result, nil
 }
 
-func (s *Store) CreateImportDraft(ctx context.Context, draft domain.ImportDraft) error {
-	id, tenantID, err := catalogIDs(draft.ID, draft.TenantID)
+func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID string, opts application.EventListOptions) ([]domain.AssetEvent, int, error) {
+	tenantUUID, assetUUID, err := postgresIDs(tenantID, assetID)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
-	assetID, err := uuid.Parse(draft.AssetID)
-	if err != nil {
-		return fmt.Errorf("parse asset ID: %w", err)
-	}
-	userID, err := uuid.Parse(draft.CreatedByUserID)
-	if err != nil {
-		return fmt.Errorf("parse user ID: %w", err)
-	}
-	return postgresdb.New(s.db).CreateImportDraft(ctx, postgresdb.CreateImportDraftParams{
-		ID: id, TenantID: tenantID, AssetID: assetID, EventType: string(draft.EventType), AmountMinor: draft.AmountMinor,
-		Currency: draft.Currency, OccurredAt: draft.OccurredAt, Source: draft.Source,
-		ExternalReference: draft.ExternalReference, Notes: draft.Notes, RawText: draft.RawText,
-		Status: draft.Status, CreatedByUserID: userID, CreatedAt: draft.CreatedAt,
+	rows, err := s.queries().ListAssetEventsPage(ctx, postgresdb.ListAssetEventsPageParams{
+		TenantID: tenantUUID, AssetID: assetUUID, SearchQuery: opts.Query, EventTypeFilter: opts.Type,
+		SortKey: opts.Sort, SortDirection: opts.Direction, ShowVoided: opts.ShowVoided,
+		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
 	})
-}
-
-func (s *Store) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]domain.ImportDraft, error) {
-	id, err := uuid.Parse(tenantID)
 	if err != nil {
-		return nil, fmt.Errorf("parse tenant ID: %w", err)
+		return nil, 0, err
 	}
-	rows, err := postgresdb.New(s.db).ListPendingImportDrafts(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]domain.ImportDraft, 0, len(rows))
+	result := make([]domain.AssetEvent, 0, len(rows))
+	total := 0
 	for _, row := range rows {
-		result = append(result, postgresDraft(row))
+		total = int(row.TotalCount)
+		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
+			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided))
 	}
-	return result, nil
+	return result, total, nil
 }
 
-func (s *Store) GetImportDraft(ctx context.Context, tenantID, draftID string) (domain.ImportDraft, error) {
-	tenantUUID, draftUUID, err := postgresIDs(tenantID, draftID)
+func (s *Store) GetAssetSummary(ctx context.Context, tenantID, assetID string) (domain.AssetSummary, error) {
+	tenantUUID, assetUUID, err := postgresIDs(tenantID, assetID)
 	if err != nil {
-		return domain.ImportDraft{}, err
+		return domain.AssetSummary{}, err
 	}
-	row, err := postgresdb.New(s.db).GetImportDraft(ctx, postgresdb.GetImportDraftParams{TenantID: tenantUUID, ID: draftUUID})
+	row, err := s.queries().GetAssetSummary(ctx, postgresdb.GetAssetSummaryParams{TenantID: tenantUUID, AssetID: assetUUID})
 	if err != nil {
-		return domain.ImportDraft{}, err
+		return domain.AssetSummary{}, err
 	}
-	return postgresDraft(row), nil
-}
-
-func (s *Store) ConfirmImportDraft(ctx context.Context, draftID string, transaction domain.AssetTransaction, event domain.AssetEvent) error {
-	return s.lifecycleTx(ctx, func(q *postgresdb.Queries) error {
-		if err := createPostgresTransaction(ctx, q, transaction); err != nil {
-			return err
-		}
-		params, err := postgresEventParams(event)
-		if err != nil {
-			return err
-		}
-		if err := q.CreateAssetEvent(ctx, params); err != nil {
-			return err
-		}
-		tenantID, draftUUID, err := postgresIDs(transaction.TenantID, draftID)
-		if err != nil {
-			return err
-		}
-		transactionID, _ := uuid.Parse(transaction.ID)
-		rows, err := q.ConfirmImportDraft(ctx, postgresdb.ConfirmImportDraftParams{
-			ConfirmedTransactionID: uuid.NullUUID{UUID: transactionID, Valid: true}, TenantID: tenantID, ID: draftUUID,
-		})
-		if err != nil {
-			return err
-		}
-		if rows != 1 {
-			return errors.New("import draft is not pending")
-		}
-		return q.LockTenantBaseCurrency(ctx, postgresdb.LockTenantBaseCurrencyParams{ID: tenantID, BaseCurrency: event.BaseCurrency})
-	})
+	return domain.AssetSummary{
+		BaseCurrency: row.BaseCurrency, ExpenseMinor: row.ExpenseMinor, IncomeMinor: row.IncomeMinor,
+		NetCashflowMinor: row.NetMinor, Status: row.Status,
+	}, nil
 }
 
 func (s *Store) lifecycleTx(ctx context.Context, fn func(*postgresdb.Queries) error) error {
+	if s.tx != nil {
+		return fn(s.queries())
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -269,19 +292,6 @@ func postgresEvent(id, tenantID, assetID, transactionID uuid.UUID, eventType str
 		}
 	}
 	return event
-}
-
-func postgresDraft(row postgresdb.ImportDraft) domain.ImportDraft {
-	draft := domain.ImportDraft{
-		ID: row.ID.String(), TenantID: row.TenantID.String(), AssetID: row.AssetID.String(), EventType: domain.AssetEventType(row.EventType),
-		AmountMinor: row.AmountMinor, Currency: row.Currency, OccurredAt: row.OccurredAt, Source: row.Source,
-		ExternalReference: row.ExternalReference, Notes: row.Notes, RawText: row.RawText, Status: row.Status,
-		CreatedByUserID: row.CreatedByUserID.String(), CreatedAt: row.CreatedAt,
-	}
-	if row.ConfirmedTransactionID.Valid {
-		draft.ConfirmedTransactionID = row.ConfirmedTransactionID.UUID.String()
-	}
-	return draft
 }
 
 func postgresIDs(first, second string) (uuid.UUID, uuid.UUID, error) {

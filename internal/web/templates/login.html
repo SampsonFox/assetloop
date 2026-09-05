@@ -1,13 +1,14 @@
-{{define "content"}}
+{{define "content"}}{{$s := .Strings}}
 <section class="auth-card">
-  <p class="eyebrow">欢迎回来</p>
-  <h1>登录 AssetLoop</h1>
-  {{if .Error}}<div class="error" role="alert">{{.Error}}</div>{{end}}
+  <p class="eyebrow">{{t $s "login.eyebrow"}}</p>
+  <h1>{{t $s "login.heading"}}</h1>
+  {{if .Error}}<div class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</div>{{end}}
   <form method="post" action="/login" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-    <label>用户名<input name="username" required autofocus autocomplete="username"></label>
-    <label>密码<input name="password" type="password" required autocomplete="current-password"></label>
-    <button type="submit">登录</button>
+    <label>{{t $s "login.username"}}<input name="username" required autofocus autocomplete="username"></label>
+    <label>{{t $s "login.password"}}<input name="password" type="password" required autocomplete="current-password"></label>
+    <button type="submit">{{t $s "login.submit"}}</button>
   </form>
+  {{template "locale-picker" .}}
 </section>
 {{end}}

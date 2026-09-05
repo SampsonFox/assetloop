@@ -1,33 +1,64 @@
-{{define "content"}}
+{{define "content"}}{{$s := .Strings}}
 <div class="page-heading">
-  <div><p class="eyebrow">{{.Principal.TenantName}}</p><h1>我的物品</h1><p class="muted">{{len .Assets}} 件具体物品</p></div>
+  <div><p class="eyebrow">{{.Principal.TenantName}}</p><h1>{{t $s "title.assets"}}</h1><p class="muted">{{.AssetTotal}} {{t $s "assets.count_suffix"}}</p></div>
   <div class="heading-actions">
-    <div class="view-switcher" aria-label="显示方式"><a href="/?view=list" class="{{if eq .AssetView "list"}}is-active{{end}}">列表</a><a href="/?view=grid" class="{{if eq .AssetView "grid"}}is-active{{end}}">卡片</a></div>
-    {{if .CanManageCatalog}}<button class="button auto" type="button" data-dialog-open="asset-drawer" data-title="录入物品" data-action="/assets">录入物品</button>{{end}}
+    <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="{{.AssetListURL}}" class="{{if eq .AssetView "list"}}is-active{{end}}" {{if eq .AssetView "list"}}aria-current="page"{{end}}>{{t $s "assets.list"}}</a><a href="{{.AssetGridURL}}" class="{{if eq .AssetView "grid"}}is-active{{end}}" {{if eq .AssetView "grid"}}aria-current="page"{{end}}>{{t $s "assets.grid"}}</a></div>
+    {{if .CanManageCatalog}}<a class="button auto" href="/assets/new">{{t $s "assets.create"}}</a>{{end}}
   </div>
 </div>
-{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
+
+<form class="asset-filters asset-search-shell" method="get" action="/">
+  {{if eq .AssetView "grid"}}<input type="hidden" name="view" value="grid">{{end}}
+  <label class="asset-search"><span>{{t $s "assets.search"}}</span><input type="search" name="q" value="{{.AssetQuery}}" placeholder="{{t $s "assets.search_placeholder"}}"></label>
+  <div class="asset-filter-actions">
+    <button class="auto" type="submit">{{t $s "assets.search"}}</button>
+    <details class="asset-filter-disclosure {{if .AssetAdvanced}}has-active{{end}}">
+      <summary class="button secondary auto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>{{t $s "assets.more_filters"}}</span>{{if .AssetAdvanced}}<small>{{t $s "assets.filters_active"}}</small>{{end}}</summary>
+      <div class="asset-filter-panel">
+        <label><span>{{t $s "assets.status"}}</span><select name="status">
+          <option value="" {{if eq .AssetStatus ""}}selected{{end}}>{{t $s "assets.all_statuses"}}</option>
+          <option value="active" {{if eq .AssetStatus "active"}}selected{{end}}>{{t $s "status.active"}}</option>
+          <option value="repairing" {{if eq .AssetStatus "repairing"}}selected{{end}}>{{t $s "status.repairing"}}</option>
+          <option value="sold" {{if eq .AssetStatus "sold"}}selected{{end}}>{{t $s "status.sold"}}</option>
+          <option value="unacquired" {{if eq .AssetStatus "unacquired"}}selected{{end}}>{{t $s "status.unacquired"}}</option>
+        </select></label>
+        <label><span>{{t $s "table.sort"}}</span><select name="sort">
+          <option value="created" {{if eq .AssetSort "created"}}selected{{end}}>{{t $s "table.created"}}</option>
+          <option value="name" {{if eq .AssetSort "name"}}selected{{end}}>{{t $s "assets.item"}}</option>
+          <option value="model" {{if eq .AssetSort "model"}}selected{{end}}>{{t $s "assets.taxonomy"}}</option>
+          <option value="status" {{if eq .AssetSort "status"}}selected{{end}}>{{t $s "assets.status"}}</option>
+          <option value="net" {{if eq .AssetSort "net"}}selected{{end}}>{{t $s "assets.net_settlement"}}</option>
+          <option value="cost" {{if eq .AssetSort "cost"}}selected{{end}}>{{t $s "assets.cost"}}</option>
+        </select></label>
+        <label><span>{{t $s "table.direction"}}</span><select name="direction"><option value="asc" {{if eq .AssetDirection "asc"}}selected{{end}}>{{t $s "table.ascending"}}</option><option value="desc" {{if eq .AssetDirection "desc"}}selected{{end}}>{{t $s "table.descending"}}</option></select></label>
+        <div class="asset-filter-panel-actions"><button class="auto" type="submit">{{t $s "assets.filter"}}</button></div>
+      </div>
+    </details>
+    {{if .AssetHasFilters}}<a class="button secondary" href="{{.AssetClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
+  </div>
+</form>
 
 {{if .Assets}}
   {{if eq .AssetView "grid"}}
-  <section class="asset-grid" aria-label="物品卡片">{{range .Assets}}
-    <article class="asset-card"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><div class="asset-card-body"><p class="eyebrow">{{.Category}} · {{.Model}} · {{.Variant}}</p><h2><a href="/assets/{{.ID}}">{{.DisplayName}}</a></h2><p class="muted">{{if .SerialNumber}}序列号 {{.SerialNumber}}{{else}}尚未记录序列号{{end}}</p></div>{{if $.CanManageCatalog}}<button class="secondary auto" type="button" data-dialog-open="asset-drawer" data-title="编辑物品" data-action="/assets/{{.ID}}" data-variant-id="{{.VariantID}}" data-display-name="{{.DisplayName}}" data-serial-number="{{.SerialNumber}}" data-color="{{.Color}}" data-purchase-channel="{{.PurchaseChannel}}" data-notes="{{.Notes}}">编辑</button>{{end}}</article>
+  <section class="asset-grid" aria-label="{{t $s "assets.cards_label"}}">{{range .Assets}}
+    {{$summary := index $.AssetSummaries .ID}}<article class="asset-card"><svg class="category-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><div class="asset-card-body"><p class="eyebrow">{{.Category}} · {{.Model}} · {{.Variant}}</p><div class="asset-card-title"><h2><a href="/assets/{{.ID}}">{{.DisplayName}}</a></h2><span class="status-badge status-{{$summary.Status}}">{{statusLabel $s $summary.Status}}</span></div><div class="asset-card-values"><p><span>{{t $s "assets.net_settlement"}}</span><strong class="net-value {{if gt $summary.NetCashflowMinor 0}}is-positive{{else if lt $summary.NetCashflowMinor 0}}is-negative{{end}}">{{money $summary.NetCashflowMinor $summary.BaseCurrency}}</strong></p><p><span>{{t $s "assets.cost"}}</span><strong>{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}{{t $s "assets.no_cost"}}{{end}}</strong></p></div><p class="muted">{{if .SerialNumber}}{{t $s "assets.serial_number"}} {{.SerialNumber}}{{else}}{{t $s "assets.serial_missing"}}{{end}}</p></div>{{if $.CanManageLifecycle}}<div class="asset-card-actions"><a href="/assets/{{.ID}}#add-event">{{t $s "assets.add_event"}}</a></div>{{end}}</article>
   {{end}}</section>
   {{else}}
-  <section class="card table-card"><table class="asset-table"><thead><tr><th>物品</th><th>类别 / 型号 / 规格</th><th>序列号</th><th>颜色</th><th>渠道</th>{{if .CanManageCatalog}}<th></th>{{end}}</tr></thead><tbody>{{range .Assets}}<tr>
-    <td><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td><td>{{.Category}} / {{.Model}} / {{.Variant}}</td><td>{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td><td>{{if .Color}}{{.Color}}{{else}}—{{end}}</td><td>{{if .PurchaseChannel}}{{.PurchaseChannel}}{{else}}—{{end}}</td>
-    {{if $.CanManageCatalog}}<td><button class="secondary auto" type="button" data-dialog-open="asset-drawer" data-title="编辑物品" data-action="/assets/{{.ID}}" data-variant-id="{{.VariantID}}" data-display-name="{{.DisplayName}}" data-serial-number="{{.SerialNumber}}" data-color="{{.Color}}" data-purchase-channel="{{.PurchaseChannel}}" data-notes="{{.Notes}}">编辑</button></td>{{end}}
+  <section class="card table-card"><table class="asset-table"><thead><tr><th aria-sort="{{ariaSort .AssetSort .AssetDirection "name"}}"><a class="table-sort" href="{{index .AssetSortURLs "name"}}">{{t $s "assets.item"}} <span aria-hidden="true">{{sortMark .AssetSort .AssetDirection "name"}}</span></a></th><th aria-sort="{{ariaSort .AssetSort .AssetDirection "model"}}"><a class="table-sort" href="{{index .AssetSortURLs "model"}}">{{t $s "assets.taxonomy"}} <span aria-hidden="true">{{sortMark .AssetSort .AssetDirection "model"}}</span></a></th><th aria-sort="{{ariaSort .AssetSort .AssetDirection "status"}}"><a class="table-sort" href="{{index .AssetSortURLs "status"}}">{{t $s "assets.status"}} <span aria-hidden="true">{{sortMark .AssetSort .AssetDirection "status"}}</span></a></th><th aria-sort="{{ariaSort .AssetSort .AssetDirection "net"}}"><a class="table-sort" href="{{index .AssetSortURLs "net"}}">{{t $s "assets.net_settlement"}} <span aria-hidden="true">{{sortMark .AssetSort .AssetDirection "net"}}</span></a></th><th aria-sort="{{ariaSort .AssetSort .AssetDirection "cost"}}"><a class="table-sort" href="{{index .AssetSortURLs "cost"}}">{{t $s "assets.cost"}} <span aria-hidden="true">{{sortMark .AssetSort .AssetDirection "cost"}}</span></a></th><th>{{t $s "assets.serial_number"}}</th>{{if .CanManageLifecycle}}<th></th>{{end}}</tr></thead><tbody>{{range .Assets}}{{$summary := index $.AssetSummaries .ID}}<tr>
+    <td data-label="{{t $s "assets.item"}}"><svg class="category-icon small" aria-hidden="true"><use href="/static/category-icons.svg#{{.CategoryIcon}}"></use></svg><a href="/assets/{{.ID}}">{{.DisplayName}}</a></td><td data-label="{{t $s "assets.taxonomy"}}">{{.Category}} / {{.Model}} / {{.Variant}}</td><td data-label="{{t $s "assets.status"}}"><span class="status-badge status-{{$summary.Status}}">{{statusLabel $s $summary.Status}}</span></td><td data-label="{{t $s "assets.net_settlement"}}"><strong class="net-value {{if gt $summary.NetCashflowMinor 0}}is-positive{{else if lt $summary.NetCashflowMinor 0}}is-negative{{end}}">{{money $summary.NetCashflowMinor $summary.BaseCurrency}}</strong></td><td data-label="{{t $s "assets.cost"}}">{{if $summary.ExpenseMinor}}{{money $summary.ExpenseMinor $summary.BaseCurrency}}{{else}}<span class="muted">{{t $s "assets.no_cost"}}</span>{{end}}</td><td data-label="{{t $s "assets.serial_number"}}">{{if .SerialNumber}}{{.SerialNumber}}{{else}}—{{end}}</td>
+    {{if $.CanManageLifecycle}}<td data-label="{{t $s "common.actions"}}"><div class="row-actions"><a href="/assets/{{.ID}}#add-event">{{t $s "assets.add_event"}}</a></div></td>{{end}}
   </tr>{{end}}</tbody></table></section>
   {{end}}
+  {{if gt .AssetTotalPages 1}}<nav class="pagination" aria-label="{{t $s "assets.pagination"}}">
+    <span>{{t $s "assets.page"}} {{.AssetPage}} / {{.AssetTotalPages}}</span>
+    <div>{{if .AssetPreviousURL}}<a class="button secondary" href="{{.AssetPreviousURL}}">{{t $s "assets.previous"}}</a>{{end}}{{if .AssetNextURL}}<a class="button secondary" href="{{.AssetNextURL}}">{{t $s "assets.next"}}</a>{{end}}</div>
+  </nav>{{end}}
+{{else if .AssetHasFilters}}
+<section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "assets.no_results_heading"}}</h2><p class="muted">{{t $s "assets.no_results_help"}}</p><a class="button secondary" href="{{.AssetClearURL}}">{{t $s "assets.clear_filters"}}</a></section>
 {{else}}
-<section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>还没有物品</h2>
-  {{if .CanManageCatalog}}<p class="muted">录入第一件具体物品，之后就可以添加买入、维修和卖出记录。</p><button class="button auto" type="button" data-dialog-open="asset-drawer" data-title="录入第一件物品" data-action="/assets">录入第一个物品</button>{{else}}<p class="muted">当前还没有可查看的物品。</p>{{end}}
+<section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "assets.empty_heading"}}</h2>
+  {{if .CanManageCatalog}}<p class="muted">{{t $s "assets.empty_help_editor"}}</p><a class="button auto" href="/assets/new">{{t $s "assets.create_first"}}</a>{{else}}<p class="muted">{{t $s "assets.empty_help_viewer"}}</p>{{end}}
 </section>
 {{end}}
-
-{{if .CanManageCatalog}}<dialog class="drawer" id="asset-drawer" aria-labelledby="asset-drawer-title"><form id="asset-form" class="drawer-panel stack" action="/assets" method="post">
-  <header class="drawer-heading"><div><p class="eyebrow">具体物品</p><h2 id="asset-drawer-title" data-dialog-title>录入物品</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="关闭">×</button></header>
-  {{if .Variants}}<input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><label>所属规格<select name="variant_id" required><option value="">请选择</option>{{range .Variants}}<option value="{{.ID}}">{{.CategoryName}} / {{.ModelName}} / {{.Name}}</option>{{end}}</select></label><label>显示名称<input name="display_name" required maxlength="200" placeholder="我的主力手机"></label><label>序列号<input name="serial_number" maxlength="200"></label><label>颜色<input name="color" maxlength="120"></label><label>购买渠道<input name="purchase_channel" maxlength="160"></label><label>备注<textarea name="notes" maxlength="2000" rows="4"></textarea></label>
-  <div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>取消</button><button class="auto" type="submit">保存</button></div>{{else}}<div class="empty-inline"><strong>当前还没有价格规格</strong><p class="muted">具体物品必须关联类别、型号和价格规格。创建规格后即可返回这里录入。</p></div><div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>取消</button><a class="button" href="/admin/catalog">创建价格规格</a></div>{{end}}
-</form></dialog>{{end}}
 {{end}}

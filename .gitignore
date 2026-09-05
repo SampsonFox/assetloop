@@ -16,10 +16,10 @@ bin/
 dist/
 coverage.out
 graphify-out/
+.impeccable/review/
 
 # Editors and OS
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-

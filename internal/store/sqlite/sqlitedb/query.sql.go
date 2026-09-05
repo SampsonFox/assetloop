@@ -10,24 +10,143 @@ import (
 	"database/sql"
 )
 
-const confirmImportDraft = `-- name: ConfirmImportDraft :execrows
-UPDATE import_drafts
-SET status = 'confirmed', confirmed_transaction_id = ?
-WHERE tenant_id = ? AND id = ? AND status = 'pending'
+const bindAsset3D = `-- name: BindAsset3D :execrows
+UPDATE assets SET model_3d_resource_id=?1 WHERE tenant_id=?2 AND id=?3
 `
 
-type ConfirmImportDraftParams struct {
-	ConfirmedTransactionID sql.NullString
-	TenantID               string
-	ID                     string
+type BindAsset3DParams struct {
+	ResourceID sql.NullString
+	TenantID   string
+	ID         string
 }
 
-func (q *Queries) ConfirmImportDraft(ctx context.Context, arg ConfirmImportDraftParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, confirmImportDraft, arg.ConfirmedTransactionID, arg.TenantID, arg.ID)
+func (q *Queries) BindAsset3D(ctx context.Context, arg BindAsset3DParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, bindAsset3D, arg.ResourceID, arg.TenantID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const bindModel3D = `-- name: BindModel3D :execrows
+UPDATE product_models SET model_3d_resource_id=?1 WHERE tenant_id=?2 AND id=?3
+`
+
+type BindModel3DParams struct {
+	ResourceID sql.NullString
+	TenantID   string
+	ID         string
+}
+
+func (q *Queries) BindModel3D(ctx context.Context, arg BindModel3DParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, bindModel3D, arg.ResourceID, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const bindVariant3D = `-- name: BindVariant3D :execrows
+UPDATE product_variants SET model_3d_resource_id=?1 WHERE tenant_id=?2 AND id=?3
+`
+
+type BindVariant3DParams struct {
+	ResourceID sql.NullString
+	TenantID   string
+	ID         string
+}
+
+func (q *Queries) BindVariant3D(ctx context.Context, arg BindVariant3DParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, bindVariant3D, arg.ResourceID, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const countAssetsWithSummary = `-- name: CountAssetsWithSummary :one
+WITH effective_events AS (
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+FROM asset_events e
+WHERE e.tenant_id = ?2
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       MAX(CASE WHEN event_type = 'purchase' THEN 1 ELSE 0 END) AS has_purchase,
+       MAX(CASE WHEN event_type = 'sale' THEN 1 ELSE 0 END) AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
+),
+asset_rows AS (
+SELECT a.id,
+       COALESCE(er.has_purchase, 0) AS has_purchase,
+       COALESCE(er.has_sale, 0) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = ?2
+  AND (CAST(?3 AS TEXT) = '' OR (
+       LOWER(a.display_name) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR
+       LOWER(a.serial_number) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR
+       LOWER(v.color) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR
+       LOWER(a.purchase_channel) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR
+       LOWER(a.notes) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR
+       LOWER(m.name) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR
+       LOWER(v.name) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR
+       LOWER(c.name) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%'
+  ))
+)
+SELECT COUNT(*) FROM asset_rows
+WHERE CAST(?1 AS TEXT) = '' OR CAST(?1 AS TEXT) = 'all'
+   OR (CAST(?1 AS TEXT) = 'sold' AND has_sale = 1)
+   OR (CAST(?1 AS TEXT) = 'repairing' AND has_sale = 0 AND has_purchase = 1 AND latest_event_type = 'repair')
+   OR (CAST(?1 AS TEXT) = 'active' AND has_sale = 0 AND has_purchase = 1 AND latest_event_type != 'repair')
+   OR (CAST(?1 AS TEXT) = 'unacquired' AND has_sale = 0 AND has_purchase = 0)
+`
+
+type CountAssetsWithSummaryParams struct {
+	StatusFilter string
+	TenantID     string
+	SearchQuery  string
+}
+
+func (q *Queries) CountAssetsWithSummary(ctx context.Context, arg CountAssetsWithSummaryParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAssetsWithSummary, arg.StatusFilter, arg.TenantID, arg.SearchQuery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countModel3DResources = `-- name: CountModel3DResources :one
+SELECT COUNT(*) FROM model_3d_resources WHERE tenant_id=?1
+ AND (CAST(?2 AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(?2 AS TEXT)) || '%')
+`
+
+type CountModel3DResourcesParams struct {
+	TenantID    string
+	SearchQuery string
+}
+
+func (q *Queries) CountModel3DResources(ctx context.Context, arg CountModel3DResourcesParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countModel3DResources, arg.TenantID, arg.SearchQuery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countUsers = `-- name: CountUsers :one
@@ -118,6 +237,35 @@ func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventPara
 	return err
 }
 
+const createAssetEventType = `-- name: CreateAssetEventType :exec
+INSERT INTO asset_event_types
+    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateAssetEventTypeParams struct {
+	ID                string
+	TenantID          string
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	CreatedByUserID   string
+	CreatedAt         string
+}
+
+func (q *Queries) CreateAssetEventType(ctx context.Context, arg CreateAssetEventTypeParams) error {
+	_, err := q.db.ExecContext(ctx, createAssetEventType,
+		arg.ID,
+		arg.TenantID,
+		arg.Name,
+		arg.NormalizedName,
+		arg.CashflowDirection,
+		arg.CreatedByUserID,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const createAssetTransaction = `-- name: CreateAssetTransaction :exec
 INSERT INTO asset_transactions
     (id, tenant_id, occurred_at, source, external_reference, notes, created_by_user_id, created_at)
@@ -151,8 +299,8 @@ func (q *Queries) CreateAssetTransaction(ctx context.Context, arg CreateAssetTra
 
 const createCatalogAsset = `-- name: CreateCatalogAsset :exec
 INSERT INTO assets
-    (id, tenant_id, variant_id, display_name, serial_number, color, purchase_channel, notes, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (id, tenant_id, variant_id, display_name, serial_number, purchase_channel, notes, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateCatalogAssetParams struct {
@@ -161,7 +309,6 @@ type CreateCatalogAssetParams struct {
 	VariantID       string
 	DisplayName     string
 	SerialNumber    string
-	Color           string
 	PurchaseChannel string
 	Notes           string
 	CreatedAt       string
@@ -174,7 +321,6 @@ func (q *Queries) CreateCatalogAsset(ctx context.Context, arg CreateCatalogAsset
 		arg.VariantID,
 		arg.DisplayName,
 		arg.SerialNumber,
-		arg.Color,
 		arg.PurchaseChannel,
 		arg.Notes,
 		arg.CreatedAt,
@@ -201,50 +347,6 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 		arg.TenantID,
 		arg.Name,
 		arg.IconKey,
-		arg.CreatedAt,
-	)
-	return err
-}
-
-const createImportDraft = `-- name: CreateImportDraft :exec
-INSERT INTO import_drafts
-    (id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-     source, external_reference, notes, raw_text, status, created_by_user_id, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`
-
-type CreateImportDraftParams struct {
-	ID                string
-	TenantID          string
-	AssetID           string
-	EventType         string
-	AmountMinor       int64
-	Currency          string
-	OccurredAt        string
-	Source            string
-	ExternalReference string
-	Notes             string
-	RawText           string
-	Status            string
-	CreatedByUserID   string
-	CreatedAt         string
-}
-
-func (q *Queries) CreateImportDraft(ctx context.Context, arg CreateImportDraftParams) error {
-	_, err := q.db.ExecContext(ctx, createImportDraft,
-		arg.ID,
-		arg.TenantID,
-		arg.AssetID,
-		arg.EventType,
-		arg.AmountMinor,
-		arg.Currency,
-		arg.OccurredAt,
-		arg.Source,
-		arg.ExternalReference,
-		arg.Notes,
-		arg.RawText,
-		arg.Status,
-		arg.CreatedByUserID,
 		arg.CreatedAt,
 	)
 	return err
@@ -292,6 +394,46 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) error 
 		arg.CategoryID,
 		arg.Name,
 		arg.CreatedAt,
+	)
+	return err
+}
+
+const createModel3DResource = `-- name: CreateModel3DResource :exec
+INSERT INTO model_3d_resources(id,tenant_id,name,status,store_id,object_key,sha256,size_bytes,source_url,author,license,created_at,updated_at)
+VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+`
+
+type CreateModel3DResourceParams struct {
+	ID        string
+	TenantID  string
+	Name      string
+	Status    string
+	StoreID   string
+	ObjectKey string
+	Sha256    string
+	SizeBytes int64
+	SourceUrl string
+	Author    string
+	License   string
+	CreatedAt string
+	UpdatedAt string
+}
+
+func (q *Queries) CreateModel3DResource(ctx context.Context, arg CreateModel3DResourceParams) error {
+	_, err := q.db.ExecContext(ctx, createModel3DResource,
+		arg.ID,
+		arg.TenantID,
+		arg.Name,
+		arg.Status,
+		arg.StoreID,
+		arg.ObjectKey,
+		arg.Sha256,
+		arg.SizeBytes,
+		arg.SourceUrl,
+		arg.Author,
+		arg.License,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	return err
 }
@@ -371,8 +513,8 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) erro
 }
 
 const createUser = `-- name: CreateUser :exec
-INSERT INTO users (id, username, username_normalized, password_hash, created_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO users (id, username, username_normalized, password_hash, locale, theme, accent, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateUserParams struct {
@@ -380,6 +522,9 @@ type CreateUserParams struct {
 	Username           string
 	UsernameNormalized string
 	PasswordHash       string
+	Locale             string
+	Theme              string
+	Accent             string
 	CreatedAt          string
 }
 
@@ -389,14 +534,17 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Username,
 		arg.UsernameNormalized,
 		arg.PasswordHash,
+		arg.Locale,
+		arg.Theme,
+		arg.Accent,
 		arg.CreatedAt,
 	)
 	return err
 }
 
 const createVariant = `-- name: CreateVariant :exec
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type CreateVariantParams struct {
@@ -405,6 +553,7 @@ type CreateVariantParams struct {
 	ModelID   string
 	Name      string
 	CreatedAt string
+	Color     string
 }
 
 func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) error {
@@ -414,6 +563,7 @@ func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) er
 		arg.ModelID,
 		arg.Name,
 		arg.CreatedAt,
+		arg.Color,
 	)
 	return err
 }
@@ -425,6 +575,29 @@ DELETE FROM sessions WHERE token_hash = ?
 func (q *Queries) DeleteSession(ctx context.Context, tokenHash string) error {
 	_, err := q.db.ExecContext(ctx, deleteSession, tokenHash)
 	return err
+}
+
+const deleteVariant = `-- name: DeleteVariant :execrows
+DELETE FROM product_variants AS variant
+WHERE variant.tenant_id = ? AND variant.id = ?
+  AND NOT EXISTS (
+    SELECT 1 FROM assets
+    WHERE assets.tenant_id = variant.tenant_id
+      AND assets.variant_id = variant.id
+  )
+`
+
+type DeleteVariantParams struct {
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) DeleteVariant(ctx context.Context, arg DeleteVariantParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteVariant, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const ensureCategory = `-- name: EnsureCategory :one
@@ -502,8 +675,8 @@ func (q *Queries) EnsureTenant(ctx context.Context, arg EnsureTenantParams) erro
 }
 
 const ensureVariant = `-- name: EnsureVariant :one
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at) VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (tenant_id, model_id, name) DO UPDATE SET name = excluded.name
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color) VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (tenant_id, model_id, name, color) DO UPDATE SET name = excluded.name
 RETURNING id
 `
 
@@ -513,6 +686,7 @@ type EnsureVariantParams struct {
 	ModelID   string
 	Name      string
 	CreatedAt string
+	Color     string
 }
 
 func (q *Queries) EnsureVariant(ctx context.Context, arg EnsureVariantParams) (string, error) {
@@ -522,6 +696,7 @@ func (q *Queries) EnsureVariant(ctx context.Context, arg EnsureVariantParams) (s
 		arg.ModelID,
 		arg.Name,
 		arg.CreatedAt,
+		arg.Color,
 	)
 	var id string
 	err := row.Scan(&id)
@@ -529,7 +704,7 @@ func (q *Queries) EnsureVariant(ctx context.Context, arg EnsureVariantParams) (s
 }
 
 const findAccountByUsername = `-- name: FindAccountByUsername :one
-SELECT u.id AS user_id, u.username, u.password_hash,
+SELECT u.id AS user_id, u.username, u.password_hash, u.locale, u.theme, u.accent,
        tm.tenant_id, tm.role, t.name AS tenant_name
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
@@ -543,6 +718,9 @@ type FindAccountByUsernameRow struct {
 	UserID       string
 	Username     string
 	PasswordHash string
+	Locale       string
+	Theme        string
+	Accent       string
 	TenantID     string
 	Role         string
 	TenantName   string
@@ -555,6 +733,9 @@ func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized 
 		&i.UserID,
 		&i.Username,
 		&i.PasswordHash,
+		&i.Locale,
+		&i.Theme,
+		&i.Accent,
 		&i.TenantID,
 		&i.Role,
 		&i.TenantName,
@@ -562,8 +743,49 @@ func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized 
 	return i, err
 }
 
+const findLifecycleRequest = `-- name: FindLifecycleRequest :one
+SELECT request_hash, event_id FROM lifecycle_requests
+WHERE tenant_id = ?1 AND user_id = ?2 AND request_key = ?3
+`
+
+type FindLifecycleRequestParams struct {
+	TenantID   string
+	UserID     string
+	RequestKey string
+}
+
+type FindLifecycleRequestRow struct {
+	RequestHash string
+	EventID     string
+}
+
+func (q *Queries) FindLifecycleRequest(ctx context.Context, arg FindLifecycleRequestParams) (FindLifecycleRequestRow, error) {
+	row := q.db.QueryRowContext(ctx, findLifecycleRequest, arg.TenantID, arg.UserID, arg.RequestKey)
+	var i FindLifecycleRequestRow
+	err := row.Scan(&i.RequestHash, &i.EventID)
+	return i, err
+}
+
+const finishModel3DResourceDelete = `-- name: FinishModel3DResourceDelete :execrows
+DELETE FROM model_3d_resources WHERE tenant_id=?1 AND id=?2 AND status='pending-delete'
+`
+
+type FinishModel3DResourceDeleteParams struct {
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) FinishModel3DResourceDelete(ctx context.Context, arg FinishModel3DResourceDeleteParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, finishModel3DResourceDelete, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const firstPrincipal = `-- name: FirstPrincipal :one
-SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name
+SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme, u.accent
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
 JOIN tenants t ON t.id = tm.tenant_id
@@ -577,6 +799,9 @@ type FirstPrincipalRow struct {
 	Username   string
 	Role       string
 	TenantName string
+	Locale     string
+	Theme      string
+	Accent     string
 }
 
 func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error) {
@@ -588,6 +813,9 @@ func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error)
 		&i.Username,
 		&i.Role,
 		&i.TenantName,
+		&i.Locale,
+		&i.Theme,
+		&i.Accent,
 	)
 	return i, err
 }
@@ -596,7 +824,7 @@ const getAsset = `-- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -611,21 +839,22 @@ type GetAssetParams struct {
 }
 
 type GetAssetRow struct {
-	ID              string
-	TenantID        string
-	CategoryID      string
-	CategoryName    string
-	CategoryIcon    string
-	ModelID         string
-	ModelName       string
-	VariantID       string
-	VariantName     string
-	DisplayName     string
-	SerialNumber    string
-	Color           string
-	PurchaseChannel string
-	Notes           string
-	CreatedAt       string
+	ID                string
+	TenantID          string
+	CategoryID        string
+	CategoryName      string
+	CategoryIcon      string
+	ModelID           string
+	ModelName         string
+	VariantID         string
+	VariantName       string
+	DisplayName       string
+	SerialNumber      string
+	Color             string
+	Model3dResourceID sql.NullString
+	PurchaseChannel   string
+	Notes             string
+	CreatedAt         string
 }
 
 func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow, error) {
@@ -644,6 +873,7 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 		&i.DisplayName,
 		&i.SerialNumber,
 		&i.Color,
+		&i.Model3dResourceID,
 		&i.PurchaseChannel,
 		&i.Notes,
 		&i.CreatedAt,
@@ -719,44 +949,241 @@ func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (G
 	return i, err
 }
 
-const getImportDraft = `-- name: GetImportDraft :one
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = ? AND id = ?
+const getAssetSummary = `-- name: GetAssetSummary :one
+WITH effective_events AS (
+    SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+    FROM asset_events e
+    WHERE e.tenant_id = ?2 AND e.asset_id = ?1
+      AND e.event_type != 'void'
+      AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
+), latest_event AS (
+    SELECT event_type FROM effective_events
+    WHERE event_type IN ('purchase', 'repair', 'sale')
+    ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 1
+)
+SELECT t.base_currency,
+       CAST(COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0) AS INTEGER) AS expense_minor,
+       CAST(COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0) AS INTEGER) AS income_minor,
+       CAST(COALESCE(SUM(e.base_amount_minor), 0) AS INTEGER) AS net_minor,
+       CASE
+         WHEN COALESCE(MAX(CASE WHEN e.event_type = 'sale' THEN 1 ELSE 0 END), 0) = 1 THEN 'sold'
+         WHEN COALESCE(MAX(CASE WHEN e.event_type = 'purchase' THEN 1 ELSE 0 END), 0) = 0 THEN 'unacquired'
+         WHEN COALESCE((SELECT event_type FROM latest_event), '') = 'repair' THEN 'repairing'
+         ELSE 'active'
+       END AS status
+FROM tenants t
+JOIN assets a ON a.tenant_id = t.id AND a.id = ?1
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = ?2
+GROUP BY t.base_currency
 `
 
-type GetImportDraftParams struct {
+type GetAssetSummaryParams struct {
+	AssetID  string
+	TenantID string
+}
+
+type GetAssetSummaryRow struct {
+	BaseCurrency string
+	ExpenseMinor int64
+	IncomeMinor  int64
+	NetMinor     int64
+	Status       string
+}
+
+func (q *Queries) GetAssetSummary(ctx context.Context, arg GetAssetSummaryParams) (GetAssetSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getAssetSummary, arg.AssetID, arg.TenantID)
+	var i GetAssetSummaryRow
+	err := row.Scan(
+		&i.BaseCurrency,
+		&i.ExpenseMinor,
+		&i.IncomeMinor,
+		&i.NetMinor,
+		&i.Status,
+	)
+	return i, err
+}
+
+const getModel3DBinding = `-- name: GetModel3DBinding :one
+SELECT m.name, COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS resource_id,
+ COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS effective_resource_id,
+ CASE WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END AS source
+FROM product_models m WHERE m.tenant_id=?1 AND m.id=?2 AND CAST(?3 AS TEXT)='model'
+UNION ALL
+SELECT v.name || CASE WHEN v.color<>'' THEN ' (' || v.color || ')' ELSE '' END, COALESCE(CAST(v.model_3d_resource_id AS TEXT),''),
+ COALESCE(CAST(COALESCE(v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
+ CASE WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
+FROM product_variants v JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+WHERE v.tenant_id=?1 AND v.id=?2 AND CAST(?3 AS TEXT)='variant'
+UNION ALL
+SELECT a.display_name, COALESCE(CAST(a.model_3d_resource_id AS TEXT),''),
+ COALESCE(CAST(COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
+ CASE WHEN a.model_3d_resource_id IS NOT NULL THEN 'asset' WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
+FROM assets a JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
+JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+WHERE a.tenant_id=?1 AND a.id=?2 AND CAST(?3 AS TEXT)='asset'
+`
+
+type GetModel3DBindingParams struct {
+	TenantID string
+	ID       string
+	Kind     string
+}
+
+type GetModel3DBindingRow struct {
+	Name                string
+	ResourceID          interface{}
+	EffectiveResourceID interface{}
+	Source              string
+}
+
+func (q *Queries) GetModel3DBinding(ctx context.Context, arg GetModel3DBindingParams) (GetModel3DBindingRow, error) {
+	row := q.db.QueryRowContext(ctx, getModel3DBinding, arg.TenantID, arg.ID, arg.Kind)
+	var i GetModel3DBindingRow
+	err := row.Scan(
+		&i.Name,
+		&i.ResourceID,
+		&i.EffectiveResourceID,
+		&i.Source,
+	)
+	return i, err
+}
+
+const getModel3DResource = `-- name: GetModel3DResource :one
+SELECT id, tenant_id, name, status, store_id, object_key, sha256, size_bytes, source_url, author, license, created_at, updated_at FROM model_3d_resources WHERE tenant_id=?1 AND id=?2
+`
+
+type GetModel3DResourceParams struct {
 	TenantID string
 	ID       string
 }
 
-func (q *Queries) GetImportDraft(ctx context.Context, arg GetImportDraftParams) (ImportDraft, error) {
-	row := q.db.QueryRowContext(ctx, getImportDraft, arg.TenantID, arg.ID)
-	var i ImportDraft
+func (q *Queries) GetModel3DResource(ctx context.Context, arg GetModel3DResourceParams) (Model3dResource, error) {
+	row := q.db.QueryRowContext(ctx, getModel3DResource, arg.TenantID, arg.ID)
+	var i Model3dResource
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
-		&i.AssetID,
-		&i.EventType,
-		&i.AmountMinor,
-		&i.Currency,
-		&i.OccurredAt,
-		&i.Source,
-		&i.ExternalReference,
-		&i.Notes,
-		&i.RawText,
+		&i.Name,
 		&i.Status,
-		&i.CreatedByUserID,
+		&i.StoreID,
+		&i.ObjectKey,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.SourceUrl,
+		&i.Author,
+		&i.License,
 		&i.CreatedAt,
-		&i.ConfirmedTransactionID,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPortfolioSummary = `-- name: GetPortfolioSummary :one
+WITH effective_events AS (
+    SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+    FROM asset_events e
+    WHERE e.tenant_id = ?1
+      AND e.event_type != 'void'
+      AND NOT EXISTS (
+          SELECT 1 FROM asset_events void_event
+          WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+      )
+)
+SELECT COUNT(DISTINCT a.id) AS asset_count,
+       CAST(COALESCE(SUM(CASE WHEN e.base_amount_minor < 0 THEN -e.base_amount_minor ELSE 0 END), 0) AS INTEGER) AS expense_minor,
+       CAST(COALESCE(SUM(CASE WHEN e.base_amount_minor > 0 THEN e.base_amount_minor ELSE 0 END), 0) AS INTEGER) AS income_minor,
+       CAST(COALESCE(SUM(e.base_amount_minor), 0) AS INTEGER) AS net_minor,
+       t.base_currency
+FROM tenants t
+LEFT JOIN assets a ON a.tenant_id = t.id
+LEFT JOIN effective_events e ON e.asset_id = a.id
+WHERE t.id = ?1
+GROUP BY t.base_currency
+`
+
+type GetPortfolioSummaryRow struct {
+	AssetCount   int64
+	ExpenseMinor int64
+	IncomeMinor  int64
+	NetMinor     int64
+	BaseCurrency string
+}
+
+func (q *Queries) GetPortfolioSummary(ctx context.Context, tenantID string) (GetPortfolioSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getPortfolioSummary, tenantID)
+	var i GetPortfolioSummaryRow
+	err := row.Scan(
+		&i.AssetCount,
+		&i.ExpenseMinor,
+		&i.IncomeMinor,
+		&i.NetMinor,
+		&i.BaseCurrency,
+	)
+	return i, err
+}
+
+const getProductModel = `-- name: GetProductModel :one
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+       COALESCE(r.store_id, '') AS model_3d_store_id, COALESCE(r.object_key, '') AS model_3d_object_key, COALESCE(r.sha256, '') AS model_3d_sha256, CAST(COALESCE(r.size_bytes, 0) AS INTEGER) AS model_3d_size_bytes,
+       COALESCE(r.source_url, '') AS model_3d_source_url, COALESCE(r.author, '') AS model_3d_author, COALESCE(r.license, '') AS model_3d_license, COALESCE(r.updated_at, '') AS model_3d_updated_at
+FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+WHERE m.tenant_id = ? AND m.id = ?
+`
+
+type GetProductModelParams struct {
+	TenantID string
+	ID       string
+}
+
+type GetProductModelRow struct {
+	ID                string
+	TenantID          string
+	CategoryID        string
+	CategoryName      string
+	CategoryIcon      string
+	Name              string
+	CreatedAt         string
+	Model3dResourceID sql.NullString
+	Model3dStoreID    string
+	Model3dObjectKey  string
+	Model3dSha256     string
+	Model3dSizeBytes  int64
+	Model3dSourceUrl  string
+	Model3dAuthor     string
+	Model3dLicense    string
+	Model3dUpdatedAt  string
+}
+
+func (q *Queries) GetProductModel(ctx context.Context, arg GetProductModelParams) (GetProductModelRow, error) {
+	row := q.db.QueryRowContext(ctx, getProductModel, arg.TenantID, arg.ID)
+	var i GetProductModelRow
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.CategoryID,
+		&i.CategoryName,
+		&i.CategoryIcon,
+		&i.Name,
+		&i.CreatedAt,
+		&i.Model3dResourceID,
+		&i.Model3dStoreID,
+		&i.Model3dObjectKey,
+		&i.Model3dSha256,
+		&i.Model3dSizeBytes,
+		&i.Model3dSourceUrl,
+		&i.Model3dAuthor,
+		&i.Model3dLicense,
+		&i.Model3dUpdatedAt,
 	)
 	return i, err
 }
 
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
-SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name
+SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
+       u.locale, u.theme, u.accent
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 JOIN tenant_memberships tm ON tm.tenant_id = s.tenant_id AND tm.user_id = s.user_id
@@ -775,6 +1202,9 @@ type GetSessionPrincipalRow struct {
 	Username   string
 	Role       string
 	TenantName string
+	Locale     string
+	Theme      string
+	Accent     string
 }
 
 func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincipalParams) (GetSessionPrincipalRow, error) {
@@ -786,6 +1216,9 @@ func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincip
 		&i.Username,
 		&i.Role,
 		&i.TenantName,
+		&i.Locale,
+		&i.Theme,
+		&i.Accent,
 	)
 	return i, err
 }
@@ -806,6 +1239,44 @@ func (q *Queries) GetTenantBaseCurrency(ctx context.Context, id string) (GetTena
 	var i GetTenantBaseCurrencyRow
 	err := row.Scan(&i.BaseCurrency, &i.BaseCurrencyLocked)
 	return i, err
+}
+
+const listAssetEventTypes = `-- name: ListAssetEventTypes :many
+SELECT id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at
+FROM asset_event_types
+WHERE tenant_id = ?
+ORDER BY normalized_name, id
+`
+
+func (q *Queries) ListAssetEventTypes(ctx context.Context, tenantID string) ([]AssetEventType, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetEventTypes, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssetEventType
+	for rows.Next() {
+		var i AssetEventType
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Name,
+			&i.NormalizedName,
+			&i.CashflowDirection,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAssetEvents = `-- name: ListAssetEvents :many
@@ -893,11 +1364,151 @@ func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams
 	return items, nil
 }
 
+const listAssetEventsPage = `-- name: ListAssetEventsPage :many
+WITH RECURSIVE list_options AS (
+    SELECT CAST(?7 AS TEXT) AS sort_key,
+           CAST(?8 AS TEXT) AS sort_direction,
+           CAST(?9 AS INTEGER) AS show_voided
+), event_lineage (id, root_created_at) AS (
+    SELECT id, created_at
+    FROM asset_events
+    WHERE tenant_id = ?1 AND asset_id = ?2 AND replaces_event_id IS NULL
+    UNION ALL
+    SELECT e.id, lineage.root_created_at
+    FROM asset_events e
+    JOIN event_lineage lineage ON lineage.id = e.replaces_event_id
+    WHERE e.tenant_id = ?1 AND e.asset_id = ?2
+)
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+       e.base_amount_minor, e.base_currency, e.original_amount_minor,
+       e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
+       e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
+       e.created_by_user_id, e.created_at,
+       EXISTS (
+           SELECT 1 FROM asset_events v
+           WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+       ) AS is_voided,
+       COUNT(*) OVER () AS total_count
+FROM asset_events e
+JOIN event_lineage lineage ON lineage.id = e.id
+CROSS JOIN list_options o
+WHERE e.tenant_id = ?1 AND e.asset_id = ?2
+  AND e.event_type != 'void'
+  AND (o.show_voided = 1 OR NOT EXISTS (
+      SELECT 1 FROM asset_events v
+      WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
+  ))
+  AND (CAST(?3 AS TEXT) = '' OR LOWER(e.notes) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR LOWER(COALESCE(e.fx_rate_source, '')) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%')
+  AND (CAST(?4 AS TEXT) = '' OR e.event_type = CAST(?4 AS TEXT))
+ORDER BY
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN e.occurred_at END ASC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.occurred_at END DESC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN lineage.root_created_at END ASC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN lineage.root_created_at END DESC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN e.created_at END ASC,
+  CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.created_at END DESC,
+  CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'asc' THEN e.base_amount_minor END ASC,
+  CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'desc' THEN e.base_amount_minor END DESC,
+  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'asc' THEN e.event_type END ASC,
+  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'desc' THEN e.event_type END DESC,
+  e.created_at DESC, e.id DESC
+LIMIT ?6 OFFSET ?5
+`
+
+type ListAssetEventsPageParams struct {
+	TenantID        string
+	AssetID         string
+	SearchQuery     string
+	EventTypeFilter string
+	PageOffset      int64
+	PageSize        int64
+	SortKey         string
+	SortDirection   string
+	ShowVoided      int64
+}
+
+type ListAssetEventsPageRow struct {
+	ID                  string
+	TenantID            string
+	AssetID             string
+	TransactionID       string
+	EventType           string
+	BaseAmountMinor     int64
+	BaseCurrency        string
+	OriginalAmountMinor sql.NullInt64
+	OriginalCurrency    sql.NullString
+	FxRateScaled        sql.NullInt64
+	FxRateDate          sql.NullString
+	FxRateSource        sql.NullString
+	Notes               string
+	VoidsEventID        sql.NullString
+	ReplacesEventID     sql.NullString
+	OccurredAt          string
+	CreatedByUserID     string
+	CreatedAt           string
+	IsVoided            bool
+	TotalCount          int64
+}
+
+func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPageParams) ([]ListAssetEventsPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetEventsPage,
+		arg.TenantID,
+		arg.AssetID,
+		arg.SearchQuery,
+		arg.EventTypeFilter,
+		arg.PageOffset,
+		arg.PageSize,
+		arg.SortKey,
+		arg.SortDirection,
+		arg.ShowVoided,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetEventsPageRow
+	for rows.Next() {
+		var i ListAssetEventsPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.AssetID,
+			&i.TransactionID,
+			&i.EventType,
+			&i.BaseAmountMinor,
+			&i.BaseCurrency,
+			&i.OriginalAmountMinor,
+			&i.OriginalCurrency,
+			&i.FxRateScaled,
+			&i.FxRateDate,
+			&i.FxRateSource,
+			&i.Notes,
+			&i.VoidsEventID,
+			&i.ReplacesEventID,
+			&i.OccurredAt,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.IsVoided,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssets = `-- name: ListAssets :many
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -908,21 +1519,22 @@ ORDER BY a.created_at DESC, a.id
 `
 
 type ListAssetsRow struct {
-	ID              string
-	TenantID        string
-	CategoryID      string
-	CategoryName    string
-	CategoryIcon    string
-	ModelID         string
-	ModelName       string
-	VariantID       string
-	VariantName     string
-	DisplayName     string
-	SerialNumber    string
-	Color           string
-	PurchaseChannel string
-	Notes           string
-	CreatedAt       string
+	ID                string
+	TenantID          string
+	CategoryID        string
+	CategoryName      string
+	CategoryIcon      string
+	ModelID           string
+	ModelName         string
+	VariantID         string
+	VariantName       string
+	DisplayName       string
+	SerialNumber      string
+	Color             string
+	Model3dResourceID sql.NullString
+	PurchaseChannel   string
+	Notes             string
+	CreatedAt         string
 }
 
 func (q *Queries) ListAssets(ctx context.Context, tenantID string) ([]ListAssetsRow, error) {
@@ -947,9 +1559,191 @@ func (q *Queries) ListAssets(ctx context.Context, tenantID string) ([]ListAssets
 			&i.DisplayName,
 			&i.SerialNumber,
 			&i.Color,
+			&i.Model3dResourceID,
 			&i.PurchaseChannel,
 			&i.Notes,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssetsWithSummary = `-- name: ListAssetsWithSummary :many
+WITH effective_events AS (
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+FROM asset_events e
+WHERE e.tenant_id = ?4
+  AND e.event_type != 'void'
+  AND NOT EXISTS (
+      SELECT 1 FROM asset_events void_event
+      WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
+  )
+),
+event_rollup AS (
+SELECT asset_id,
+       SUM(CASE WHEN base_amount_minor < 0 THEN -base_amount_minor ELSE 0 END) AS expense_minor,
+       SUM(CASE WHEN base_amount_minor > 0 THEN base_amount_minor ELSE 0 END) AS income_minor,
+       SUM(base_amount_minor) AS net_minor,
+       MAX(CASE WHEN event_type = 'purchase' THEN 1 ELSE 0 END) AS has_purchase,
+       MAX(CASE WHEN event_type = 'sale' THEN 1 ELSE 0 END) AS has_sale
+FROM effective_events
+GROUP BY asset_id
+),
+ranked_events AS (
+SELECT asset_id, event_type,
+       ROW_NUMBER() OVER (PARTITION BY asset_id ORDER BY occurred_at DESC, created_at DESC, id DESC) AS event_rank
+FROM effective_events
+WHERE event_type IN ('purchase', 'repair', 'sale')
+),
+asset_rows AS (
+SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+       c.icon_key AS category_icon,
+       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
+       a.purchase_channel, a.notes, a.created_at,
+       CAST(COALESCE(er.expense_minor, 0) AS INTEGER) AS expense_minor,
+       CAST(COALESCE(er.income_minor, 0) AS INTEGER) AS income_minor,
+       CAST(COALESCE(er.net_minor, 0) AS INTEGER) AS net_minor,
+       COALESCE(er.has_purchase, 0) AS has_purchase,
+       COALESCE(er.has_sale, 0) AS has_sale,
+       COALESCE(re.event_type, '') AS latest_event_type,
+       t.base_currency,
+       CAST(?5 AS TEXT) AS sort_key,
+       CAST(?6 AS TEXT) AS sort_direction
+FROM assets a
+JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+JOIN tenants t ON t.id = a.tenant_id
+LEFT JOIN event_rollup er ON er.asset_id = a.id
+LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
+WHERE a.tenant_id = ?4
+  AND (CAST(?7 AS TEXT) = '' OR (
+       LOWER(a.display_name) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%' OR
+       LOWER(a.serial_number) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%' OR
+       LOWER(v.color) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%' OR
+       LOWER(a.purchase_channel) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%' OR
+       LOWER(a.notes) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%' OR
+       LOWER(m.name) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%' OR
+       LOWER(v.name) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%' OR
+       LOWER(c.name) LIKE '%' || LOWER(CAST(?7 AS TEXT)) || '%'
+  ))
+)
+SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
+       variant_id, variant_name, display_name, serial_number, color, model_3d_resource_id, purchase_channel, notes, created_at,
+       expense_minor, income_minor, net_minor,
+       CASE
+           WHEN has_sale = 1 THEN 'sold'
+           WHEN has_purchase = 1 AND latest_event_type = 'repair' THEN 'repairing'
+           WHEN has_purchase = 1 THEN 'active'
+           ELSE 'unacquired'
+       END AS status,
+       base_currency
+FROM asset_rows
+WHERE CAST(?1 AS TEXT) = '' OR CAST(?1 AS TEXT) = 'all'
+   OR (CAST(?1 AS TEXT) = 'sold' AND has_sale = 1)
+   OR (CAST(?1 AS TEXT) = 'repairing' AND has_sale = 0 AND has_purchase = 1 AND latest_event_type = 'repair')
+   OR (CAST(?1 AS TEXT) = 'active' AND has_sale = 0 AND has_purchase = 1 AND latest_event_type != 'repair')
+   OR (CAST(?1 AS TEXT) = 'unacquired' AND has_sale = 0 AND has_purchase = 0)
+ORDER BY
+  CASE WHEN sort_key = 'name' AND sort_direction = 'asc' THEN LOWER(display_name) END ASC,
+  CASE WHEN sort_key = 'name' AND sort_direction = 'desc' THEN LOWER(display_name) END DESC,
+  CASE WHEN sort_key = 'model' AND sort_direction = 'asc' THEN LOWER(model_name || ' ' || variant_name) END ASC,
+  CASE WHEN sort_key = 'model' AND sort_direction = 'desc' THEN LOWER(model_name || ' ' || variant_name) END DESC,
+  CASE WHEN sort_key = 'status' AND sort_direction = 'asc' THEN status END ASC,
+  CASE WHEN sort_key = 'status' AND sort_direction = 'desc' THEN status END DESC,
+  CASE WHEN sort_key = 'net' AND sort_direction = 'asc' THEN net_minor END ASC,
+  CASE WHEN sort_key = 'net' AND sort_direction = 'desc' THEN net_minor END DESC,
+  CASE WHEN sort_key = 'cost' AND sort_direction = 'asc' THEN expense_minor END ASC,
+  CASE WHEN sort_key = 'cost' AND sort_direction = 'desc' THEN expense_minor END DESC,
+  CASE WHEN sort_key = 'created' AND sort_direction = 'asc' THEN created_at END ASC,
+  CASE WHEN sort_key = 'created' AND sort_direction = 'desc' THEN created_at END DESC,
+  id
+LIMIT ?3 OFFSET ?2
+`
+
+type ListAssetsWithSummaryParams struct {
+	StatusFilter  string
+	PageOffset    int64
+	PageSize      int64
+	TenantID      string
+	SortKey       string
+	SortDirection string
+	SearchQuery   string
+}
+
+type ListAssetsWithSummaryRow struct {
+	ID                string
+	TenantID          string
+	CategoryID        string
+	CategoryName      string
+	CategoryIcon      string
+	ModelID           string
+	ModelName         string
+	VariantID         string
+	VariantName       string
+	DisplayName       string
+	SerialNumber      string
+	Color             string
+	Model3dResourceID sql.NullString
+	PurchaseChannel   string
+	Notes             string
+	CreatedAt         string
+	ExpenseMinor      int64
+	IncomeMinor       int64
+	NetMinor          int64
+	Status            string
+	BaseCurrency      string
+}
+
+func (q *Queries) ListAssetsWithSummary(ctx context.Context, arg ListAssetsWithSummaryParams) ([]ListAssetsWithSummaryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetsWithSummary,
+		arg.StatusFilter,
+		arg.PageOffset,
+		arg.PageSize,
+		arg.TenantID,
+		arg.SortKey,
+		arg.SortDirection,
+		arg.SearchQuery,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetsWithSummaryRow
+	for rows.Next() {
+		var i ListAssetsWithSummaryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryIcon,
+			&i.ModelID,
+			&i.ModelName,
+			&i.VariantID,
+			&i.VariantName,
+			&i.DisplayName,
+			&i.SerialNumber,
+			&i.Color,
+			&i.Model3dResourceID,
+			&i.PurchaseChannel,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.ExpenseMinor,
+			&i.IncomeMinor,
+			&i.NetMinor,
+			&i.Status,
+			&i.BaseCurrency,
 		); err != nil {
 			return nil, err
 		}
@@ -1051,22 +1845,189 @@ func (q *Queries) ListMembers(ctx context.Context, tenantID string) ([]ListMembe
 	return items, nil
 }
 
+const listMembersPage = `-- name: ListMembersPage :many
+WITH list_options AS (
+    SELECT CAST(?6 AS TEXT) AS sort_key,
+           CAST(?7 AS TEXT) AS sort_direction
+)
+SELECT u.id AS user_id, u.username, tm.role, tm.created_at, COUNT(*) OVER () AS total_count
+FROM tenant_memberships tm
+JOIN users u ON u.id = tm.user_id
+CROSS JOIN list_options o
+WHERE tm.tenant_id = ?1
+  AND (CAST(?2 AS TEXT) = '' OR LOWER(u.username) LIKE '%' || LOWER(CAST(?2 AS TEXT)) || '%')
+  AND (CAST(?3 AS TEXT) = '' OR tm.role = CAST(?3 AS TEXT))
+ORDER BY
+  CASE WHEN o.sort_key = 'username' AND o.sort_direction = 'asc' THEN u.username_normalized END ASC,
+  CASE WHEN o.sort_key = 'username' AND o.sort_direction = 'desc' THEN u.username_normalized END DESC,
+  CASE WHEN o.sort_key = 'role' AND o.sort_direction = 'asc' THEN tm.role END ASC,
+  CASE WHEN o.sort_key = 'role' AND o.sort_direction = 'desc' THEN tm.role END DESC,
+  CASE WHEN o.sort_key = 'created' AND o.sort_direction = 'asc' THEN tm.created_at END ASC,
+  CASE WHEN o.sort_key = 'created' AND o.sort_direction = 'desc' THEN tm.created_at END DESC,
+  u.id
+LIMIT ?5 OFFSET ?4
+`
+
+type ListMembersPageParams struct {
+	TenantID      string
+	SearchQuery   string
+	RoleFilter    string
+	PageOffset    int64
+	PageSize      int64
+	SortKey       string
+	SortDirection string
+}
+
+type ListMembersPageRow struct {
+	UserID     string
+	Username   string
+	Role       string
+	CreatedAt  string
+	TotalCount int64
+}
+
+func (q *Queries) ListMembersPage(ctx context.Context, arg ListMembersPageParams) ([]ListMembersPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMembersPage,
+		arg.TenantID,
+		arg.SearchQuery,
+		arg.RoleFilter,
+		arg.PageOffset,
+		arg.PageSize,
+		arg.SortKey,
+		arg.SortDirection,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembersPageRow
+	for rows.Next() {
+		var i ListMembersPageRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.Role,
+			&i.CreatedAt,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listModel3DResources = `-- name: ListModel3DResources :many
+SELECT r.id, r.tenant_id, r.name, r.status, r.store_id, r.object_key, r.sha256, r.size_bytes, r.source_url, r.author, r.license, r.created_at, r.updated_at,
+ (SELECT COUNT(*) FROM product_models m WHERE m.tenant_id=r.tenant_id AND m.model_3d_resource_id=r.id)
+ +(SELECT COUNT(*) FROM product_variants v WHERE v.tenant_id=r.tenant_id AND v.model_3d_resource_id=r.id)
+ +(SELECT COUNT(*) FROM assets a WHERE a.tenant_id=r.tenant_id AND a.model_3d_resource_id=r.id) AS reference_count
+FROM model_3d_resources r WHERE r.tenant_id=?1
+ AND (CAST(?2 AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(?2 AS TEXT)) || '%')
+ORDER BY created_at DESC,id LIMIT ?4 OFFSET ?3
+`
+
+type ListModel3DResourcesParams struct {
+	TenantID    string
+	SearchQuery string
+	PageOffset  int64
+	PageSize    int64
+}
+
+type ListModel3DResourcesRow struct {
+	ID             string
+	TenantID       string
+	Name           string
+	Status         string
+	StoreID        string
+	ObjectKey      string
+	Sha256         string
+	SizeBytes      int64
+	SourceUrl      string
+	Author         string
+	License        string
+	CreatedAt      string
+	UpdatedAt      string
+	ReferenceCount int64
+}
+
+func (q *Queries) ListModel3DResources(ctx context.Context, arg ListModel3DResourcesParams) ([]ListModel3DResourcesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listModel3DResources,
+		arg.TenantID,
+		arg.SearchQuery,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListModel3DResourcesRow
+	for rows.Next() {
+		var i ListModel3DResourcesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Name,
+			&i.Status,
+			&i.StoreID,
+			&i.ObjectKey,
+			&i.Sha256,
+			&i.SizeBytes,
+			&i.SourceUrl,
+			&i.Author,
+			&i.License,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReferenceCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listModels = `-- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+       COALESCE(r.store_id, '') AS model_3d_store_id, COALESCE(r.object_key, '') AS model_3d_object_key, COALESCE(r.sha256, '') AS model_3d_sha256, CAST(COALESCE(r.size_bytes, 0) AS INTEGER) AS model_3d_size_bytes,
+       COALESCE(r.source_url, '') AS model_3d_source_url, COALESCE(r.author, '') AS model_3d_author, COALESCE(r.license, '') AS model_3d_license, COALESCE(r.updated_at, '') AS model_3d_updated_at
 FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = ?
 ORDER BY c.name, m.name, m.id
 `
 
 type ListModelsRow struct {
-	ID           string
-	TenantID     string
-	CategoryID   string
-	CategoryName string
-	CategoryIcon string
-	Name         string
-	CreatedAt    string
+	ID                string
+	TenantID          string
+	CategoryID        string
+	CategoryName      string
+	CategoryIcon      string
+	Name              string
+	CreatedAt         string
+	Model3dResourceID sql.NullString
+	Model3dStoreID    string
+	Model3dObjectKey  string
+	Model3dSha256     string
+	Model3dSizeBytes  int64
+	Model3dSourceUrl  string
+	Model3dAuthor     string
+	Model3dLicense    string
+	Model3dUpdatedAt  string
 }
 
 func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModelsRow, error) {
@@ -1086,6 +2047,15 @@ func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModels
 			&i.CategoryIcon,
 			&i.Name,
 			&i.CreatedAt,
+			&i.Model3dResourceID,
+			&i.Model3dStoreID,
+			&i.Model3dObjectKey,
+			&i.Model3dSha256,
+			&i.Model3dSizeBytes,
+			&i.Model3dSourceUrl,
+			&i.Model3dAuthor,
+			&i.Model3dLicense,
+			&i.Model3dUpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1100,40 +2070,124 @@ func (q *Queries) ListModels(ctx context.Context, tenantID string) ([]ListModels
 	return items, nil
 }
 
-const listPendingImportDrafts = `-- name: ListPendingImportDrafts :many
-SELECT id, tenant_id, asset_id, event_type, amount_minor, currency, occurred_at,
-       source, external_reference, notes, raw_text, status, created_by_user_id,
-       created_at, confirmed_transaction_id
-FROM import_drafts
-WHERE tenant_id = ? AND status = 'pending'
-ORDER BY created_at, id
+const listModelsWithVariants = `-- name: ListModelsWithVariants :many
+WITH filtered_models AS (
+    SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
+           c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+           COALESCE(r.store_id, '') AS model_3d_store_id, COALESCE(r.object_key, '') AS model_3d_object_key, COALESCE(r.sha256, '') AS model_3d_sha256, CAST(COALESCE(r.size_bytes, 0) AS INTEGER) AS model_3d_size_bytes,
+           COALESCE(r.source_url, '') AS model_3d_source_url, COALESCE(r.author, '') AS model_3d_author, COALESCE(r.license, '') AS model_3d_license, COALESCE(r.updated_at, '') AS model_3d_updated_at,
+           CAST(?1 AS TEXT) AS sort_key,
+           CAST(?2 AS TEXT) AS sort_direction
+    FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
+    JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
+    WHERE m.tenant_id = ?3
+      AND (CAST(?4 AS TEXT) = '' OR
+           LOWER(m.name) LIKE '%' || LOWER(CAST(?4 AS TEXT)) || '%' OR
+           LOWER(c.name) LIKE '%' || LOWER(CAST(?4 AS TEXT)) || '%')
+      AND (CAST(?5 AS TEXT) = '' OR m.category_id = CAST(?5 AS TEXT))
+),
+paged_models AS (
+    SELECT id, tenant_id, category_id, category_name, category_icon, name, created_at, model_3d_resource_id, model_3d_store_id, model_3d_object_key, model_3d_sha256, model_3d_size_bytes, model_3d_source_url, model_3d_author, model_3d_license, model_3d_updated_at, sort_key, sort_direction, COUNT(*) OVER () AS total_count,
+           ROW_NUMBER() OVER (ORDER BY
+             CASE WHEN sort_key = 'category' AND sort_direction = 'asc' THEN LOWER(category_name) END ASC,
+             CASE WHEN sort_key = 'category' AND sort_direction = 'desc' THEN LOWER(category_name) END DESC,
+             CASE WHEN sort_key = 'name' AND sort_direction = 'asc' THEN LOWER(name) END ASC,
+             CASE WHEN sort_key = 'name' AND sort_direction = 'desc' THEN LOWER(name) END DESC,
+             CASE WHEN sort_key = 'created' AND sort_direction = 'asc' THEN created_at END ASC,
+             CASE WHEN sort_key = 'created' AND sort_direction = 'desc' THEN created_at END DESC,
+             LOWER(category_name), LOWER(name), id) AS page_order
+    FROM filtered_models
+    LIMIT ?7 OFFSET ?6
+)
+SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
+       pm.name, pm.created_at, pm.model_3d_resource_id,
+       pm.model_3d_store_id, pm.model_3d_object_key, pm.model_3d_sha256, pm.model_3d_size_bytes,
+       pm.model_3d_source_url, pm.model_3d_author, pm.model_3d_license, pm.model_3d_updated_at,
+       pm.total_count, pm.page_order,
+       v.id AS variant_id, v.name AS variant_name, v.color AS variant_color, v.model_3d_resource_id AS variant_model_3d_resource_id, v.created_at AS variant_created_at
+FROM paged_models pm
+LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
+ORDER BY pm.page_order, LOWER(v.name), v.id
 `
 
-func (q *Queries) ListPendingImportDrafts(ctx context.Context, tenantID string) ([]ImportDraft, error) {
-	rows, err := q.db.QueryContext(ctx, listPendingImportDrafts, tenantID)
+type ListModelsWithVariantsParams struct {
+	SortKey        string
+	SortDirection  string
+	TenantID       string
+	SearchQuery    string
+	CategoryFilter string
+	PageOffset     int64
+	PageSize       int64
+}
+
+type ListModelsWithVariantsRow struct {
+	ID                       string
+	TenantID                 string
+	CategoryID               string
+	CategoryName             string
+	CategoryIcon             string
+	Name                     string
+	CreatedAt                string
+	Model3dResourceID        sql.NullString
+	Model3dStoreID           string
+	Model3dObjectKey         string
+	Model3dSha256            string
+	Model3dSizeBytes         int64
+	Model3dSourceUrl         string
+	Model3dAuthor            string
+	Model3dLicense           string
+	Model3dUpdatedAt         string
+	TotalCount               int64
+	PageOrder                interface{}
+	VariantID                sql.NullString
+	VariantName              sql.NullString
+	VariantColor             sql.NullString
+	VariantModel3dResourceID sql.NullString
+	VariantCreatedAt         sql.NullString
+}
+
+func (q *Queries) ListModelsWithVariants(ctx context.Context, arg ListModelsWithVariantsParams) ([]ListModelsWithVariantsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listModelsWithVariants,
+		arg.SortKey,
+		arg.SortDirection,
+		arg.TenantID,
+		arg.SearchQuery,
+		arg.CategoryFilter,
+		arg.PageOffset,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ImportDraft
+	var items []ListModelsWithVariantsRow
 	for rows.Next() {
-		var i ImportDraft
+		var i ListModelsWithVariantsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
-			&i.AssetID,
-			&i.EventType,
-			&i.AmountMinor,
-			&i.Currency,
-			&i.OccurredAt,
-			&i.Source,
-			&i.ExternalReference,
-			&i.Notes,
-			&i.RawText,
-			&i.Status,
-			&i.CreatedByUserID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.CategoryIcon,
+			&i.Name,
 			&i.CreatedAt,
-			&i.ConfirmedTransactionID,
+			&i.Model3dResourceID,
+			&i.Model3dStoreID,
+			&i.Model3dObjectKey,
+			&i.Model3dSha256,
+			&i.Model3dSizeBytes,
+			&i.Model3dSourceUrl,
+			&i.Model3dAuthor,
+			&i.Model3dLicense,
+			&i.Model3dUpdatedAt,
+			&i.TotalCount,
+			&i.PageOrder,
+			&i.VariantID,
+			&i.VariantName,
+			&i.VariantColor,
+			&i.VariantModel3dResourceID,
+			&i.VariantCreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1150,7 +2204,7 @@ func (q *Queries) ListPendingImportDrafts(ctx context.Context, tenantID string) 
 
 const listVariants = `-- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
-       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.created_at
+       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.color, v.model_3d_resource_id, v.created_at
 FROM product_variants v
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
@@ -1159,15 +2213,17 @@ ORDER BY c.name, m.name, v.name, v.id
 `
 
 type ListVariantsRow struct {
-	ID           string
-	TenantID     string
-	CategoryID   string
-	CategoryName string
-	CategoryIcon string
-	ModelID      string
-	ModelName    string
-	Name         string
-	CreatedAt    string
+	ID                string
+	TenantID          string
+	CategoryID        string
+	CategoryName      string
+	CategoryIcon      string
+	ModelID           string
+	ModelName         string
+	Name              string
+	Color             string
+	Model3dResourceID sql.NullString
+	CreatedAt         string
 }
 
 func (q *Queries) ListVariants(ctx context.Context, tenantID string) ([]ListVariantsRow, error) {
@@ -1188,6 +2244,8 @@ func (q *Queries) ListVariants(ctx context.Context, tenantID string) ([]ListVari
 			&i.ModelID,
 			&i.ModelName,
 			&i.Name,
+			&i.Color,
+			&i.Model3dResourceID,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -1201,6 +2259,18 @@ func (q *Queries) ListVariants(ctx context.Context, tenantID string) ([]ListVari
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLifecycleTenant = `-- name: LockLifecycleTenant :execrows
+UPDATE tenants SET id = id WHERE id = ?1
+`
+
+func (q *Queries) LockLifecycleTenant(ctx context.Context, tenantID string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, lockLifecycleTenant, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const lockTenantBaseCurrency = `-- name: LockTenantBaseCurrency :exec
@@ -1219,9 +2289,130 @@ func (q *Queries) LockTenantBaseCurrency(ctx context.Context, arg LockTenantBase
 	return err
 }
 
+const markModel3DResourcePendingDelete = `-- name: MarkModel3DResourcePendingDelete :execrows
+UPDATE model_3d_resources SET status='pending-delete'
+WHERE model_3d_resources.tenant_id=?1 AND model_3d_resources.id=?2
+ AND NOT EXISTS(SELECT 1 FROM product_models WHERE product_models.tenant_id=?1 AND product_models.model_3d_resource_id=?2)
+ AND NOT EXISTS(SELECT 1 FROM product_variants WHERE product_variants.tenant_id=?1 AND product_variants.model_3d_resource_id=?2)
+ AND NOT EXISTS(SELECT 1 FROM assets WHERE assets.tenant_id=?1 AND assets.model_3d_resource_id=?2)
+`
+
+type MarkModel3DResourcePendingDeleteParams struct {
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) MarkModel3DResourcePendingDelete(ctx context.Context, arg MarkModel3DResourcePendingDeleteParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markModel3DResourcePendingDelete, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const model3DReferences = `-- name: Model3DReferences :many
+SELECT CAST('model' AS TEXT) AS kind,id,name FROM product_models WHERE product_models.tenant_id=?1 AND product_models.model_3d_resource_id=?2
+UNION ALL
+SELECT CAST('variant' AS TEXT),id,name || CASE WHEN color<>'' THEN ' (' || color || ')' ELSE '' END FROM product_variants WHERE product_variants.tenant_id=?1 AND product_variants.model_3d_resource_id=?2
+UNION ALL
+SELECT CAST('asset' AS TEXT),id,display_name FROM assets WHERE assets.tenant_id=?1 AND assets.model_3d_resource_id=?2
+`
+
+type Model3DReferencesParams struct {
+	TenantID string
+	ID       sql.NullString
+}
+
+type Model3DReferencesRow struct {
+	Kind string
+	ID   string
+	Name string
+}
+
+func (q *Queries) Model3DReferences(ctx context.Context, arg Model3DReferencesParams) ([]Model3DReferencesRow, error) {
+	rows, err := q.db.QueryContext(ctx, model3DReferences, arg.TenantID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Model3DReferencesRow
+	for rows.Next() {
+		var i Model3DReferencesRow
+		if err := rows.Scan(&i.Kind, &i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolveAssetModel3D = `-- name: ResolveAssetModel3D :one
+SELECT r.id, r.tenant_id, r.name, r.status, r.store_id, r.object_key, r.sha256, r.size_bytes, r.source_url, r.author, r.license, r.created_at, r.updated_at FROM assets a
+JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
+JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+JOIN model_3d_resources r ON r.tenant_id=a.tenant_id AND r.id=COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id)
+WHERE a.tenant_id=?1 AND a.id=?2 AND r.status='ready'
+`
+
+type ResolveAssetModel3DParams struct {
+	TenantID string
+	ID       string
+}
+
+func (q *Queries) ResolveAssetModel3D(ctx context.Context, arg ResolveAssetModel3DParams) (Model3dResource, error) {
+	row := q.db.QueryRowContext(ctx, resolveAssetModel3D, arg.TenantID, arg.ID)
+	var i Model3dResource
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Name,
+		&i.Status,
+		&i.StoreID,
+		&i.ObjectKey,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.SourceUrl,
+		&i.Author,
+		&i.License,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const saveLifecycleRequest = `-- name: SaveLifecycleRequest :exec
+INSERT INTO lifecycle_requests (tenant_id, user_id, request_key, request_hash, event_id)
+VALUES (?1, ?2, ?3, ?4, ?5)
+`
+
+type SaveLifecycleRequestParams struct {
+	TenantID    string
+	UserID      string
+	RequestKey  string
+	RequestHash string
+	EventID     string
+}
+
+func (q *Queries) SaveLifecycleRequest(ctx context.Context, arg SaveLifecycleRequestParams) error {
+	_, err := q.db.ExecContext(ctx, saveLifecycleRequest,
+		arg.TenantID,
+		arg.UserID,
+		arg.RequestKey,
+		arg.RequestHash,
+		arg.EventID,
+	)
+	return err
+}
+
 const updateCatalogAsset = `-- name: UpdateCatalogAsset :execrows
 UPDATE assets
-SET variant_id = ?, display_name = ?, serial_number = ?, color = ?, purchase_channel = ?, notes = ?
+SET variant_id = ?, display_name = ?, serial_number = ?, purchase_channel = ?, notes = ?
 WHERE tenant_id = ? AND id = ?
 `
 
@@ -1229,7 +2420,6 @@ type UpdateCatalogAssetParams struct {
 	VariantID       string
 	DisplayName     string
 	SerialNumber    string
-	Color           string
 	PurchaseChannel string
 	Notes           string
 	TenantID        string
@@ -1241,7 +2431,6 @@ func (q *Queries) UpdateCatalogAsset(ctx context.Context, arg UpdateCatalogAsset
 		arg.VariantID,
 		arg.DisplayName,
 		arg.SerialNumber,
-		arg.Color,
 		arg.PurchaseChannel,
 		arg.Notes,
 		arg.TenantID,
@@ -1305,15 +2494,106 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (int64
 	return result.RowsAffected()
 }
 
+const updateModel3DResource = `-- name: UpdateModel3DResource :execrows
+UPDATE model_3d_resources SET name=?1,source_url=?2,author=?3,license=?4,updated_at=?5
+WHERE tenant_id=?6 AND id=?7 AND status='ready'
+`
+
+type UpdateModel3DResourceParams struct {
+	Name      string
+	SourceUrl string
+	Author    string
+	License   string
+	UpdatedAt string
+	TenantID  string
+	ID        string
+}
+
+func (q *Queries) UpdateModel3DResource(ctx context.Context, arg UpdateModel3DResourceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateModel3DResource,
+		arg.Name,
+		arg.SourceUrl,
+		arg.Author,
+		arg.License,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateProductModel3D = `-- name: UpdateProductModel3D :execrows
+UPDATE product_models SET model_3d_store_id = ?, model_3d_object_key = ?, model_3d_sha256 = ?,
+ model_3d_size_bytes = ?, model_3d_source_url = ?, model_3d_author = ?, model_3d_license = ?, model_3d_updated_at = ?
+WHERE tenant_id = ? AND id = ?
+`
+
+type UpdateProductModel3DParams struct {
+	Model3dStoreID   sql.NullString
+	Model3dObjectKey sql.NullString
+	Model3dSha256    sql.NullString
+	Model3dSizeBytes sql.NullInt64
+	Model3dSourceUrl sql.NullString
+	Model3dAuthor    sql.NullString
+	Model3dLicense   sql.NullString
+	Model3dUpdatedAt sql.NullString
+	TenantID         string
+	ID               string
+}
+
+func (q *Queries) UpdateProductModel3D(ctx context.Context, arg UpdateProductModel3DParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateProductModel3D,
+		arg.Model3dStoreID,
+		arg.Model3dObjectKey,
+		arg.Model3dSha256,
+		arg.Model3dSizeBytes,
+		arg.Model3dSourceUrl,
+		arg.Model3dAuthor,
+		arg.Model3dLicense,
+		arg.Model3dUpdatedAt,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateUserPreferences = `-- name: UpdateUserPreferences :exec
+UPDATE users SET locale = ?, theme = ?, accent = ? WHERE id = ?
+`
+
+type UpdateUserPreferencesParams struct {
+	Locale string
+	Theme  string
+	Accent string
+	ID     string
+}
+
+func (q *Queries) UpdateUserPreferences(ctx context.Context, arg UpdateUserPreferencesParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserPreferences,
+		arg.Locale,
+		arg.Theme,
+		arg.Accent,
+		arg.ID,
+	)
+	return err
+}
+
 const updateVariant = `-- name: UpdateVariant :execrows
 UPDATE product_variants
-SET model_id = ?, name = ?
+SET model_id = ?, name = ?, color = ?
 WHERE tenant_id = ? AND id = ?
 `
 
 type UpdateVariantParams struct {
 	ModelID  string
 	Name     string
+	Color    string
 	TenantID string
 	ID       string
 }
@@ -1322,6 +2602,7 @@ func (q *Queries) UpdateVariant(ctx context.Context, arg UpdateVariantParams) (i
 	result, err := q.db.ExecContext(ctx, updateVariant,
 		arg.ModelID,
 		arg.Name,
+		arg.Color,
 		arg.TenantID,
 		arg.ID,
 	)

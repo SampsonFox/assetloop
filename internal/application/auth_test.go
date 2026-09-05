@@ -33,7 +33,7 @@ func (s *memoryAuthStore) BootstrapAuth(_ context.Context, tenant Tenant, user U
 		return ErrSetupComplete
 	}
 	s.users[user.ID] = user
-	p := Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: membership.Role}
+	p := Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: membership.Role, Locale: user.Locale, Theme: user.Theme, Accent: user.Accent}
 	s.accounts[user.UsernameNormalized] = Account{Principal: p, PasswordHash: user.PasswordHash}
 	s.principals[user.ID] = p
 	s.members[tenant.ID] = []Member{{UserID: user.ID, Username: user.Username, Role: membership.Role, CreatedAt: membership.CreatedAt}}
@@ -74,6 +74,22 @@ func (s *memoryAuthStore) DeleteSession(_ context.Context, tokenHash string) err
 	return nil
 }
 
+func (s *memoryAuthStore) UpdateUserPreferences(_ context.Context, userID string, locale Locale, theme Theme, accent Accent) error {
+	principal, ok := s.principals[userID]
+	if !ok {
+		return sql.ErrNoRows
+	}
+	principal.Locale, principal.Theme, principal.Accent = locale, theme, accent
+	s.principals[userID] = principal
+	for username, account := range s.accounts {
+		if account.UserID == userID {
+			account.Principal = principal
+			s.accounts[username] = account
+		}
+	}
+	return nil
+}
+
 func (s *memoryAuthStore) CreateMember(_ context.Context, user User, membership Membership, event SecurityEvent) error {
 	if _, exists := s.accounts[user.UsernameNormalized]; exists {
 		return errors.New("duplicate username")
@@ -81,7 +97,7 @@ func (s *memoryAuthStore) CreateMember(_ context.Context, user User, membership 
 	s.users[user.ID] = user
 	owner := s.members[membership.TenantID][0]
 	principal := s.principals[owner.UserID]
-	p := Principal{TenantID: membership.TenantID, TenantName: principal.TenantName, UserID: user.ID, Username: user.Username, Role: membership.Role}
+	p := Principal{TenantID: membership.TenantID, TenantName: principal.TenantName, UserID: user.ID, Username: user.Username, Role: membership.Role, Locale: user.Locale, Theme: user.Theme, Accent: user.Accent}
 	s.accounts[user.UsernameNormalized] = Account{Principal: p, PasswordHash: user.PasswordHash}
 	s.principals[user.ID] = p
 	s.members[membership.TenantID] = append(s.members[membership.TenantID], Member{UserID: user.ID, Username: user.Username, Role: membership.Role, CreatedAt: membership.CreatedAt})
@@ -89,8 +105,9 @@ func (s *memoryAuthStore) CreateMember(_ context.Context, user User, membership 
 	return nil
 }
 
-func (s *memoryAuthStore) ListMembers(_ context.Context, tenantID string) ([]Member, error) {
-	return append([]Member(nil), s.members[tenantID]...), nil
+func (s *memoryAuthStore) ListMembers(_ context.Context, tenantID string, opts MemberListOptions) (MemberListResult, error) {
+	members := append([]Member(nil), s.members[tenantID]...)
+	return MemberListResult{Members: members, Total: len(members)}, nil
 }
 
 func (s *memoryAuthStore) RecordSecurityEvent(_ context.Context, event SecurityEvent) error {
@@ -132,6 +149,9 @@ func TestAuthServiceSetupLoginAndMemberPermissions(t *testing.T) {
 	if credential.Principal.Role != RoleOwner || credential.Principal.TenantName != "Home" || credential.Token == "" {
 		t.Fatalf("unexpected setup credential: %+v", credential)
 	}
+	if credential.Principal.Locale != LocaleZhCN || credential.Principal.Theme != ThemeSystem || credential.Principal.Accent != AccentEmerald {
+		t.Fatalf("unexpected default preferences: %+v", credential.Principal)
+	}
 	if _, err := service.Setup(ctx, SetupAuth{TenantName: "Other", BaseCurrency: "CNY", Username: "other", Password: "another long password"}); !errors.Is(err, ErrSetupComplete) {
 		t.Fatalf("second setup should fail with ErrSetupComplete, got %v", err)
 	}
@@ -157,6 +177,33 @@ func TestAuthServiceSetupLoginAndMemberPermissions(t *testing.T) {
 	}
 	if len(store.events) != 4 {
 		t.Fatalf("expected setup, membership, login success and login failure audit events, got %d", len(store.events))
+	}
+}
+
+func TestAuthServiceUpdatesPreferences(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryAuthStore()
+	service := NewAuthService(store)
+	credential, err := service.Setup(ctx, SetupAuth{TenantName: "Home", BaseCurrency: "CNY", Username: "owner", Password: "correct horse battery"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := service.UpdatePreferences(ctx, credential.Principal, UpdatePreferences{Locale: LocaleEn, Theme: ThemeDark, Accent: AccentViolet})
+	if err != nil || updated.Locale != LocaleEn || updated.Theme != ThemeDark || updated.Accent != AccentViolet {
+		t.Fatalf("update preferences: principal=%+v err=%v", updated, err)
+	}
+	authenticated, err := service.Authenticate(ctx, credential.Token)
+	if err != nil || authenticated.Locale != LocaleEn || authenticated.Theme != ThemeDark || authenticated.Accent != AccentViolet {
+		t.Fatalf("preferences were not visible through session: principal=%+v err=%v", authenticated, err)
+	}
+	if _, err := service.UpdatePreferences(ctx, updated, UpdatePreferences{Locale: "fr", Theme: ThemeDark, Accent: AccentViolet}); err == nil {
+		t.Fatal("unsupported locale should fail")
+	}
+	if _, err := service.UpdatePreferences(ctx, updated, UpdatePreferences{Locale: LocaleEn, Theme: "sepia", Accent: AccentViolet}); err == nil {
+		t.Fatal("unsupported theme should fail")
+	}
+	if _, err := service.UpdatePreferences(ctx, updated, UpdatePreferences{Locale: LocaleEn, Theme: ThemeDark, Accent: "neon"}); err == nil {
+		t.Fatal("unsupported accent should fail")
 	}
 }
 
