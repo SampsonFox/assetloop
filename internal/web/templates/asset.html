@@ -2,7 +2,6 @@
 <div class="page-heading">
   <div><p class="eyebrow">{{t $s "assets.concrete"}}</p><h1>{{.Asset.DisplayName}}</h1></div>
 	<div class="heading-actions asset-detail-actions">
-        {{if .CanManageCatalog}}<a class="button secondary" href="/admin/3d?kind=asset&amp;target={{.Asset.ID}}&amp;name={{.Asset.DisplayName}}">{{t $s "resource.manage_binding"}}</a>{{end}}
 		<a class="icon-button" href="/" aria-label="{{t $s "common.back_assets"}}" title="{{t $s "common.back_assets"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
 		</a>

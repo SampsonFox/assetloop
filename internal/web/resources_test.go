@@ -86,6 +86,9 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	assertStatus(created, 303)
 	assetPath := created.Header().Get("Location")
 	asset := strings.TrimPrefix(assetPath, "/assets/")
+	if body := get(assetPath).Body.String(); strings.Contains(body, "kind=asset") || !strings.Contains(body, assetPath+"/edit") {
+		t.Fatal("asset detail must keep editing entry but reserve model binding for the edit page")
+	}
 	if body := get(assetPath).Body.String(); !strings.Contains(body, "Blue") || strings.Contains(body, "Injected independent color") {
 		t.Fatal("asset color must come from specification")
 	}
