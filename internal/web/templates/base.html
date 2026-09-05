@@ -20,7 +20,7 @@
       <div class="account-menu-panel">
         <div class="account-identity"><span class="account-avatar">{{userInitial .Principal.Username}}</span><span><strong>{{.Principal.Username}}</strong><small>{{roleLabel $s .Principal.Role}}</small></span></div>
         <nav aria-label="{{t $s "menu.label"}}">
-          {{if ne .Principal.Role "viewer"}}<a class="menu-item" href="/admin/catalog" {{if .NavCatalog}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "menu.catalog"}}</span></a>{{end}}
+          {{if ne .Principal.Role "viewer"}}<a class="menu-item" href="/admin/catalog" {{if .NavCatalog}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "menu.catalog"}}</span></a>{{end}}<a class="menu-item" href="/admin/3d">{{template "icon-grid"}}<span>{{t $s "resource.title"}}</span></a>
           {{if eq .Principal.Role "owner"}}<a class="menu-item" href="/admin/members" {{if .NavMembers}}aria-current="page"{{end}}>{{template "icon-users"}}<span>{{t $s "menu.members"}}</span></a>{{end}}
         </nav>
         <form action="/preferences" method="post" class="preference-form" data-auto-submit>

@@ -119,6 +119,18 @@ type EventListResult struct {
 }
 
 type ModelMediaStore interface {
+	CreateAndBindModel3DResource(context.Context, domain.Model3DResource, BindModel3DResource) error
+	GetModel3DBinding(context.Context, string, string, string) (Model3DBinding, error)
+	CreateModel3DResource(context.Context, domain.Model3DResource) error
+	GetModel3DResource(context.Context, string, string) (domain.Model3DResource, error)
+	ListModel3DResources(context.Context, string, Model3DResourceListOptions) (Model3DResourceListResult, error)
+	UpdateModel3DResource(context.Context, domain.Model3DResource) error
+	Model3DReferences(context.Context, string, string) ([]Model3DReference, error)
+	MarkModel3DResourcePendingDelete(context.Context, string, string) error
+	FinishModel3DResourceDelete(context.Context, string, string) error
+	BindModel3DResource(context.Context, string, BindModel3DResource) error
+	ResolveAssetModel3D(context.Context, string, string) (domain.Model3DResource, error)
+
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 	GetProductModel(context.Context, string, string) (domain.ProductModel, error)
 	UpdateProductModel3D(context.Context, string, string, domain.ProductModel3D) error
@@ -139,6 +151,7 @@ type BlobStores interface {
 }
 
 type ObjectKeyMapper interface {
+	Model3DResource(string, string, string) (string, error)
 	ProductModel3D(string, string, string) (string, error)
 }
 

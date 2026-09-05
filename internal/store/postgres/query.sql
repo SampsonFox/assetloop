@@ -13,8 +13,8 @@ ON CONFLICT (tenant_id, category_id, name) DO UPDATE SET name = excluded.name
 RETURNING id;
 
 -- name: EnsureVariant :one
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at) VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (tenant_id, model_id, name) DO UPDATE SET name = excluded.name
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color) VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (tenant_id, model_id, name, color) DO UPDATE SET name = excluded.name
 RETURNING id;
 
 -- name: CreateAsset :exec
@@ -24,7 +24,7 @@ INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES 
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -51,12 +51,12 @@ SET category_id = $1, name = $2
 WHERE tenant_id = $3 AND id = $4;
 
 -- name: CreateVariant :exec
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: UpdateVariant :execrows
 UPDATE product_variants
-SET model_id = $1, name = $2
+SET model_id = $1, name = $2, color = $5
 WHERE tenant_id = $3 AND id = $4;
 
 -- name: DeleteVariant :execrows
@@ -70,13 +70,13 @@ WHERE variant.tenant_id = $1 AND variant.id = $2
 
 -- name: CreateCatalogAsset :exec
 INSERT INTO assets
-    (id, tenant_id, variant_id, display_name, serial_number, color, purchase_channel, notes, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+    (id, tenant_id, variant_id, display_name, serial_number, purchase_channel, notes, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: UpdateCatalogAsset :execrows
 UPDATE assets
-SET variant_id = $1, display_name = $2, serial_number = $3, color = $4, purchase_channel = $5, notes = $6
-WHERE tenant_id = $7 AND id = $8;
+SET variant_id = $1, display_name = $2, serial_number = $3, purchase_channel = $4, notes = $5
+WHERE tenant_id = $6 AND id = $7;
 
 -- name: ListCategories :many
 SELECT id, tenant_id, name, icon_key, created_at
@@ -85,10 +85,11 @@ WHERE tenant_id = $1
 ORDER BY name, id;
 
 -- name: ListModels :many
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
-       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
-       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+       r.store_id AS model_3d_store_id, r.object_key AS model_3d_object_key, r.sha256 AS model_3d_sha256, r.size_bytes AS model_3d_size_bytes,
+       r.source_url AS model_3d_source_url, r.author AS model_3d_author, r.license AS model_3d_license, r.updated_at AS model_3d_updated_at
 FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1
 ORDER BY c.name, m.name, m.id;
@@ -96,10 +97,11 @@ ORDER BY c.name, m.name, m.id;
 -- name: ListModelsWithVariants :many
 WITH filtered_models AS (
     SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
-           c.icon_key AS category_icon, m.name, m.created_at,
-           m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
-           m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
+           c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+           r.store_id AS model_3d_store_id, r.object_key AS model_3d_object_key, r.sha256 AS model_3d_sha256, r.size_bytes AS model_3d_size_bytes,
+           r.source_url AS model_3d_source_url, r.author AS model_3d_author, r.license AS model_3d_license, r.updated_at AS model_3d_updated_at
     FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
     JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
     WHERE m.tenant_id = sqlc.arg(tenant_id)
       AND (sqlc.arg(search_query)::text = '' OR m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR c.name ILIKE '%' || sqlc.arg(search_query)::text || '%')
@@ -119,19 +121,20 @@ paged_models AS (
     LIMIT sqlc.arg(page_size)::bigint OFFSET sqlc.arg(page_offset)::bigint
 )
 SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
-       pm.name, pm.created_at,
+       pm.name, pm.created_at, pm.model_3d_resource_id,
        pm.model_3d_store_id, pm.model_3d_object_key, pm.model_3d_sha256, pm.model_3d_size_bytes,
        pm.model_3d_source_url, pm.model_3d_author, pm.model_3d_license, pm.model_3d_updated_at,
        pm.total_count, pm.page_order,
-       v.id AS variant_id, v.name AS variant_name, v.created_at AS variant_created_at
+       v.id AS variant_id, v.name AS variant_name, v.color AS variant_color, v.model_3d_resource_id AS variant_model_3d_resource_id, v.created_at AS variant_created_at
 FROM paged_models pm
 LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
 ORDER BY pm.page_order, LOWER(v.name), v.id;
 -- name: GetProductModel :one
-SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at,
-       m.model_3d_store_id, m.model_3d_object_key, m.model_3d_sha256, m.model_3d_size_bytes,
-       m.model_3d_source_url, m.model_3d_author, m.model_3d_license, m.model_3d_updated_at
+SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
+       r.store_id AS model_3d_store_id, r.object_key AS model_3d_object_key, r.sha256 AS model_3d_sha256, r.size_bytes AS model_3d_size_bytes,
+       r.source_url AS model_3d_source_url, r.author AS model_3d_author, r.license AS model_3d_license, r.updated_at AS model_3d_updated_at
 FROM product_models m
+LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_resource_id AND r.status='ready'
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1 AND m.id = $2;
 
@@ -142,7 +145,7 @@ WHERE tenant_id = $9 AND id = $10;
 
 -- name: ListVariants :many
 SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
-       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.created_at
+       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.color, v.model_3d_resource_id, v.created_at
 FROM product_variants v
 JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
@@ -153,7 +156,7 @@ ORDER BY c.name, m.name, v.name, v.id;
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
 JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
@@ -193,7 +196,7 @@ asset_rows AS (
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, a.color,
+       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at,
        COALESCE(er.expense_minor, 0)::bigint AS expense_minor,
        COALESCE(er.income_minor, 0)::bigint AS income_minor,
@@ -228,7 +231,7 @@ WHERE a.tenant_id = sqlc.arg(tenant_id)
   ))
 )
 SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
-       variant_id, variant_name, display_name, serial_number, color, purchase_channel, notes, created_at,
+       variant_id, variant_name, display_name, serial_number, color, model_3d_resource_id, purchase_channel, notes, created_at,
        expense_minor, income_minor, net_minor,
        status,
        base_currency
@@ -555,3 +558,79 @@ WHERE tenant_id = sqlc.arg(tenant_id) AND user_id = sqlc.arg(user_id) AND reques
 -- name: SaveLifecycleRequest :exec
 INSERT INTO lifecycle_requests (tenant_id, user_id, request_key, request_hash, event_id)
 VALUES (sqlc.arg(tenant_id), sqlc.arg(user_id), sqlc.arg(request_key), sqlc.arg(request_hash), sqlc.arg(event_id));
+
+-- name: CreateModel3DResource :exec
+INSERT INTO model_3d_resources(id,tenant_id,name,status,store_id,object_key,sha256,size_bytes,source_url,author,license,created_at,updated_at)
+VALUES(sqlc.arg(id),sqlc.arg(tenant_id),sqlc.arg(name),sqlc.arg(status),sqlc.arg(store_id),sqlc.arg(object_key),sqlc.arg(sha256),sqlc.arg(size_bytes),sqlc.arg(source_url),sqlc.arg(author),sqlc.arg(license),sqlc.arg(created_at),sqlc.arg(updated_at));
+
+-- name: GetModel3DResource :one
+SELECT * FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: ListModel3DResources :many
+SELECT r.*,
+ (SELECT COUNT(*) FROM product_models m WHERE m.tenant_id=r.tenant_id AND m.model_3d_resource_id=r.id)
+ +(SELECT COUNT(*) FROM product_variants v WHERE v.tenant_id=r.tenant_id AND v.model_3d_resource_id=r.id)
+ +(SELECT COUNT(*) FROM assets a WHERE a.tenant_id=r.tenant_id AND a.model_3d_resource_id=r.id) AS reference_count
+FROM model_3d_resources r WHERE r.tenant_id=sqlc.arg(tenant_id)
+ AND (CAST(sqlc.arg(search_query) AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')
+ORDER BY created_at DESC,id LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
+
+-- name: CountModel3DResources :one
+SELECT COUNT(*) FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id)
+ AND (CAST(sqlc.arg(search_query) AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%');
+
+-- name: UpdateModel3DResource :execrows
+UPDATE model_3d_resources SET name=sqlc.arg(name),source_url=sqlc.arg(source_url),author=sqlc.arg(author),license=sqlc.arg(license),updated_at=sqlc.arg(updated_at)
+WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id) AND status='ready';
+
+-- name: MarkModel3DResourcePendingDelete :execrows
+UPDATE model_3d_resources SET status='pending-delete'
+WHERE model_3d_resources.tenant_id=sqlc.arg(tenant_id) AND model_3d_resources.id=sqlc.arg(id)
+ AND NOT EXISTS(SELECT 1 FROM product_models WHERE product_models.tenant_id=sqlc.arg(tenant_id) AND product_models.model_3d_resource_id=sqlc.arg(id))
+ AND NOT EXISTS(SELECT 1 FROM product_variants WHERE product_variants.tenant_id=sqlc.arg(tenant_id) AND product_variants.model_3d_resource_id=sqlc.arg(id))
+ AND NOT EXISTS(SELECT 1 FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id));
+
+-- name: FinishModel3DResourceDelete :execrows
+DELETE FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id) AND status='pending-delete';
+
+-- name: Model3DReferences :many
+SELECT CAST('model' AS TEXT) AS kind,id,name FROM product_models WHERE product_models.tenant_id=sqlc.arg(tenant_id) AND product_models.model_3d_resource_id=sqlc.arg(id)
+UNION ALL
+SELECT CAST('variant' AS TEXT),id,name || CASE WHEN color<>'' THEN ' (' || color || ')' ELSE '' END FROM product_variants WHERE product_variants.tenant_id=sqlc.arg(tenant_id) AND product_variants.model_3d_resource_id=sqlc.arg(id)
+UNION ALL
+SELECT CAST('asset' AS TEXT),id,display_name FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id);
+
+-- name: BindModel3D :execrows
+UPDATE product_models SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: BindVariant3D :execrows
+UPDATE product_variants SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: BindAsset3D :execrows
+UPDATE assets SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
+
+-- name: ResolveAssetModel3D :one
+SELECT r.* FROM assets a
+JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
+JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+JOIN model_3d_resources r ON r.tenant_id=a.tenant_id AND r.id=COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id)
+WHERE a.tenant_id=sqlc.arg(tenant_id) AND a.id=sqlc.arg(id) AND r.status='ready';
+
+-- name: GetModel3DBinding :one
+SELECT m.name, COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS resource_id,
+ COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS effective_resource_id,
+ CASE WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END AS source
+FROM product_models m WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='model'
+UNION ALL
+SELECT v.name || CASE WHEN v.color<>'' THEN ' (' || v.color || ')' ELSE '' END, COALESCE(CAST(v.model_3d_resource_id AS TEXT),''),
+ COALESCE(CAST(COALESCE(v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
+ CASE WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
+FROM product_variants v JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+WHERE v.tenant_id=sqlc.arg(tenant_id) AND v.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='variant'
+UNION ALL
+SELECT a.display_name, COALESCE(CAST(a.model_3d_resource_id AS TEXT),''),
+ COALESCE(CAST(COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
+ CASE WHEN a.model_3d_resource_id IS NOT NULL THEN 'asset' WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
+FROM assets a JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
+JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
+WHERE a.tenant_id=sqlc.arg(tenant_id) AND a.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='asset';

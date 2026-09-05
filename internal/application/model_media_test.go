@@ -29,9 +29,11 @@ func testGLB(jsonText string) []byte {
 }
 
 type mediaTestStore struct {
-	model   domain.ProductModel
-	asset   domain.Asset
-	updates []domain.ProductModel3D
+	ModelMediaStore
+	resources map[string]domain.Model3DResource
+	model     domain.ProductModel
+	asset     domain.Asset
+	updates   []domain.ProductModel3D
 }
 
 func (s *mediaTestStore) GetAsset(_ context.Context, tenant, id string) (domain.Asset, error) {
@@ -97,11 +99,61 @@ type mediaKeys struct{}
 func (mediaKeys) ProductModel3D(tenant, model, sha string) (string, error) {
 	return "tenants/" + tenant + "/models/" + model + "/" + sha + ".glb", nil
 }
+func (mediaKeys) Model3DResource(tenant, id, sha string) (string, error) {
+	return "tenants/" + tenant + "/model-3d-resources/" + id + "/" + sha + ".glb", nil
+}
+
+func (s *mediaTestStore) CreateModel3DResource(_ context.Context, r domain.Model3DResource) error {
+	if s.resources == nil {
+		s.resources = map[string]domain.Model3DResource{}
+	}
+	s.resources[r.ID] = r
+	return nil
+}
+func (s *mediaTestStore) GetModel3DResource(_ context.Context, tenant, id string) (domain.Model3DResource, error) {
+	r, ok := s.resources[id]
+	if !ok || r.TenantID != tenant {
+		return domain.Model3DResource{}, ErrModel3DNotFound
+	}
+	return r, nil
+}
+func (s *mediaTestStore) BindModel3DResource(ctx context.Context, tenant string, b BindModel3DResource) error {
+	r, err := s.GetModel3DResource(ctx, tenant, b.ResourceID)
+	if err != nil {
+		return err
+	}
+	return s.UpdateProductModel3D(ctx, tenant, b.TargetID, r.ProductModel3D)
+}
+func (s *mediaTestStore) GetModel3DBinding(ctx context.Context, tenant, kind, id string) (Model3DBinding, error) {
+	m, err := s.GetProductModel(ctx, tenant, id)
+	if err != nil {
+		return Model3DBinding{}, err
+	}
+	return Model3DBinding{Name: m.Name}, nil
+}
+func (s *mediaTestStore) CreateAndBindModel3DResource(ctx context.Context, r domain.Model3DResource, b BindModel3DResource) error {
+	if err := s.CreateModel3DResource(ctx, r); err != nil {
+		return err
+	}
+	b.ResourceID = r.ID
+	return s.BindModel3DResource(ctx, r.TenantID, b)
+}
+func (s *mediaTestStore) ResolveAssetModel3D(ctx context.Context, tenant, id string) (domain.Model3DResource, error) {
+	a, err := s.GetAsset(ctx, tenant, id)
+	if err != nil {
+		return domain.Model3DResource{}, err
+	}
+	m, err := s.GetProductModel(ctx, tenant, a.ModelID)
+	if err != nil || m.Model3D == nil {
+		return domain.Model3DResource{}, ErrModel3DNotFound
+	}
+	return s.GetModel3DResource(ctx, tenant, m.Model3D.ResourceID)
+}
 
 func TestModelMediaUploadReplaceAndRead(t *testing.T) {
 	tenant, modelID, assetID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	old := &domain.ProductModel3D{StoreID: "local", ObjectKey: "old.glb", SHA256: "old", SizeBytes: 3}
-	store := &mediaTestStore{model: domain.ProductModel{ID: modelID, TenantID: tenant, Model3D: old}, asset: domain.Asset{ID: assetID, TenantID: tenant, ModelID: modelID}}
+	store := &mediaTestStore{model: domain.ProductModel{ID: modelID, TenantID: tenant, Name: "Test", Model3D: old}, asset: domain.Asset{ID: assetID, TenantID: tenant, ModelID: modelID}}
 	blobs := &memoryBlob{data: map[string][]byte{"old.glb": []byte("old")}}
 	service := NewModelMediaService(store, mediaRegistry{"local": blobs}, mediaKeys{}, "local")
 	service.now = func() time.Time { return time.Unix(100, 0) }
@@ -113,8 +165,8 @@ func TestModelMediaUploadReplaceAndRead(t *testing.T) {
 	if media.StoreID != "local" || media.Author != "Maker" || len(store.updates) != 1 {
 		t.Fatalf("unexpected media: %#v", media)
 	}
-	if len(blobs.deleted) != 1 || blobs.deleted[0] != "old.glb" {
-		t.Fatalf("old object not deleted: %#v", blobs.deleted)
+	if len(blobs.deleted) != 0 || string(blobs.data["old.glb"]) != "old" {
+		t.Fatalf("replacement deleted independent old object: %#v", blobs.deleted)
 	}
 	opened, err := service.OpenForAsset(context.Background(), actor, assetID)
 	if err != nil {

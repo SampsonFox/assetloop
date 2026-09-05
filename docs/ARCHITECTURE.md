@@ -123,7 +123,7 @@ Tenant
                           +-- AssetEvent[]
 ```
 
-`ProductVariant` contains only attributes that affect market identity and price, such as storage capacity. `Asset` contains instance attributes such as serial number and normally color. Category-specific condition schemes map assets and market listings to comparable condition codes.
+`ProductVariant` contains product specifications, including storage capacity and color. Its identity is unique within a tenant and product model by specification name and color. `Asset` contains instance attributes such as serial number and personal notes, and derives its displayed color from its variant. Historical asset color text is retained for compatibility, not used as the active color source. Category-specific condition schemes map assets and market listings to comparable condition codes.
 
 Transactions group related cash and lifecycle effects, while asset events remain the append-only lifecycle record.
 Confirmed events cannot be updated or deleted at either Store or database level. A correction
@@ -301,14 +301,18 @@ Attachment or product-model media use case
 
 ```text
 tenants/{tenant_id}/attachments/{yyyy}/{mm}/{attachment_id}/{variant}.{ext}
-tenants/{tenant_id}/models/{product_model_id}/{sha256}.glb
+tenants/{tenant_id}/model-3d-resources/{resource_id}/{sha256}.glb
 ```
 
 The metadata row selects the store for reads. A configuration value selects the default store for new writes. Therefore a configuration switch never relocates or hides existing bytes.
 
 A store migration copies the object under the same key, verifies size and SHA-256, changes `store_id`, then optionally removes the old object.
 
-A `ProductModel` may bind one current self-contained GLB. Variants and concrete assets resolve that shared model through the application service. Replacement writes and verifies the new blob before changing model metadata, then removes the old blob on a best-effort basis. Authenticated reads are proxied by the Web transport; source URL, author, and license are descriptive metadata only.
+A tenant-owned `Model3DResource` holds an immutable self-contained GLB and editable name and attribution. Product models, variants, and assets reference resources independently; multiple records can share a resource. Effective media is resolved in the application layer in asset override, variant default, then product-model default order. Only absent bindings inherit; a selected file that fails to load falls back to the static image or category icon. The resource table contains no color or capacity fields.
+
+Uploads write and verify new resource-specific blobs before transactionally creating metadata and binding the target. Replacing a binding never deletes the previous resource. A referenced resource cannot be deleted: binding and deletion share a transaction isolation protocol, and pending-deletion resources reject new bindings. Unreferenced deletion first persists pending state, then removes the blob and finally the row; failures remain visible and retryable. No distributed transaction or background cleanup service is introduced. Authenticated reads are proxied by Web; source URL, author, and license remain descriptive metadata.
+
+Migration 00011 expands existing metadata into resource references, retaining legacy fields and existing `tenants/{tenant_id}/models/{product_model_id}/{sha256}.glb` keys without moving bytes. Asset colors split existing variants into name/color combinations while preserving asset IDs and lifecycle references. Backups must cover both the database and the selected Local/OSS objects.
 
 ## 9. Market data architecture
 

@@ -46,7 +46,7 @@ func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Ass
 	if err != nil {
 		return domain.Asset{}, err
 	}
-	ids.variant, err = q.EnsureVariant(ctx, postgresdb.EnsureVariantParams{ID: ids.variant, TenantID: ids.tenant, ModelID: ids.model, Name: asset.Variant, CreatedAt: asset.CreatedAt})
+	ids.variant, err = q.EnsureVariant(ctx, postgresdb.EnsureVariantParams{ID: ids.variant, TenantID: ids.tenant, ModelID: ids.model, Name: asset.Variant, Color: asset.Color, CreatedAt: asset.CreatedAt})
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -80,7 +80,8 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 		CategoryID: row.CategoryID.String(), Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 		ModelID: row.ModelID.String(), Model: row.ModelName,
 		VariantID: row.VariantID.String(), Variant: row.VariantName,
-		DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+		Model3DResourceID: optionalUUID(row.Model3dResourceID),
+		DisplayName:       row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
 		PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: row.CreatedAt,
 	}, nil
 }

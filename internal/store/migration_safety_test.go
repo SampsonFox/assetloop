@@ -28,10 +28,35 @@ func TestMigrationSafety(t *testing.T) {
 			if err := basestore.Migrate(context.Background(), db, cfg); err == nil {
 				t.Fatal("foreign key violation accepted at startup")
 			}
+			var version, foreignKeys, resources int
+			if err := db.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil || version != 10 {
+				t.Fatalf("failed resource upgrade must roll back its version: %d %v", version, err)
+			}
+			if err := db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil || foreignKeys != 1 {
+				t.Fatalf("foreign keys not restored after failed upgrade: %d %v", foreignKeys, err)
+			}
+			if err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE name='model_3d_resources'").Scan(&resources); err != nil || resources != 0 {
+				t.Fatalf("failed resource upgrade left partial schema: %d %v", resources, err)
+			}
 		}
 		backups, err := filepath.Glob(cfg.DSN + ".backup-*")
-		if err != nil || len(backups) != 1 {
-			t.Fatalf("upgrade backup lost or duplicated: %v %v", backups, err)
+		// Migration 11 rolls back; each startup therefore makes a new upgrade attempt
+		// and must retain its own pre-upgrade recovery backup (v7, then v10).
+		if err != nil || len(backups) != 2 {
+			t.Fatalf("missing per-attempt upgrade backup: %v %v", backups, err)
+		}
+		for i, path := range backups {
+			backup, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var version, preserved int
+			versionErr := backup.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version)
+			dataErr := backup.QueryRow("SELECT COUNT(*) FROM item_categories WHERE id='bad-category' AND tenant_id='missing-tenant'").Scan(&preserved)
+			_ = backup.Close()
+			if versionErr != nil || dataErr != nil || version != []int{7, 10}[i] || preserved != 1 {
+				t.Fatalf("recovery backup changed: version=%d preserved=%d errors=%v/%v", version, preserved, versionErr, dataErr)
+			}
 		}
 	})
 	t.Run("failed upgrade preserves recoverable backup", func(t *testing.T) {

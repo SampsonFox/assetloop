@@ -101,26 +101,33 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
-	variant256, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB"})
+	variant256, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "钛金属"})
 	if err != nil {
 		t.Fatalf("create 256GB variant: %v", err)
 	}
 	if _, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"}); err != nil {
 		t.Fatalf("create 512GB variant: %v", err)
 	}
+	blackVariant, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "黑色"})
+	if err != nil || blackVariant.ID == variant256.ID {
+		t.Fatalf("create distinct color variant: %+v err=%v", blackVariant, err)
+	}
+	if _, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "钛金属"}); err == nil {
+		t.Fatal("duplicate model/name/color variant was accepted")
+	}
 	asset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{
 		VariantID: variant256.ID, DisplayName: "全要素测试手机", SerialNumber: "FULL-ELEMENT-001",
-		Color: "钛金属", PurchaseChannel: "官方商城", Notes: "全要素目录记录",
+		PurchaseChannel: "官方商城", Notes: "全要素目录记录",
 	})
 	if err != nil {
 		t.Fatalf("create catalog asset: %v", err)
 	}
 	got, err := catalog.GetAsset(ctx, owner, asset.ID)
-	if err != nil || got.DisplayName != "全要素测试手机" || got.SerialNumber != "FULL-ELEMENT-001" || got.Variant != "256GB" {
+	if err != nil || got.DisplayName != "全要素测试手机" || got.SerialNumber != "FULL-ELEMENT-001" || got.Variant != "256GB" || got.Color != "钛金属" {
 		t.Fatalf("get catalog asset: got=%+v err=%v", got, err)
 	}
 	snapshot, err := catalog.Snapshot(ctx, viewerSession.Principal)
-	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 2 || len(snapshot.Assets) != 1 {
+	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 3 || len(snapshot.Assets) != 1 {
 		t.Fatalf("viewer catalog snapshot: %+v err=%v", snapshot, err)
 	}
 	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, application.CreateCategory{Name: "禁止写入"}); !errors.Is(err, application.ErrForbidden) {
@@ -136,18 +143,113 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil {
 		t.Fatalf("upload product model GLB: %v", err)
 	}
-	if !strings.Contains(media.ObjectKey, "tenants/"+owner.TenantID+"/models/"+model.ID+"/") {
+	if media.ResourceID == "" || !strings.HasPrefix(media.ObjectKey, "tenants/"+owner.TenantID+"/") {
 		t.Fatalf("unexpected model object key: %q", media.ObjectKey)
 	}
 	opened, err := modelMedia.OpenForAsset(ctx, viewerSession.Principal, asset.ID)
 	if err != nil {
 		t.Fatalf("viewer open product model GLB: %v", err)
 	}
-	modelBytes, _ := io.ReadAll(opened.Reader)
-	_ = opened.Reader.Close()
-	if !bytes.Equal(modelBytes, glb) {
-		t.Fatal("resolved model GLB differs")
+	modelBytes, readErr := io.ReadAll(opened.Reader)
+	closeErr := opened.Reader.Close()
+	if readErr != nil || closeErr != nil || !bytes.Equal(modelBytes, glb) {
+		t.Fatalf("resolved model GLB differs: read=%v close=%v", readErr, closeErr)
 	}
+
+	// One resource can serve unrelated models and variants; each asset may override it.
+	sharedModel, err := catalog.CreateModel(ctx, owner, application.CreateModel{CategoryID: category.ID, Name: "共享资源手机"})
+	if err != nil {
+		t.Fatalf("create sharing model: %v", err)
+	}
+	sharedVariant, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: sharedModel.ID, Name: "128GB", Color: "银色"})
+	if err != nil {
+		t.Fatalf("create sharing variant: %v", err)
+	}
+	sharedAsset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: sharedVariant.ID, DisplayName: "共享模型资产"})
+	if err != nil {
+		t.Fatalf("create sharing asset: %v", err)
+	}
+	bind := func(kind, targetID, resourceID string) {
+		t.Helper()
+		if err := modelMedia.Bind(ctx, owner, application.BindModel3DResource{Kind: kind, TargetID: targetID, ResourceID: resourceID}); err != nil {
+			t.Fatalf("bind %s resource %q: %v", kind, resourceID, err)
+		}
+	}
+	assertResource := func(assetID, resourceID string) {
+		t.Helper()
+		// A fresh service must resolve the persisted reference and read its actual bytes.
+		service := application.NewModelMediaService(store, blob.Registry{"local": localStore}, blob.ObjectKeyMapper{}, "local")
+		resolved, err := service.ResolveForAsset(ctx, viewerSession.Principal, assetID)
+		if err != nil || resolved.ResourceID != resourceID {
+			t.Fatalf("resolve asset %s: resource=%+v want=%s err=%v", assetID, resolved, resourceID, err)
+		}
+		opened, err := service.OpenForAsset(ctx, viewerSession.Principal, assetID)
+		if err != nil {
+			t.Fatalf("open resolved resource: %v", err)
+		}
+		data, readErr := io.ReadAll(opened.Reader)
+		closeErr := opened.Reader.Close()
+		if readErr != nil || closeErr != nil || opened.Model.ResourceID != resourceID || !bytes.Equal(data, glb) {
+			t.Fatalf("read resolved resource: resource=%s read=%v close=%v", opened.Model.ResourceID, readErr, closeErr)
+		}
+	}
+	assertReferenced := func(resourceID string) {
+		t.Helper()
+		if err := modelMedia.DeleteResource(ctx, owner, resourceID); !errors.Is(err, application.ErrModel3DReferenced) {
+			t.Fatalf("delete referenced resource %s: want reference rejection, got %v", resourceID, err)
+		}
+		if resource, err := modelMedia.GetResource(ctx, viewerSession.Principal, resourceID); err != nil || resource.Status != "ready" {
+			t.Fatalf("rejected deletion damaged resource: status=%q err=%v", resource.Status, err)
+		}
+	}
+	bind("model", sharedModel.ID, media.ResourceID)
+	assertResource(sharedAsset.ID, media.ResourceID)
+	assertReferenced(media.ResourceID)
+
+	variantResource, err := modelMedia.Upload(ctx, owner, application.UploadModel3DResource{Name: "变体共享资源", File: glb, License: "CC0"})
+	if err != nil {
+		t.Fatalf("upload variant resource: %v", err)
+	}
+	bind("variant", variant256.ID, variantResource.ID)
+	bind("variant", blackVariant.ID, variantResource.ID)
+	assertResource(asset.ID, variantResource.ID)
+	assertReferenced(variantResource.ID)
+	override, err := modelMedia.Upload(ctx, owner, application.UploadModel3DResource{Name: "资产独立资源", File: glb, License: "CC0"})
+	if err != nil {
+		t.Fatalf("upload asset override: %v", err)
+	}
+	bind("asset", asset.ID, override.ID)
+	assertResource(asset.ID, override.ID)
+	assertResource(sharedAsset.ID, media.ResourceID)
+	assertReferenced(override.ID)
+	assertResource(asset.ID, override.ID)
+	bind("asset", asset.ID, "")
+	assertResource(asset.ID, variantResource.ID)
+	if err := modelMedia.DeleteResource(ctx, owner, override.ID); err != nil {
+		t.Fatalf("delete unbound override: %v", err)
+	}
+	if _, err := modelMedia.GetResource(ctx, owner, override.ID); err == nil {
+		t.Fatal("deleted resource remains readable")
+	}
+	if reader, _, err := localStore.Open(ctx, override.ObjectKey); err == nil {
+		_ = reader.Close()
+		t.Fatal("deleted resource bytes remain readable")
+	}
+	bind("variant", variant256.ID, "")
+	assertResource(asset.ID, media.ResourceID)
+	assertReferenced(variantResource.ID) // The other variant still references it.
+	bind("variant", blackVariant.ID, "")
+	if err := modelMedia.DeleteResource(ctx, owner, variantResource.ID); err != nil {
+		t.Fatalf("delete fully unbound variant resource: %v", err)
+	}
+	bind("model", model.ID, "")
+	if _, err := modelMedia.OpenForAsset(ctx, viewerSession.Principal, asset.ID); !errors.Is(err, application.ErrModel3DNotFound) {
+		t.Fatalf("unbound asset should have no resource: %v", err)
+	}
+	assertReferenced(media.ResourceID) // The other model still references it.
+	assertResource(sharedAsset.ID, media.ResourceID)
+	bind("model", model.ID, media.ResourceID)
+	assertResource(asset.ID, media.ResourceID)
 
 	lifecycle := application.NewLifecycleService(store)
 	purchase, err := lifecycle.Record(ctx, owner, application.RecordEvent{

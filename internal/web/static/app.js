@@ -1,6 +1,7 @@
 (() => {
   const fields = {
     name: "name",
+    color: "color",
     iconKey: "icon_key",
     categoryId: "category_id",
     modelId: "model_id",
@@ -152,6 +153,11 @@
       }
       if (dialog.id === "model-drawer") {
         const modelId = opener.dataset.editModelId || "";
+        const library = dialog.querySelector("[data-model-library]");
+        if (library) {
+          library.hidden = !modelId;
+          library.querySelector("[data-model-library-link]").href = `/admin/3d?${new URLSearchParams({kind: "model", target: modelId, name: opener.dataset.name || ""})}`;
+        }
         const manager = dialog.querySelector("[data-model-variants]");
         if (manager) manager.hidden = !modelId;
         for (const group of dialog.querySelectorAll("[data-variant-group]")) {

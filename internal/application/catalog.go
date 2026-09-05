@@ -69,11 +69,13 @@ type UpdateModel struct {
 }
 
 type CreateVariant struct {
+	Color   string
 	ModelID string
 	Name    string
 }
 
 type UpdateVariant struct {
+	Color   string
 	ID      string
 	ModelID string
 	Name    string
@@ -210,7 +212,11 @@ func (s *CatalogService) CreateVariant(ctx context.Context, actor Principal, cmd
 	if err != nil {
 		return domain.ProductVariant{}, err
 	}
-	variant := domain.ProductVariant{ID: newID(), TenantID: actor.TenantID, ModelID: cmd.ModelID, Name: name, CreatedAt: s.now().UTC()}
+	color, err := catalogText("color", cmd.Color, 120, false)
+	if err != nil {
+		return domain.ProductVariant{}, err
+	}
+	variant := domain.ProductVariant{ID: newID(), Color: color, TenantID: actor.TenantID, ModelID: cmd.ModelID, Name: name, CreatedAt: s.now().UTC()}
 	if err := s.store.CreateVariant(ctx, variant); err != nil {
 		return domain.ProductVariant{}, fmt.Errorf("create variant: %w", err)
 	}
@@ -231,7 +237,11 @@ func (s *CatalogService) UpdateVariant(ctx context.Context, actor Principal, cmd
 	if err != nil {
 		return domain.ProductVariant{}, err
 	}
-	variant := domain.ProductVariant{ID: cmd.ID, TenantID: actor.TenantID, ModelID: cmd.ModelID, Name: name}
+	color, err := catalogText("color", cmd.Color, 120, false)
+	if err != nil {
+		return domain.ProductVariant{}, err
+	}
+	variant := domain.ProductVariant{ID: cmd.ID, Color: color, TenantID: actor.TenantID, ModelID: cmd.ModelID, Name: name}
 	if err := s.store.UpdateVariant(ctx, variant); err != nil {
 		return domain.ProductVariant{}, fmt.Errorf("update variant: %w", err)
 	}

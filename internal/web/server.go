@@ -125,6 +125,14 @@ type pageData struct {
 	NavMembers         bool
 	EventForm          eventFormData
 	Model3D            *domain.ProductModel3D
+	Resources          []domain.Model3DResource
+	Resource           *domain.Model3DResource
+	References         []application.Model3DReference
+	BindingKind        string
+	BindingID          string
+	BindingName        string
+	Binding            *application.Model3DBinding
+	BoundResource      *domain.Model3DResource
 }
 
 type eventFormData struct {
@@ -208,7 +216,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -248,6 +256,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /assets/{id}", s.updateAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
 	mux.HandleFunc("GET /assets/{id}/model.glb", s.assetModel3D)
+	mux.HandleFunc("GET /admin/3d", s.resourcesPage)
+	mux.HandleFunc("POST /admin/3d", s.uploadResource)
+	mux.HandleFunc("GET /admin/3d/{id}", s.resourcePage)
+	mux.HandleFunc("GET /admin/3d/{id}/model.glb", s.resourceGLB)
+	mux.HandleFunc("POST /admin/3d/{id}", s.updateResource)
+	mux.HandleFunc("POST /admin/3d/{id}/delete", s.deleteResource)
+	mux.HandleFunc("POST /admin/3d/bind/{kind}/{id}", s.bindResource)
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
 	mux.HandleFunc("POST /admin/event-types", s.createAssetEventType)
 	mux.HandleFunc("GET /events/{id}/correct", s.correctEventForm)
@@ -267,6 +282,7 @@ func (s *Server) updateModel3D(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, r, http.StatusRequestEntityTooLarge, errors.New("上传内容超过 25 MiB"))
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 	if !s.verifyCSRF(w, r) {
 		return
 	}
@@ -282,7 +298,9 @@ func (s *Server) updateModel3D(w http.ResponseWriter, r *http.Request) {
 		if err == nil && int64(len(file)) > application.MaxProductModel3DBytes {
 			err = errors.New("GLB 文件超过 25 MiB")
 		}
-	} else if !errors.Is(err, http.ErrMissingFile) {
+	} else if errors.Is(err, http.ErrMissingFile) {
+		err = nil
+	} else {
 		s.renderCatalogError(w, r, principal, err)
 		return
 	}
@@ -419,7 +437,7 @@ func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	variant, err := s.catalog.CreateVariant(r.Context(), principal, application.CreateVariant{
-		ModelID: r.FormValue("model_id"), Name: r.FormValue("name"),
+		ModelID: r.FormValue("model_id"), Name: r.FormValue("name"), Color: r.FormValue("color"),
 	})
 	if err != nil {
 		s.renderCatalogMutationError(w, r, principal, err)
@@ -441,7 +459,7 @@ func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	variant, err := s.catalog.UpdateVariant(r.Context(), principal, application.UpdateVariant{ID: r.PathValue("id"), ModelID: r.FormValue("model_id"), Name: r.FormValue("name")})
+	variant, err := s.catalog.UpdateVariant(r.Context(), principal, application.UpdateVariant{ID: r.PathValue("id"), ModelID: r.FormValue("model_id"), Name: r.FormValue("name"), Color: r.FormValue("color")})
 	if err != nil {
 		s.renderCatalogError(w, r, principal, err)
 		return
@@ -478,7 +496,7 @@ func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := s.catalog.CreateAsset(r.Context(), principal, application.CreateCatalogAsset{
 		VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
-		SerialNumber: r.FormValue("serial_number"), Color: r.FormValue("color"),
+		SerialNumber:    r.FormValue("serial_number"),
 		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	})
 	if err != nil {
@@ -527,7 +545,7 @@ func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.catalog.UpdateAsset(r.Context(), principal, application.UpdateCatalogAsset{
 		ID: r.PathValue("id"), VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
-		SerialNumber: r.FormValue("serial_number"), Color: r.FormValue("color"),
+		SerialNumber:    r.FormValue("serial_number"),
 		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	})
 	if err != nil {
@@ -727,8 +745,12 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 	}
 	nowValue := time.Now().Local().Format("2006-01-02T15:04")
 	var model3D *domain.ProductModel3D
+	var modelBinding *application.Model3DBinding
 	if s.modelMedia != nil {
-		if media, mediaErr := s.modelMedia.GetForModel(r.Context(), principal, asset.ModelID); mediaErr == nil {
+		if binding, err := s.modelMedia.Binding(r.Context(), principal, "asset", asset.ID); err == nil {
+			modelBinding = &binding
+		}
+		if media, mediaErr := s.modelMedia.ResolveForAsset(r.Context(), principal, asset.ID); mediaErr == nil {
 			model3D = &media
 		}
 	}
@@ -749,6 +771,7 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		TableHasFilters: query != "" || eventType != "" || sortKey != "occurred" || direction != "asc" || showVoided,
 		TableAdvanced:   eventType != "" || sortKey != "occurred" || direction != "asc" || showVoided,
 		Model3D:         model3D,
+		Binding:         modelBinding,
 	})
 }
 

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -74,7 +75,23 @@ func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
 	if err != nil {
 		return fmt.Errorf("initialize migrations: %w", err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
+	if cfg.Driver == "sqlite" {
+		// Rebuild migrations need FK enforcement suspended outside Goose's transaction.
+		// Goose commits the schema and version together and rolls both back on failure.
+		for current < target {
+			if current == 10 {
+				if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+					return err
+				}
+			}
+			result, migrateErr := provider.UpByOne(ctx)
+			_, restoreErr := db.ExecContext(context.WithoutCancel(ctx), "PRAGMA foreign_keys = ON")
+			if err := errors.Join(migrateErr, restoreErr); err != nil {
+				return fmt.Errorf("migrate SQLite and restore foreign keys: %w", err)
+			}
+			current = result.Source.Version
+		}
+	} else if _, err := provider.Up(ctx); err != nil {
 		return fmt.Errorf("migrate %s: %w", cfg.Driver, err)
 	}
 	if cfg.Driver == "sqlite" {

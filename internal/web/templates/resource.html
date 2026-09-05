@@ -1,0 +1,19 @@
+{{define "content"}}{{$s := .Strings}}
+<section class="page-heading"><h1>{{.Resource.Name}}</h1><a href="/admin/3d">{{t $s "resource.back"}}</a></section>
+{{if .Error}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
+{{if eq .Resource.Status "ready"}}
+<section class="card asset-profile resource-profile">
+<figure class="asset-product-visual has-model" data-model-viewer data-model-loaded="{{t $s "resource.loaded"}}" data-model-url="/admin/3d/{{.Resource.ID}}/model.glb?v={{.Resource.SHA256}}" data-model-error="{{t $s "resource.preview_error"}}">
+<div class="asset-model-fallback" data-model-fallback><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg></div>
+<canvas class="asset-model-canvas" data-model-canvas aria-label="{{t $s "asset.model_3d_label"}}" tabindex="0"></canvas><div class="asset-model-status" data-model-status role="status">{{t $s "asset.model_3d_loading"}}</div><div class="asset-model-controls"><span>{{t $s "resource.viewer_hint"}}</span><button class="secondary auto" type="button" data-model-reset>{{t $s "asset.model_3d_reset"}}</button></div>
+</figure>
+{{if .CanManageCatalog}}<form class="stack asset-profile-content" method="post" action="/admin/3d/{{.Resource.ID}}" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+<label>{{t $s "resource.name"}}<input name="name" value="{{.Resource.Name}}" required maxlength="160"></label>
+<label>{{t $s "catalog.model_3d_source"}}<input type="url" name="model_3d_source_url" maxlength="2000" value="{{.Resource.SourceURL}}"></label>
+<label>{{t $s "catalog.model_3d_author"}}<input name="model_3d_author" maxlength="200" value="{{.Resource.Author}}"></label>
+<label>{{t $s "catalog.model_3d_license"}}<input name="model_3d_license" maxlength="200" value="{{.Resource.License}}"></label><p class="muted">{{t $s "resource.edit_help"}}</p><button class="auto" type="submit">{{t $s "common.save"}}</button>
+</form>{{else}}<dl class="asset-profile-content"><dt>{{t $s "catalog.model_3d_author"}}</dt><dd>{{.Resource.Author}}</dd><dt>{{t $s "catalog.model_3d_license"}}</dt><dd>{{.Resource.License}}</dd><dt>{{t $s "catalog.model_3d_source"}}</dt><dd>{{if .Resource.SourceURL}}<a href="{{.Resource.SourceURL}}" rel="noreferrer">{{.Resource.SourceURL}}</a>{{else}}{{t $s "common.none"}}{{end}}</dd></dl>{{end}}</section><script type="module" src="/static/asset-model-viewer.js"></script>
+{{else}}<p role="status">{{t $s "resource.pending_help"}}</p>{{end}}
+<section class="resource-references" id="references"><h2>{{t $s "resource.references"}}</h2>{{if .References}}<ul>{{range .References}}<li><a href="{{if eq .Kind "asset"}}/assets/{{.ID}}{{else}}/admin/3d?kind={{.Kind}}&amp;target={{.ID}}&amp;name={{.Name}}{{end}}">{{.Name}}</a> · {{if eq .Kind "model"}}{{t $s "catalog.model_name"}}{{else if eq .Kind "variant"}}{{t $s "catalog.variant"}}{{else}}{{t $s "assets.item"}}{{end}}</li>{{end}}</ul><p class="muted">{{t $s "resource.referenced_help"}}</p>{{else}}<p class="muted">{{t $s "resource.no_references"}}</p>{{end}}
+{{if .CanManageCatalog}}<form method="post" action="/admin/3d/{{.Resource.ID}}/delete" data-confirm="{{t $s "resource.delete_confirm"}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="secondary auto" type="submit" {{if .References}}disabled{{end}}>{{if eq .Resource.Status "ready"}}{{t $s "common.delete"}}{{else}}{{t $s "resource.retry_delete"}}{{end}}</button></form>{{end}}</section>
+{{end}}

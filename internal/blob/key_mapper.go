@@ -9,6 +9,13 @@ import (
 
 type ObjectKeyMapper struct{}
 
+func (ObjectKeyMapper) Model3DResource(tenantID, resourceID, sha string) (string, error) {
+	if _, err := (ObjectKeyMapper{}).ProductModel3D(tenantID, resourceID, sha); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("tenants/%s/model-3d-resources/%s/%s.glb", tenantID, resourceID, sha), nil
+}
+
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func (ObjectKeyMapper) ProductModel3D(tenantID, modelID, sha string) (string, error) {

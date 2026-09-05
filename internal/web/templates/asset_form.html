@@ -12,11 +12,10 @@
     {{if .Variants}}
     <form id="asset-form" class="asset-editor-form" action="{{.AssetFormAction}}" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <div class="form-field"><div class="field-heading"><label for="asset-variant">{{t $s "assets.variant"}}</label><button class="link-button" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "assets.add_type"}}" data-action="/admin/catalog/variants">{{t $s "assets.add_type"}}</button></div><select id="asset-variant" name="variant_id" required><option value="">{{t $s "common.select"}}</option>{{range .Variants}}<option value="{{.ID}}"{{if eq .ID $.Asset.VariantID}} selected{{end}}>{{.CategoryName}} / {{.ModelName}} / {{.Name}}</option>{{end}}</select></div>
+      <div class="form-field"><div class="field-heading"><label for="asset-variant">{{t $s "assets.variant"}}</label><button class="link-button" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "assets.add_type"}}" data-action="/admin/catalog/variants">{{t $s "assets.add_type"}}</button></div><select id="asset-variant" name="variant_id" required><option value="">{{t $s "common.select"}}</option>{{range .Variants}}<option value="{{.ID}}"{{if eq .ID $.Asset.VariantID}} selected{{end}}>{{.CategoryName}} / {{.ModelName}} / {{.Name}}{{if .Color}} · {{.Color}}{{end}}</option>{{end}}</select></div>
       <div class="asset-editor-fields">
         <label>{{t $s "assets.display_name"}}<input name="display_name" value="{{.Asset.DisplayName}}" required maxlength="200" placeholder="{{t $s "assets.display_placeholder"}}"></label>
         <label>{{t $s "assets.serial_number"}}<input name="serial_number" value="{{.Asset.SerialNumber}}" maxlength="200"></label>
-        <label>{{t $s "assets.color"}}<input name="color" value="{{.Asset.Color}}" maxlength="120"></label>
         <label>{{t $s "assets.purchase_channel"}}<input name="purchase_channel" value="{{.Asset.PurchaseChannel}}" maxlength="160"></label>
         <label class="wide">{{t $s "common.notes"}}<textarea name="notes" maxlength="2000" rows="4">{{.Asset.Notes}}</textarea></label>
       </div>
@@ -28,5 +27,6 @@
     {{end}}
   </div>
 </section>
+{{if .AssetFormEditing}}<p><a class="button secondary" href="/admin/3d?kind=asset&amp;target={{.Asset.ID}}&amp;name={{.Asset.DisplayName}}">{{t $s "resource.manage_binding"}}</a></p>{{end}}
 {{template "catalog-drawers" .}}
 {{end}}

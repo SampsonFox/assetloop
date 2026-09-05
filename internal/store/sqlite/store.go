@@ -43,7 +43,7 @@ func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Ass
 	if err != nil {
 		return domain.Asset{}, err
 	}
-	asset.VariantID, err = q.EnsureVariant(ctx, sqlitedb.EnsureVariantParams{ID: asset.VariantID, TenantID: asset.TenantID, ModelID: asset.ModelID, Name: asset.Variant, CreatedAt: createdAt})
+	asset.VariantID, err = q.EnsureVariant(ctx, sqlitedb.EnsureVariantParams{ID: asset.VariantID, TenantID: asset.TenantID, ModelID: asset.ModelID, Name: asset.Variant, Color: asset.Color, CreatedAt: createdAt})
 	if err != nil {
 		return domain.Asset{}, err
 	}
@@ -70,7 +70,8 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 		CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 		ModelID: row.ModelID, Model: row.ModelName,
 		VariantID: row.VariantID, Variant: row.VariantName,
-		DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+		Model3DResourceID: row.Model3dResourceID.String,
+		DisplayName:       row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
 		PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
 	}, nil
 }

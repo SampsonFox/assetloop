@@ -67,7 +67,7 @@ func (s *Store) CreateVariant(ctx context.Context, variant domain.ProductVariant
 		return fmt.Errorf("parse model ID: %w", err)
 	}
 	return postgresdb.New(s.db).CreateVariant(ctx, postgresdb.CreateVariantParams{
-		ID: id, TenantID: tenantID, ModelID: modelID, Name: variant.Name, CreatedAt: variant.CreatedAt,
+		ID: id, TenantID: tenantID, ModelID: modelID, Name: variant.Name, Color: variant.Color, CreatedAt: variant.CreatedAt,
 	})
 }
 
@@ -80,7 +80,7 @@ func (s *Store) UpdateVariant(ctx context.Context, variant domain.ProductVariant
 	if err != nil {
 		return fmt.Errorf("parse model ID: %w", err)
 	}
-	count, err := postgresdb.New(s.db).UpdateVariant(ctx, postgresdb.UpdateVariantParams{ModelID: modelID, Name: variant.Name, TenantID: tenantID, ID: id})
+	count, err := postgresdb.New(s.db).UpdateVariant(ctx, postgresdb.UpdateVariantParams{ModelID: modelID, Name: variant.Name, Color: variant.Color, TenantID: tenantID, ID: id})
 	return updatedRow(count, err)
 }
 
@@ -104,7 +104,7 @@ func (s *Store) CreateCatalogAsset(ctx context.Context, asset domain.Asset) erro
 	}
 	return postgresdb.New(s.db).CreateCatalogAsset(ctx, postgresdb.CreateCatalogAssetParams{
 		ID: id, TenantID: tenantID, VariantID: variantID, DisplayName: asset.DisplayName,
-		SerialNumber: asset.SerialNumber, Color: asset.Color, PurchaseChannel: asset.PurchaseChannel,
+		SerialNumber: asset.SerialNumber, PurchaseChannel: asset.PurchaseChannel,
 		Notes: asset.Notes, CreatedAt: asset.CreatedAt,
 	})
 }
@@ -120,7 +120,7 @@ func (s *Store) UpdateCatalogAsset(ctx context.Context, asset domain.Asset) erro
 	}
 	count, err := postgresdb.New(s.db).UpdateCatalogAsset(ctx, postgresdb.UpdateCatalogAssetParams{
 		VariantID: variantID, DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
-		Color: asset.Color, PurchaseChannel: asset.PurchaseChannel, Notes: asset.Notes,
+		PurchaseChannel: asset.PurchaseChannel, Notes: asset.Notes,
 		TenantID: tenantID, ID: id,
 	})
 	return updatedRow(count, err)
@@ -153,11 +153,11 @@ func (s *Store) ListModels(ctx context.Context, tenantID string) ([]domain.Produ
 	}
 	result := make([]domain.ProductModel, 0, len(rows))
 	for _, row := range rows {
-		model := domain.ProductModel{
+		model := domain.ProductModel{Model3DResourceID: optionalUUID(row.Model3dResourceID),
 			ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(),
 			CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: row.CreatedAt,
 		}
-		model.Model3D = postgresModel3D(row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
+		model.Model3D = postgresModel3D(row.Model3dResourceID, row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
 		result = append(result, model)
 	}
 	return result, nil
@@ -172,27 +172,25 @@ func (s *Store) GetProductModel(ctx context.Context, tenantID, modelID string) (
 	if err != nil {
 		return domain.ProductModel{}, err
 	}
-	return domain.ProductModel{ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(), CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: row.CreatedAt, Model3D: postgresModel3D(row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)}, nil
+	return domain.ProductModel{Model3DResourceID: optionalUUID(row.Model3dResourceID), ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(), CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: row.CreatedAt, Model3D: postgresModel3D(row.Model3dResourceID, row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)}, nil
 }
 
 func (s *Store) UpdateProductModel3D(ctx context.Context, tenantID, modelID string, media domain.ProductModel3D) error {
-	id, tenant, err := catalogIDs(modelID, tenantID)
-	if err != nil {
+	if _, err := s.GetProductModel(ctx, tenantID, modelID); err != nil {
 		return err
 	}
-	count, err := postgresdb.New(s.db).UpdateProductModel3D(ctx, postgresdb.UpdateProductModel3DParams{
-		Model3dStoreID: nullString(media.StoreID), Model3dObjectKey: nullString(media.ObjectKey), Model3dSha256: nullString(media.SHA256),
-		Model3dSizeBytes: sql.NullInt64{Int64: media.SizeBytes, Valid: media.SizeBytes > 0}, Model3dSourceUrl: nullString(media.SourceURL),
-		Model3dAuthor: nullString(media.Author), Model3dLicense: nullString(media.License), Model3dUpdatedAt: sql.NullTime{Time: media.UpdatedAt, Valid: !media.UpdatedAt.IsZero()}, TenantID: tenant, ID: id,
-	})
-	return updatedRow(count, err)
+	if media.ResourceID == "" {
+		media.ResourceID = uuid.NewString()
+		return s.CreateAndBindModel3DResource(ctx, domain.Model3DResource{ID: media.ResourceID, TenantID: tenantID, Name: "Model 3D", Status: "ready", ProductModel3D: media, CreatedAt: media.UpdatedAt}, application.BindModel3DResource{Kind: "model", TargetID: modelID, ResourceID: media.ResourceID})
+	}
+	return s.BindModel3DResource(ctx, tenantID, application.BindModel3DResource{Kind: "model", TargetID: modelID, ResourceID: media.ResourceID})
 }
 
-func postgresModel3D(storeID, objectKey, sha sql.NullString, size sql.NullInt64, source, author, license sql.NullString, updated sql.NullTime) *domain.ProductModel3D {
+func postgresModel3D(resourceID uuid.NullUUID, storeID, objectKey, sha sql.NullString, size sql.NullInt64, source, author, license sql.NullString, updated sql.NullTime) *domain.ProductModel3D {
 	if !storeID.Valid || !objectKey.Valid || !sha.Valid || !size.Valid {
 		return nil
 	}
-	return &domain.ProductModel3D{StoreID: storeID.String, ObjectKey: objectKey.String, SHA256: sha.String, SizeBytes: size.Int64, SourceURL: source.String, Author: author.String, License: license.String, UpdatedAt: updated.Time}
+	return &domain.ProductModel3D{ResourceID: optionalUUID(resourceID), StoreID: storeID.String, ObjectKey: objectKey.String, SHA256: sha.String, SizeBytes: size.Int64, SourceURL: source.String, Author: author.String, License: license.String, UpdatedAt: updated.Time}
 }
 
 func nullString(value string) sql.NullString {
@@ -210,7 +208,7 @@ func (s *Store) ListVariants(ctx context.Context, tenantID string) ([]domain.Pro
 	}
 	result := make([]domain.ProductVariant, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, domain.ProductVariant{
+		result = append(result, domain.ProductVariant{Color: row.Color, Model3DResourceID: optionalUUID(row.Model3dResourceID),
 			ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(),
 			CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, ModelID: row.ModelID.String(), ModelName: row.ModelName,
 			Name: row.Name, CreatedAt: row.CreatedAt,
@@ -230,7 +228,7 @@ func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset
 	}
 	result := make([]domain.Asset, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, domain.Asset{
+		result = append(result, domain.Asset{Model3DResourceID: optionalUUID(row.Model3dResourceID),
 			ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(), Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 			ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID.String(), Variant: row.VariantName,
 			DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
@@ -262,7 +260,7 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 	result := application.AssetListResult{Assets: make([]application.AssetWithSummary, 0, len(rows)), Total: int(total)}
 	for _, row := range rows {
 		result.Assets = append(result.Assets, application.AssetWithSummary{
-			Asset: domain.Asset{
+			Asset: domain.Asset{Model3DResourceID: optionalUUID(row.Model3dResourceID),
 				ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(), Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 				ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID.String(), Variant: row.VariantName,
 				DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
@@ -297,16 +295,16 @@ func (s *Store) ListModelsWithVariants(ctx context.Context, tenantID string, opt
 			result.Total = int(row.TotalCount)
 		}
 		if _, ok := seen[row.ID]; !ok {
-			model := domain.ProductModel{
+			model := domain.ProductModel{Model3DResourceID: optionalUUID(row.Model3dResourceID),
 				ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(),
 				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: row.CreatedAt,
 			}
-			model.Model3D = postgresModel3D(row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
+			model.Model3D = postgresModel3D(row.Model3dResourceID, row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
 			result.Models = append(result.Models, model)
 			seen[row.ID] = struct{}{}
 		}
 		if row.VariantID.Valid {
-			result.Variants = append(result.Variants, domain.ProductVariant{
+			result.Variants = append(result.Variants, domain.ProductVariant{Color: row.VariantColor.String, Model3DResourceID: optionalUUID(row.VariantModel3dResourceID),
 				ID: row.VariantID.UUID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(),
 				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon,
 				ModelID: row.ID.String(), ModelName: row.Name, Name: row.VariantName.String, CreatedAt: row.VariantCreatedAt.Time,
@@ -336,4 +334,11 @@ func catalogIDs(id, tenantID string) (uuid.UUID, uuid.UUID, error) {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("parse tenant ID: %w", err)
 	}
 	return parsedID, parsedTenantID, nil
+}
+
+func optionalUUID(v uuid.NullUUID) string {
+	if !v.Valid {
+		return ""
+	}
+	return v.UUID.String()
 }

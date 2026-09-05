@@ -2,6 +2,7 @@
 <div class="page-heading">
   <div><p class="eyebrow">{{t $s "assets.concrete"}}</p><h1>{{.Asset.DisplayName}}</h1></div>
 	<div class="heading-actions asset-detail-actions">
+        {{if .CanManageCatalog}}<a class="button secondary" href="/admin/3d?kind=asset&amp;target={{.Asset.ID}}&amp;name={{.Asset.DisplayName}}">{{t $s "resource.manage_binding"}}</a>{{end}}
 		<a class="icon-button" href="/" aria-label="{{t $s "common.back_assets"}}" title="{{t $s "common.back_assets"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
 		</a>
@@ -11,14 +12,14 @@
 	</div>
 </div>
 <section class="card asset-profile">
-  <figure class="asset-product-visual{{if .Model3D}} has-model{{end}}"{{if .Model3D}} data-model-viewer data-model-url="/assets/{{.Asset.ID}}/model.glb?v={{.Model3D.SHA256}}"{{end}}>
+  <figure class="asset-product-visual{{if .Model3D}} has-model{{end}}"{{if .Model3D}} data-model-viewer data-model-loaded="{{t $s "resource.loaded"}}" data-model-error="{{t $s "resource.preview_error"}}" data-model-url="/assets/{{.Asset.ID}}/model.glb?v={{.Model3D.SHA256}}"{{end}}>
     <div class="asset-model-fallback" data-model-fallback>
       {{$productImage := productImage .Asset}}{{if $productImage}}<img class="asset-product-image" src="{{$productImage}}" alt="{{.Asset.Model}} · {{t $s "asset.model_image_caption"}}" width="1728" height="912" decoding="async" fetchpriority="high"><figcaption class="asset-product-caption">{{t $s "asset.model_image_caption"}}</figcaption>{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>{{end}}
     </div>
     {{if .Model3D}}
     <canvas class="asset-model-canvas" data-model-canvas aria-label="{{t $s "asset.model_3d_label"}}" tabindex="0"></canvas>
     <div class="asset-model-status" data-model-status role="status">{{t $s "asset.model_3d_loading"}}</div>
-    <div class="asset-model-controls"><span>{{t $s "asset.model_3d_hint"}}</span><button class="secondary auto" type="button" data-model-reset>{{t $s "asset.model_3d_reset"}}</button></div>
+    <div class="asset-model-controls"><span>{{t $s "resource.viewer_hint"}}</span><button class="secondary auto" type="button" data-model-reset>{{t $s "asset.model_3d_reset"}}</button></div>
     <script type="module" src="/static/asset-model-viewer.js"></script>
     {{end}}
   </figure>
@@ -34,6 +35,7 @@
       <div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
     </dl>
+    {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "variant"}}{{t $s "resource.source_variant"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>
 </section>
