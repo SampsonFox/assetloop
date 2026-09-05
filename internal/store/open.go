@@ -42,7 +42,19 @@ func Open(cfg config.Database) (*sql.DB, error) {
 }
 
 func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
-	if cfg.Driver == "sqlite" {
+	unlock, err := migrationLock(ctx, db, cfg.Driver)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	current, target, err := schemaVersions(ctx, db, cfg.Driver)
+	if err != nil {
+		return err
+	}
+	if current == target {
+		return nil
+	}
+	if cfg.Driver == "sqlite" && current > 0 {
 		if err := backupSQLite(ctx, db, cfg.DSN); err != nil {
 			return err
 		}
@@ -62,7 +74,43 @@ func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
 	if _, err := provider.Up(ctx); err != nil {
 		return fmt.Errorf("migrate %s: %w", cfg.Driver, err)
 	}
+	if cfg.Driver == "sqlite" {
+		if err := verifySQLite(ctx, db); err != nil {
+			return err
+		}
+	}
+	return CheckSchema(ctx, db, cfg.Driver)
+}
+
+// CheckSchema is read-only: application startup never initializes PostgreSQL tables.
+func CheckSchema(ctx context.Context, db *sql.DB, driver string) error {
+	current, target, err := schemaVersions(ctx, db, driver)
+	if err != nil {
+		return err
+	}
+	if current != target {
+		return fmt.Errorf("database schema %d requires migration to %d; run assetloop migrate", current, target)
+	}
 	return nil
+}
+
+func verifySQLite(ctx context.Context, db *sql.DB) error {
+	var result string
+	if err := db.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&result); err != nil {
+		return fmt.Errorf("check SQLite integrity: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("SQLite integrity check: %s", result)
+	}
+	rows, err := db.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return fmt.Errorf("check SQLite foreign keys: %w", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return fmt.Errorf("SQLite foreign key check failed")
+	}
+	return rows.Err()
 }
 
 func sqlitePath(dsn string) string {

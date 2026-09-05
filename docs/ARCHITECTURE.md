@@ -199,6 +199,16 @@ only after an explicit data-retention decision.
 - PostgreSQL production upgrades run once as a release job under an advisory lock.
 - Destructive changes use expand-contract across releases.
 
+Startup checks the complete applied migration history against the embedded versions and rejects
+unknown versions, missing earlier migrations, and (for PostgreSQL) pending migrations without
+changing database state. The explicit migration command takes a PostgreSQL session advisory lock
+scoped to the database and schema. SQLite takes a kernel file lock beside the canonical database
+path across inspection, backup, migration, and verification; a process crash releases this lock.
+An unchanged schema creates no backup. An existing SQLite schema is backed up with `VACUUM INTO`
+and the backup integrity is verified before an upgrade; this is a consistent database snapshot,
+not a filesystem copy. After migration, integrity and foreign-key checks must pass. Failure stops
+startup and retains the pre-upgrade backup for recovery.
+
 ### 7.3 Tenant boundary
 
 Every business row is tenant-owned. Local mode creates one default tenant; SaaS resolves tenant identity through authentication. No query or uniqueness rule may rely on an implicit single tenant.

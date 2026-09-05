@@ -29,7 +29,7 @@ func TestStoreConformanceAndSafeRemigration(t *testing.T) {
 		t.Fatalf("repeat migration: %v", err)
 	}
 	backups, err := filepath.Glob(path + ".backup-*")
-	if err != nil || len(backups) == 0 {
-		t.Fatalf("expected verified pre-upgrade backup, files=%v err=%v", backups, err)
+	if err != nil || len(backups) != 0 {
+		t.Fatalf("unchanged schema must not create upgrade backups, files=%v err=%v", backups, err)
 	}
 }

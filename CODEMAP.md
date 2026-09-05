@@ -62,6 +62,8 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 | `internal/application/*_test.go` | validation, exact money/FX conversion, auth, catalog, lifecycle, and role policy |
 | `internal/store/storetest/` | shared dual-database auth/catalog/lifecycle behavior, custom event types, bulk relation loading, server-side list query contracts, aggregate summaries, FX evidence, append-only correction, locks, and tenant isolation |
 | `internal/store/migration_upgrade_test.go` | previous-schema upgrades, including lifecycle-table expansion, without data loss |
+| `internal/store/schema.go`, `migration_lock*.go` | read-only schema compatibility checks and cross-process SQLite/PostgreSQL migration locks |
+| `internal/store/migration_safety_test.go`, `migration_lock_test.go` | concurrent upgrades, unchanged-schema backups, version rejection, recovery backups, and crash-released locks |
 | `internal/web/i18n.go` | registered locales, stable message keys, browser/cookie locale matching, and zh-CN fallback |
 | `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, FX confirmation, correction, import confirmation, totals, and role denial |
 | `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → catalog → foreign purchase → repair correction → sale scenario on both databases |

@@ -51,6 +51,9 @@ func run(args []string) error {
 				return err
 			}
 		}
+		if err := store.CheckSchema(context.Background(), db, cfg.Database.Driver); err != nil {
+			return err
+		}
 		var appStore interface {
 			application.Store
 			application.AuthStore
