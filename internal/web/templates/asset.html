@@ -39,9 +39,9 @@
   <form class="timeline-filters asset-search-shell" method="get" action="/assets/{{.Asset.ID}}#lifecycle-timeline">
     <label class="asset-search"><span>{{t $s "asset.search_events"}}</span><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "asset.search_events_placeholder"}}"></label>
     <div class="asset-filter-actions">
-      <button class="auto" type="submit">{{t $s "assets.search"}}</button>
+      <button class="icon-button" type="submit" aria-label="{{t $s "assets.search"}}" title="{{t $s "assets.search"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></button>
       <details class="asset-filter-disclosure {{if .TableAdvanced}}has-active{{end}}">
-        <summary class="button secondary auto"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>{{t $s "assets.more_filters"}}</span>{{if .TableAdvanced}}<small>{{t $s "assets.filters_active"}}</small>{{end}}</summary>
+        <summary class="icon-button" aria-label="{{t $s "assets.more_filters"}}{{if .TableAdvanced}} · {{t $s "assets.filters_active"}}{{end}}" title="{{t $s "assets.more_filters"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg></summary>
         <div class="asset-filter-panel timeline-filter-panel">
           <label><span>{{t $s "asset.event_type"}}</span><select name="event_type"><option value="">{{t $s "asset.all_event_types"}}</option>{{range .EventTypes}}<option value="{{.Name}}" {{if eq $.TableFilter .Name}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}</select></label>
           <label><span>{{t $s "table.sort"}}</span><select name="sort"><option value="occurred" {{if eq .TableSort "occurred"}}selected{{end}}>{{t $s "asset.time"}}</option><option value="amount" {{if eq .TableSort "amount"}}selected{{end}}>{{t $s "asset.base_amount"}}</option><option value="type" {{if eq .TableSort "type"}}selected{{end}}>{{t $s "asset.event_type"}}</option></select></label>
