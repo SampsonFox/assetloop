@@ -8,18 +8,21 @@
   <form class="form-grid section-gap" action="/events/{{$event.ID}}/correct" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="request_key" value="{{.EventForm.RequestKey}}">
-    <div class="form-field">
-      <label for="correction-amount">{{t $s "correct.amount"}}</label>
+    {{if eq .EventForm.Cashflow "neutral"}}
+    <input type="hidden" name="amount" value="0">
+    <input type="hidden" name="currency" value="{{.BaseCurrency}}">
+    {{else}}<div class="form-field">
+      <label for="correction-amount">{{t $s "asset.amount"}}</label>
       <div class="money-input-group">
-        <input id="correction-amount" name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required>
+        <input id="correction-amount" name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)" data-positive-pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)" title="{{t $s "validation.amount_positive"}}">
         <input class="currency-suffix" name="currency" value="{{.EventForm.Currency}}" list="correction-currencies" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" spellcheck="false" required data-currency-select data-base-currency="{{.BaseCurrency}}" aria-label="{{t $s "asset.original_currency"}}">
         <datalist id="correction-currencies">{{range currencyOptions}}<option value="{{.}}"></option>{{end}}</datalist>
       </div>
-    </div>
+    </div>{{end}}
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
-    <label data-fx-field hidden><span>{{t $s "correct.fx_rate"}}</span><span class="fx-rate-input-group" data-fx-rate-group><span class="fx-rate-addon">1 <span data-fx-rate-from>{{.EventForm.Currency}}</span> =</span><input type="number" name="fx_rate" value="{{.EventForm.FXRate}}" inputmode="decimal" min="0" step="any" placeholder="{{t $s "asset.fx_required"}}" data-fx-required><span class="fx-rate-addon">{{.BaseCurrency}}</span></span><output class="fx-conversion-preview" data-fx-result data-base-currency="{{.BaseCurrency}}" data-base-minor-units="{{currencyMinorUnits .BaseCurrency}}" aria-live="polite" hidden><span>{{t $s "asset.fx_result"}}</span><strong data-fx-result-value></strong></output></label>
+    {{if ne .EventForm.Cashflow "neutral"}}<label data-fx-field hidden><span>{{t $s "correct.fx_rate"}}</span><span class="fx-rate-input-group" data-fx-rate-group><span class="fx-rate-addon">1 <span data-fx-rate-from>{{.EventForm.Currency}}</span> =</span><input type="number" name="fx_rate" value="{{.EventForm.FXRate}}" inputmode="decimal" min="0" step="any" placeholder="{{t $s "asset.fx_required"}}" data-fx-required><span class="fx-rate-addon">{{.BaseCurrency}}</span></span><output class="fx-conversion-preview" data-fx-result data-base-currency="{{.BaseCurrency}}" data-base-minor-units="{{currencyMinorUnits .BaseCurrency}}" aria-live="polite" hidden><span>{{t $s "asset.fx_result"}}</span><strong data-fx-result-value></strong></output></label>
     <label data-fx-field hidden>{{t $s "asset.fx_date"}}<input type="date" name="fx_rate_date" value="{{.EventForm.FXRateDate}}" data-fx-required></label>
-    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" value="{{.EventForm.FXRateSource}}" data-fx-required></label>
+    <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" value="{{.EventForm.FXRateSource}}" data-fx-required></label>{{end}}
     <label>{{t $s "correct.source"}}<input name="source" value="{{.EventForm.Source}}"></label>
     <label class="wide">{{t $s "correct.notes"}}<textarea name="notes" required maxlength="2000" rows="3">{{.EventForm.Notes}}</textarea></label>
     <button type="submit">{{t $s "correct.submit"}}</button>

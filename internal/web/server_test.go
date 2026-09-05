@@ -648,10 +648,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以物品记录为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-summary"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以物品记录为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-summary"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-positive-pattern=`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
+	}
+	if strings.Contains(detail.Body.String(), "金额（正数）") {
+		t.Fatalf("the amount label must not repeat its positive-input constraint: %s", detail.Body.String())
 	}
 	if strings.Count(detail.Body.String(), `class="timeline-summary-item"`) != 3 || strings.Contains(detail.Body.String(), `cashflow-strip`) || strings.Index(detail.Body.String(), `class="timeline-summary"`) < strings.Index(detail.Body.String(), `id="lifecycle-timeline"`) {
 		t.Fatalf("asset cashflow summary must be a compact row inside the timeline: %s", detail.Body.String())
@@ -724,14 +727,18 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if len(correctionLinks) != 3 {
 		t.Fatalf("expected purchase, custom, and repair correction links: %s", detail.Body.String())
 	}
+	neutralCorrectionForm := request(t, handler, http.MethodGet, "/events/"+correctionLinks[1][1]+"/correct", nil, []*http.Cookie{ownerSession, csrf})
+	if neutralCorrectionForm.Code != http.StatusOK || !strings.Contains(neutralCorrectionForm.Body.String(), `type="hidden" name="amount" value="0"`) || strings.Contains(neutralCorrectionForm.Body.String(), `id="correction-amount"`) {
+		t.Fatalf("neutral event correction must not ask for a monetary amount: status=%d body=%s", neutralCorrectionForm.Code, neutralCorrectionForm.Body.String())
+	}
 	correctionForm := request(t, handler, http.MethodGet, "/events/"+correctionLinks[2][1]+"/correct", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`class="money-input-group"`, `class="currency-suffix"`, `list="correction-currencies"`, `aria-label="原始货币"`, `class="fx-rate-input-group"`, `1 <span data-fx-rate-from>CNY</span> =`, `type="number" name="fx_rate"`, `min="0" step="any"`, `class="fx-conversion-preview"`, `data-base-minor-units="2"`, `data-fx-result-value`} {
+	for _, want := range []string{`class="money-input-group"`, `class="currency-suffix"`, `list="correction-currencies"`, `aria-label="原始货币"`, `name="amount" value="200.00"`, `data-positive-pattern=`, `class="fx-rate-input-group"`, `1 <span data-fx-rate-from>CNY</span> =`, `type="number" name="fx_rate"`, `min="0" step="any"`, `class="fx-conversion-preview"`, `data-base-minor-units="2"`, `data-fx-result-value`} {
 		if correctionForm.Code != http.StatusOK || !strings.Contains(correctionForm.Body.String(), want) {
 			t.Fatalf("correction money input missing %q: status=%d body=%s", want, correctionForm.Code, correctionForm.Body.String())
 		}
 	}
 	interactionScript := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
-	for _, want := range []string{`unit.textContent = select.value.toUpperCase()`, `const decimalProduct =`, `BigInt(`, `syncFXPreview(form)`} {
+	for _, want := range []string{`unit.textContent = select.value.toUpperCase()`, `amount.removeAttribute("pattern")`, `amount.pattern = amount.dataset.positivePattern`, `const decimalProduct =`, `BigInt(`, `syncFXPreview(form)`} {
 		if interactionScript.Code != http.StatusOK || !strings.Contains(interactionScript.Body.String(), want) {
 			t.Fatalf("FX preview interaction missing %q: status=%d body=%s", want, interactionScript.Code, interactionScript.Body.String())
 		}

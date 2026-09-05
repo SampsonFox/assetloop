@@ -68,6 +68,10 @@ func (s *LifecycleService) Record(ctx context.Context, actor Principal, cmd Reco
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEvent{}, err
 	}
+	var err error
+	if cmd, err = normalizeRecordAmount(cmd); err != nil {
+		return domain.AssetEvent{}, err
+	}
 	return s.write(ctx, actor, "record", "", cmd, func(scoped *LifecycleService) (domain.AssetEvent, error) {
 		return scoped.record(ctx, actor, cmd)
 	})
@@ -95,9 +99,23 @@ func (s *LifecycleService) Correct(ctx context.Context, actor Principal, eventID
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEvent{}, err
 	}
+	var err error
+	if cmd, err = normalizeRecordAmount(cmd); err != nil {
+		return domain.AssetEvent{}, err
+	}
 	return s.write(ctx, actor, "correct", eventID, cmd, func(scoped *LifecycleService) (domain.AssetEvent, error) {
 		return scoped.correct(ctx, actor, eventID, cmd)
 	})
+}
+
+func normalizeRecordAmount(cmd RecordEvent) (RecordEvent, error) {
+	if cmd.AmountMinor == -1<<63 {
+		return RecordEvent{}, NewInputError("validation.amount_invalid")
+	}
+	if cmd.AmountMinor < 0 {
+		cmd.AmountMinor = -cmd.AmountMinor
+	}
+	return cmd, nil
 }
 
 func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID string, cmd RecordEvent) (domain.AssetEvent, error) {

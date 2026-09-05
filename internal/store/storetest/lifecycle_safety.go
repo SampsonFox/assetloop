@@ -38,7 +38,7 @@ func RunLifecycleRetries(t *testing.T, first, second Store) {
 		t.Fatal(err)
 	}
 	services := []*application.LifecycleService{application.NewLifecycleService(first), application.NewLifecycleService(second)}
-	cmd := application.RecordEvent{RequestKey: "purchase-retry", AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 10000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)}
+	cmd := application.RecordEvent{RequestKey: "purchase-retry", AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: -10000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC)}
 	type result struct {
 		event domain.AssetEvent
 		err   error
@@ -58,7 +58,15 @@ func RunLifecycleRetries(t *testing.T, first, second Store) {
 		if purchase.ID != "" && got.event.ID != purchase.ID {
 			t.Fatal("retry created another event")
 		}
+		if got.event.BaseAmountMinor != -10000 {
+			t.Fatalf("purchase amount direction was not derived from its event type: %+v", got.event)
+		}
 		purchase = got.event
+	}
+	positiveRetry := cmd
+	positiveRetry.AmountMinor = 10000
+	if got, err := services[1].Record(ctx, owner, positiveRetry); err != nil || got.ID != purchase.ID {
+		t.Fatalf("equivalent signed amount did not reuse the normalized request: %+v %v", got, err)
 	}
 	cmd.AmountMinor++
 	if _, err := services[0].Record(ctx, owner, cmd); err == nil {
@@ -74,14 +82,14 @@ func RunLifecycleRetries(t *testing.T, first, second Store) {
 	repair := cmd
 	repair.RequestKey = "repair-retry"
 	repair.Type = domain.AssetEventRepair
-	repair.AmountMinor = -1
+	repair.AmountMinor = 0
 	if _, err := services[0].Record(ctx, owner, repair); err == nil {
-		t.Fatal("invalid amount accepted")
+		t.Fatal("zero amount accepted for an expense event")
 	}
-	repair.AmountMinor = 200
+	repair.AmountMinor = -200
 	maintenance, err := services[0].Record(ctx, owner, repair)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || maintenance.BaseAmountMinor != -200 {
+		t.Fatalf("negative command amount was not normalized by expense direction: %+v %v", maintenance, err)
 	}
 	replayed, err := services[1].Record(ctx, owner, repair)
 	if err != nil || replayed.ID != maintenance.ID {
@@ -89,10 +97,10 @@ func RunLifecycleRetries(t *testing.T, first, second Store) {
 	}
 	correction := repair
 	correction.RequestKey = "correction-retry"
-	correction.AmountMinor = 150
+	correction.AmountMinor = -150
 	replacement, err := services[0].Correct(ctx, owner, maintenance.ID, correction)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || replacement.BaseAmountMinor != -150 {
+		t.Fatalf("negative correction amount was not normalized by expense direction: %+v %v", replacement, err)
 	}
 	for i := range 6 {
 		go func() {

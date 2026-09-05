@@ -68,9 +68,9 @@
     <div class="form-field"><div class="field-heading"><label for="event-type-select">{{t $s "asset.event_type"}}</label><button class="link-button" type="button" data-dialog-open="event-type-drawer" data-title="{{t $s "asset.event_type_create"}}" data-action="/admin/event-types" aria-controls="event-type-drawer">{{t $s "asset.event_type_add"}}</button></div><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}<option value="{{.Name}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .Name}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}</select></div>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
     <div class="form-field" data-money-field>
-      <label for="event-amount">{{t $s "asset.amount_positive"}}</label>
+      <label for="event-amount">{{t $s "asset.amount"}}</label>
       <div class="money-input-group">
-        <input id="event-amount" name="amount" inputmode="decimal" required placeholder="6999.00" value="{{.EventForm.Amount}}">
+        <input id="event-amount" name="amount" inputmode="decimal" required pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)" data-positive-pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)" title="{{t $s "validation.amount_positive"}}" placeholder="6999.00" value="{{.EventForm.Amount}}">
         <input class="currency-suffix" name="currency" value="{{.EventForm.Currency}}" list="event-currencies" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" spellcheck="false" required data-currency-select data-base-currency="{{.BaseCurrency}}" aria-label="{{t $s "asset.original_currency"}}">
         <datalist id="event-currencies">{{range currencyOptions}}<option value="{{.}}"></option>{{end}}</datalist>
       </div>

@@ -66,9 +66,11 @@
         if (amount.value !== "0") amount.dataset.previousValue = amount.value;
         amount.value = "0";
         amount.required = false;
+        amount.removeAttribute("pattern");
       } else {
         if (amount.value === "0") amount.value = amount.dataset.previousValue || "";
         amount.required = true;
+        amount.pattern = amount.dataset.positivePattern;
       }
     }
     const currency = select.form.querySelector("[data-currency-select]");

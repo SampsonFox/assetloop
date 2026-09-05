@@ -124,6 +124,7 @@ type pageData struct {
 type eventFormData struct {
 	RequestKey        string
 	Type              string
+	Cashflow          string
 	OccurredAt        string
 	Amount            string
 	Currency          string
@@ -577,6 +578,17 @@ func (s *Server) renderCorrectionForm(w http.ResponseWriter, r *http.Request, st
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	eventTypes, err := s.lifecycle.EventTypes(r.Context(), principal)
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	for _, eventType := range eventTypes {
+		if eventType.Name == string(event.Type) {
+			form.Cashflow = string(eventType.Cashflow)
+			break
+		}
+	}
 	s.render(w, status, "event_correct", pageData{
 		Title: textFor(principal.Locale, "correct.heading"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Events: []domain.AssetEvent{event}, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked, EventForm: form,
@@ -586,7 +598,7 @@ func (s *Server) renderCorrectionForm(w http.ResponseWriter, r *http.Request, st
 
 func eventFormForCorrection(event domain.AssetEvent) eventFormData {
 	currency, amountMinor := event.BaseCurrency, event.BaseAmountMinor
-	form := eventFormData{RequestKey: randomToken(), OccurredAt: event.OccurredAt.Local().Format("2006-01-02T15:04"), Source: "manual-correction"}
+	form := eventFormData{RequestKey: randomToken(), Type: string(event.Type), OccurredAt: event.OccurredAt.Local().Format("2006-01-02T15:04"), Source: "manual-correction"}
 	if event.FX != nil {
 		currency, amountMinor = event.FX.OriginalCurrency, event.FX.OriginalAmountMinor
 		form.FXRate = formatRate(event.FX.RateScaled)
@@ -594,7 +606,7 @@ func eventFormForCorrection(event domain.AssetEvent) eventFormData {
 		form.FXRateSource = event.FX.RateSource
 	}
 	form.Currency = currency
-	form.Amount = strings.TrimSuffix(domain.FormatMinor(amountMinor, currency), " "+currency)
+	form.Amount = strings.TrimPrefix(strings.TrimSuffix(domain.FormatMinor(amountMinor, currency), " "+currency), "-")
 	return form
 }
 

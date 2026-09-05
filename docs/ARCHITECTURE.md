@@ -140,6 +140,12 @@ later configuration cannot rewrite history. Neutral events persist a zero amount
 tenant base currency. Custom types do not implicitly change the built-in acquired, repairing, or sold
 status transitions.
 
+Lifecycle commands treat a supplied monetary amount as an unsigned magnitude. Before idempotency
+fingerprinting, conversion, or persistence, the application service takes its absolute value and then
+derives the stored sign exclusively from the resolved event type's cash-flow effect: expenses are
+negative, income is positive, and neutral events are zero. Web controls accept only positive input,
+while MCP and other transport adapters receive the same normalization through the shared use case.
+
 ## 6. Money architecture
 
 Money is represented as:

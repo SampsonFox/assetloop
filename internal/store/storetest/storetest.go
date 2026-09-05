@@ -42,7 +42,7 @@ func runLifecycle(t *testing.T, store Store) {
 	asset := snapshot.Assets[0]
 	service := application.NewLifecycleService(store)
 	purchase, err := service.Record(ctx, owner, application.RecordEvent{
-		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 10_000, Currency: "USD",
+		AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: -10_000, Currency: "USD",
 		FXRateScaled: 710_000_000, FXRateDate: time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
 		FXRateSource: "store-test", FXConfirmed: true, OccurredAt: time.Date(2026, 8, 2, 0, 0, 0, 0, time.UTC),
 		Source: "manual", ExternalReference: "ORDER-001", Notes: "purchase",
@@ -50,7 +50,7 @@ func runLifecycle(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("record foreign-currency purchase: %v", err)
 	}
-	if purchase.BaseAmountMinor != -71_000 || purchase.FX == nil || purchase.FX.OriginalCurrency != "USD" {
+	if purchase.BaseAmountMinor != -71_000 || purchase.FX == nil || purchase.FX.OriginalAmountMinor != 10_000 || purchase.FX.OriginalCurrency != "USD" {
 		t.Fatalf("purchase conversion evidence mismatch: %+v", purchase)
 	}
 	maintenanceType, err := service.CreateEventType(ctx, owner, application.CreateAssetEventType{Name: "保养", Cashflow: domain.AssetEventNeutral})
@@ -76,7 +76,7 @@ func runLifecycle(t *testing.T, store Store) {
 		t.Fatalf("base currency should lock after first money event: locked=%v err=%v", locked, err)
 	}
 	repair, err := service.Record(ctx, owner, application.RecordEvent{
-		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: 20_000, Currency: "CNY",
+		AssetID: asset.ID, Type: domain.AssetEventRepair, AmountMinor: -20_000, Currency: "CNY",
 		OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "screen repair",
 	})
 	if err != nil {
@@ -84,7 +84,7 @@ func runLifecycle(t *testing.T, store Store) {
 	}
 	time.Sleep(time.Millisecond)
 	replacement, err := service.Correct(ctx, owner, repair.ID, application.RecordEvent{
-		AmountMinor: 15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "corrected repair",
+		AmountMinor: -15_000, Currency: "CNY", OccurredAt: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC), Notes: "corrected repair",
 	})
 	if err != nil {
 		t.Fatalf("correct repair: %v", err)
@@ -101,7 +101,7 @@ func runLifecycle(t *testing.T, store Store) {
 		t.Fatalf("repairing asset list mismatch: result=%+v err=%v", repairingList, err)
 	}
 	sale, err := service.Record(ctx, owner, application.RecordEvent{
-		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: 800_000, Currency: "CNY",
+		AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: -800_000, Currency: "CNY",
 		OccurredAt: time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC), Source: "ai-harness",
 		ExternalReference: "SALE-001", Notes: "user-confirmed sale",
 	})
