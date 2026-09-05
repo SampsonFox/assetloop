@@ -64,6 +64,10 @@ A work-branch push runs `secret-scan` only. The full Go suite, PostgreSQL compat
 
 Passing a narrow test, finishing one bug fix, or pushing a checkpoint does not imply that development is finished. Only the user's explicit UAT-checkpoint instruction starts promotion.
 
+## Local preview launch safety
+
+When restarting an existing preview, preserve its verified database and blob directory. Pass the explicit `serve` argument and absolute `DB_DSN` (for SQLite) and `ATTACHMENT_LOCAL_ROOT` values. A no-argument Windows launch can enter double-click mode and change the working directory to the executable's directory; relative blob paths can then point at an empty `bin/data/blobs` directory even while the database remains readable. After restart, verify an existing asset's GLB endpoint returns its expected bytes, not only that the HTML page loads. Do not create a replacement preview database or relocate blobs to compensate for an incorrect launch directory.
+
 ## Promotion
 
 1. After the user explicitly identifies the accumulated batch as a UAT checkpoint, run formatting, sqlc generation, tests, vet, secret scanning, the full-element scenario, and the relevant local smoke test.

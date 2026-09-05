@@ -59,7 +59,7 @@ function viewer({ reduced = false, webgl = true, width = 500, height = 300, dime
     THREE: { ...math, WebGLRenderer: Renderer }, OrbitControls: Controls, GLTFLoader: Loader,
     document: doc,
     window: { devicePixelRatio: 1, matchMedia: () => motion, setTimeout() {}, addEventListener() {} },
-    ResizeObserver: class { observe() {} disconnect() {} },
+    ResizeObserver: class { constructor(fn) { state.resize = fn; } observe() {} disconnect() {} },
     IntersectionObserver: class { constructor(fn) { state.intersection = fn; } observe() {} disconnect() {} },
     requestAnimationFrame: (fn) => { frames.set(++nextFrame, fn); return nextFrame; },
     cancelAnimationFrame: (id) => frames.delete(id),
@@ -77,6 +77,7 @@ function viewer({ reduced = false, webgl = true, width = 500, height = 300, dime
   };
   return {
     state, status, canvas, classes, motion, flush, doc, rotate,
+    resize(w, h) { width = w; height = h; state.resize(); flush(); },
     ready() { state.success({ scene: new math.Mesh(new math.BoxGeometry(...dimensions)) }); flush(); },
     key(key) { let prevented = false; listeners.get('keydown')({ key, preventDefault() { prevented = true; } }); flush(); return prevented; },
   };
@@ -135,6 +136,11 @@ test('both viewer surfaces expose a keyboard-accessible autoplay toggle', () => 
     const html = readFileSync(new URL(`./templates/${template}.html`, import.meta.url), 'utf8');
     assert.match(html, /<button[^>]*data-model-rotate[^>]*aria-pressed="true"/);
     assert.match(html, /resource.auto_rotate/);
+    const toggle = html.match(/<button[^>]*data-model-rotate[\s\S]*?<\/button>/)?.[0];
+    assert.match(toggle, /aria-label=/);
+    assert.match(toggle, /class="model-pause"/);
+    assert.match(toggle, /class="model-play"/);
+    assert.equal(toggle.replace(/<[^>]*>/g, '').trim(), '');
     const reset = html.match(/<button[^>]*data-model-reset[\s\S]*?<\/button>/)?.[0];
     assert.ok(reset, 'Reset button is present');
     assert.match(reset, /class="icon-button"/);
@@ -143,6 +149,22 @@ test('both viewer surfaces expose a keyboard-accessible autoplay toggle', () => 
     assert.match(reset, /<svg[^>]*aria-hidden="true"/);
     assert.equal(reset.replace(/<[^>]*>/g, '').trim(), '', 'Reset is icon-only');
   }
+});
+
+test('resize refits reset framing while preserving the user zoom ratio', () => {
+  const v = viewer({ reduced: true, width: 500, height: 500, dimensions: [1, 7, 1] }); v.ready();
+  v.key('+');
+  v.resize(240, 300);
+  const zoomedDistance = v.state.position.length();
+  v.state.reset(); v.flush();
+  assert.ok(Math.abs(zoomedDistance / v.state.position.length() - 0.9) < 1e-9);
+});
+
+test('compact controls reveal on hover or keyboard focus and remain available on touch', () => {
+  const css = readFileSync(new URL('./static/app.css', import.meta.url), 'utf8');
+  assert.match(css, /@media \(hover:hover\) and \(pointer:fine\)/);
+  assert.match(css, /\.asset-product-visual:focus-within \.asset-model-controls/);
+  assert.match(css, /flex-wrap:nowrap/);
 });
 
 test('selected-resource failure leaves the fallback and never loads another resource', () => {
@@ -166,12 +188,15 @@ test('initial framing fits every bounding-box corner on narrow and wide stages w
   for (const [width, height] of [[240, 500], [1200, 260]]) {
     for (const dimensions of [[2, 2, 2], [8, 1, 3], [1, 7, 1]]) {
       const v = viewer({ width, height, dimensions }); v.ready();
+      let extent = 0;
       for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
         const corner = new math.Vector3(x * dimensions[0] / 2, y * dimensions[1] / 2, z * dimensions[2] / 2).project(v.state.camera);
-        assert.ok(Math.abs(corner.x) <= 0.7 && Math.abs(corner.y) <= 0.7,
+        extent = Math.max(extent, Math.abs(corner.x), Math.abs(corner.y));
+        assert.ok(Math.abs(corner.x) <= 0.750001 && Math.abs(corner.y) <= 0.750001,
           `Clipped or crowded corner at ${width}×${height}: ${corner.toArray()}`);
         assert.ok(corner.z > -1 && corner.z < 1, 'Corner outside camera clipping planes');
       }
+      assert.ok(Math.abs(extent - 0.75) < 0.00001, 'Initial view must fill 75% on the limiting axis');
     }
   }
 });

@@ -49,6 +49,31 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   scene.add(fill);
 
   let home = null;
+  let modelSize = null;
+  const fitView = () => {
+    if (!modelSize) return;
+    const direction = new THREE.Vector3(0.72, 0.2, 1).normalize();
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), direction).normalize();
+    const up = new THREE.Vector3().crossVectors(direction, right);
+    const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+    let distance = 0;
+    // Fit the projected box to 75% of the canvas, not an oversized enclosing sphere.
+    for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+      const corner = new THREE.Vector3(x * modelSize.x / 2, y * modelSize.y / 2, z * modelSize.z / 2);
+      distance = Math.max(distance, corner.dot(direction) + Math.max(Math.abs(corner.dot(right)) / (tanV * camera.aspect * 0.75), Math.abs(corner.dot(up)) / (tanV * 0.75)));
+    }
+    const radius = modelSize.length() * 0.5 || 1;
+    distance = Math.max(distance, radius);
+    const zoom = home ? camera.position.distanceTo(controls.target) / home.position.length() : 1;
+    const currentDirection = home ? camera.position.clone().sub(controls.target).normalize() : direction;
+    home = { position: direction.clone().multiplyScalar(distance), target: new THREE.Vector3() };
+    camera.near = Math.max(radius / 100, 0.001);
+    camera.far = Math.max(distance * 20, 100);
+    controls.minDistance = radius * 0.7;
+    controls.maxDistance = distance * 4;
+    camera.position.copy(controls.target).add(currentDirection.clone().multiplyScalar(Math.max(controls.minDistance, Math.min(controls.maxDistance, distance * zoom))));
+    camera.updateProjectionMatrix();
+  };
   const render = (time) => {
     frame = 0;
     if (failed || !visible || document.hidden) { previousTime = null; return; }
@@ -82,8 +107,10 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   const resize = () => {
     const { width, height } = root.getBoundingClientRect();
     if (!width || !height) return;
-    renderer.setSize(width, height, false);
-    camera.aspect = width / height;
+    const canvasHeight = Math.max(height - 56, 1);
+    renderer.setSize(width, canvasHeight, false);
+    camera.aspect = width / canvasHeight;
+    fitView();
     camera.updateProjectionMatrix();
     requestRender();
   };
@@ -99,20 +126,10 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     const size = box.getSize(new THREE.Vector3());
     object.position.sub(center);
     scene.add(object);
-    const radius = size.length() * 0.5 || 1;
-    const verticalHalfFOV = THREE.MathUtils.degToRad(camera.fov * 0.5);
-    const horizontalHalfFOV = Math.atan(Math.tan(verticalHalfFOV) * camera.aspect);
-    // Fit the enclosing sphere in both axes, leaving room for the controls.
-    const distance = radius / Math.sin(Math.min(verticalHalfFOV, horizontalHalfFOV)) * 1.5;
-    camera.near = Math.max(radius / 100, 0.001);
-    camera.far = Math.max(distance * 20, 100);
-    camera.position.set(0.72, 0.2, 1).normalize().multiplyScalar(distance);
-    camera.updateProjectionMatrix();
     controls.target.set(0, 0, 0);
-    controls.minDistance = radius * 0.7;
-    controls.maxDistance = distance * 4;
+    modelSize = size;
+    fitView();
     controls.update();
-    home = { position: camera.position.clone(), target: controls.target.clone() };
     motionChanged();
     root.classList.add('is-ready');
     status.textContent = root.dataset.modelLoaded;
