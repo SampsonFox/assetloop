@@ -6,6 +6,16 @@ import * as math from './static/vendor/three-0.180.0/three.module.min.js';
 
 const source = readFileSync(new URL('./static/asset-model-viewer.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '');
 
+test('viewer stage inherits the theme accent surface without an opaque WebGL background', () => {
+  const css = readFileSync(new URL('./static/app.css', import.meta.url), 'utf8');
+  assert.match(css, /--product-stage:\s*var\(--accent-soft\)/);
+  assert.match(css, /background:var\(--product-stage\)/);
+  assert.match(source, /alpha: true/);
+  assert.doesNotMatch(source, /scene\.background\s*=|setClearColor\(/);
+  assert.match(css, /--accent-soft:var\(--accent-light-soft\)/);
+  assert.equal((css.match(/--accent-soft:var\(--accent-dark-soft\)/g) || []).length, 2);
+});
+
 function viewer({ reduced = false, webgl = true, width = 500, height = 300, dimensions = [2, 2, 2] } = {}) {
   const listeners = new Map();
   const frames = new Map();

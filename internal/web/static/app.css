@@ -8,7 +8,7 @@
   --danger:#a52c2c; --danger-bg:#fff0f0; --danger-line:#f2caca;
   --warning:#8a5a00; --warning-soft:#fff1cc;
   --income-soft:#e3f4e8; --void-soft:#ececec; --void-ink:#666;
-  --hover:rgba(0,0,0,.04); --segment-track:#f0f0f0; --segment-selected:#fff; --product-stage:#000;
+  --hover:rgba(0,0,0,.04); --segment-track:#f0f0f0; --segment-selected:#fff; --product-stage:var(--accent-soft);
   --shadow:rgba(23,33,29,.07); --popup-shadow:rgba(0,0,0,.12); --drawer-shadow:rgba(23,33,29,.16); --backdrop:rgba(23,33,29,.38);
 }
 :root[data-accent="blue"] { --accent-light:#245fb5; --accent-light-soft:#e5efff; --accent-dark:#82b1ff; --accent-dark-contrast:#0d1c34; --accent-dark-soft:#203653; }
