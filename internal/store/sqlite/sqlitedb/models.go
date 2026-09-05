@@ -153,4 +153,5 @@ type User struct {
 	CreatedAt          string
 	Locale             string
 	Theme              string
+	Accent             string
 }

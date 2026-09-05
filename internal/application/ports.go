@@ -20,7 +20,7 @@ type AuthStore interface {
 	CreateSession(context.Context, Session) error
 	GetSessionPrincipal(context.Context, string, time.Time) (Principal, error)
 	DeleteSession(context.Context, string) error
-	UpdateUserPreferences(context.Context, string, Locale, Theme) error
+	UpdateUserPreferences(context.Context, string, Locale, Theme, Accent) error
 	CreateMember(context.Context, User, Membership, SecurityEvent) error
 	ListMembers(context.Context, string, MemberListOptions) (MemberListResult, error)
 	RecordSecurityEvent(context.Context, SecurityEvent) error

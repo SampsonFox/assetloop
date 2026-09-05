@@ -43,6 +43,16 @@ const (
 	ThemeDark   Theme = "dark"
 )
 
+type Accent string
+
+const (
+	AccentEmerald Accent = "emerald"
+	AccentBlue    Accent = "blue"
+	AccentViolet  Accent = "violet"
+	AccentAmber   Accent = "amber"
+	AccentRose    Accent = "rose"
+)
+
 type Capability string
 
 const (
@@ -68,6 +78,7 @@ type Principal struct {
 	Role       Role
 	Locale     Locale
 	Theme      Theme
+	Accent     Accent
 }
 
 func (p Principal) Can(capability Capability) bool {
@@ -107,6 +118,7 @@ type User struct {
 	PasswordHash       string
 	Locale             Locale
 	Theme              Theme
+	Accent             Accent
 	CreatedAt          time.Time
 }
 
@@ -175,6 +187,7 @@ type AddMember struct {
 type UpdatePreferences struct {
 	Locale Locale
 	Theme  Theme
+	Accent Accent
 }
 
 type AuthService struct {
@@ -220,7 +233,7 @@ func (s *AuthService) Setup(ctx context.Context, cmd SetupAuth) (SessionCredenti
 	if err := s.store.BootstrapAuth(ctx, tenant, user, membership, event); err != nil {
 		return SessionCredential{}, fmt.Errorf("bootstrap authentication: %w", err)
 	}
-	return s.issueSession(ctx, Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: RoleOwner, Locale: user.Locale, Theme: user.Theme})
+	return s.issueSession(ctx, Principal{TenantID: tenant.ID, TenantName: tenant.Name, UserID: user.ID, Username: user.Username, Role: RoleOwner, Locale: user.Locale, Theme: user.Theme, Accent: user.Accent})
 }
 
 func (s *AuthService) EnsureDisabledPrincipal(ctx context.Context) (Principal, error) {
@@ -231,7 +244,7 @@ func (s *AuthService) EnsureDisabledPrincipal(ctx context.Context) (Principal, e
 	if needsSetup {
 		now := s.now().UTC()
 		tenant := Tenant{ID: "00000000-0000-4000-8000-000000000001", Name: "Local", BaseCurrency: "CNY", CreatedAt: now}
-		user := User{ID: "00000000-0000-4000-8000-000000000002", Username: "local", UsernameNormalized: "local", PasswordHash: "disabled", Locale: LocaleZhCN, Theme: ThemeSystem, CreatedAt: now}
+		user := User{ID: "00000000-0000-4000-8000-000000000002", Username: "local", UsernameNormalized: "local", PasswordHash: "disabled", Locale: LocaleZhCN, Theme: ThemeSystem, Accent: AccentEmerald, CreatedAt: now}
 		membership := Membership{TenantID: tenant.ID, UserID: user.ID, Role: RoleOwner, CreatedAt: now}
 		event := SecurityEvent{ID: newID(), TenantID: tenant.ID, ActorUserID: user.ID, Action: "auth.disabled_bootstrap", TargetUserID: user.ID, OccurredAt: now}
 		if err := s.store.BootstrapAuth(ctx, tenant, user, membership, event); err != nil {
@@ -301,10 +314,13 @@ func (s *AuthService) UpdatePreferences(ctx context.Context, actor Principal, cm
 	if !validTheme(cmd.Theme) {
 		return Principal{}, NewInputError("validation.theme_invalid")
 	}
-	if err := s.store.UpdateUserPreferences(ctx, actor.UserID, cmd.Locale, cmd.Theme); err != nil {
+	if !validAccent(cmd.Accent) {
+		return Principal{}, NewInputError("validation.accent_invalid")
+	}
+	if err := s.store.UpdateUserPreferences(ctx, actor.UserID, cmd.Locale, cmd.Theme, cmd.Accent); err != nil {
 		return Principal{}, fmt.Errorf("update user preferences: %w", err)
 	}
-	actor.Locale, actor.Theme = cmd.Locale, cmd.Theme
+	actor.Locale, actor.Theme, actor.Accent = cmd.Locale, cmd.Theme, cmd.Accent
 	return actor, nil
 }
 
@@ -374,7 +390,7 @@ func newUser(username, password string, now time.Time) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
-	return User{ID: newID(), Username: strings.TrimSpace(username), UsernameNormalized: normalized, PasswordHash: hash, Locale: LocaleZhCN, Theme: ThemeSystem, CreatedAt: now}, nil
+	return User{ID: newID(), Username: strings.TrimSpace(username), UsernameNormalized: normalized, PasswordHash: hash, Locale: LocaleZhCN, Theme: ThemeSystem, Accent: AccentEmerald, CreatedAt: now}, nil
 }
 
 func validLocale(locale Locale) bool {
@@ -383,6 +399,10 @@ func validLocale(locale Locale) bool {
 
 func validTheme(theme Theme) bool {
 	return theme == ThemeSystem || theme == ThemeLight || theme == ThemeDark
+}
+
+func validAccent(accent Accent) bool {
+	return accent == AccentEmerald || accent == AccentBlue || accent == AccentViolet || accent == AccentAmber || accent == AccentRose
 }
 
 func normalizeUsername(value string) (string, error) {

@@ -392,12 +392,12 @@ func runAuth(t *testing.T, store Store) {
 	if err != nil || got != credential.Principal {
 		t.Fatalf("session principal mismatch: got=%+v want=%+v err=%v", got, credential.Principal, err)
 	}
-	got, err = service.UpdatePreferences(ctx, got, application.UpdatePreferences{Locale: application.LocaleEn, Theme: application.ThemeDark})
+	got, err = service.UpdatePreferences(ctx, got, application.UpdatePreferences{Locale: application.LocaleEn, Theme: application.ThemeDark, Accent: application.AccentBlue})
 	if err != nil {
 		t.Fatalf("update preferences: %v", err)
 	}
 	got, err = service.Authenticate(ctx, credential.Token)
-	if err != nil || got.Locale != application.LocaleEn || got.Theme != application.ThemeDark {
+	if err != nil || got.Locale != application.LocaleEn || got.Theme != application.ThemeDark || got.Accent != application.AccentBlue {
 		t.Fatalf("stored preferences mismatch: principal=%+v err=%v", got, err)
 	}
 	if _, err := service.AddMember(ctx, got, application.AddMember{Username: "store-viewer", Password: "store viewer password", Role: application.RoleViewer}); err != nil {

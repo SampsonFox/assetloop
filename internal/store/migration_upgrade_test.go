@@ -65,6 +65,27 @@ func TestUpgradeExistingUserGetsSafePreferences(t *testing.T) {
 	})
 }
 
+func TestUpgradeExistingPreferencesGetsSafeAccent(t *testing.T) {
+	for _, driver := range []string{"sqlite", "postgres"} {
+		t.Run(driver, func(t *testing.T) {
+			cfg := config.Database{Driver: driver, DSN: filepath.Join(t.TempDir(), "accent-upgrade.db")}
+			if driver == "postgres" {
+				dsn := os.Getenv("TEST_POSTGRES_DSN")
+				if dsn == "" {
+					if os.Getenv("REQUIRE_POSTGRES_TEST") == "true" {
+						t.Fatal("TEST_POSTGRES_DSN is required for PostgreSQL migration upgrade coverage")
+					}
+					t.Skip("TEST_POSTGRES_DSN is not set")
+				}
+				var cleanup func()
+				cfg, cleanup = postgresUpgradeSchema(t, dsn)
+				defer cleanup()
+			}
+			runAccentUpgradeTest(t, cfg)
+		})
+	}
+}
+
 func TestUpgradeCustomEventTypesPreservesLifecycle(t *testing.T) {
 	t.Run("sqlite", func(t *testing.T) {
 		runCustomEventTypeUpgradeTest(t, config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "event-types-upgrade.db")})
@@ -208,6 +229,34 @@ func runUserPreferencesUpgradeTest(t *testing.T, cfg config.Database) {
 	}
 	if username != "Existing User" || passwordHash != "preserved-hash" || locale != "zh-CN" || theme != "system" {
 		t.Fatalf("unexpected upgraded user: username=%q hash=%q locale=%q theme=%q", username, passwordHash, locale, theme)
+	}
+}
+
+func runAccentUpgradeTest(t *testing.T, cfg config.Database) {
+	t.Helper()
+	db, err := basestore.Open(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	applyMigrationsThrough(t, db, cfg.Driver, 8)
+	createdAt := any("2026-09-01T00:00:00Z")
+	if cfg.Driver == "postgres" {
+		createdAt = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	}
+	if _, err := db.Exec("INSERT INTO users (id, username, username_normalized, password_hash, locale, theme, created_at) VALUES ("+values(cfg.Driver, 7)+")",
+		"88888888-8888-4888-8888-888888888888", "Accent User", "accent-user", "preserved-hash", "en", "dark", createdAt); err != nil {
+		t.Fatalf("seed existing preferences: %v", err)
+	}
+	if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
+		t.Fatalf("upgrade user accent: %v", err)
+	}
+	var locale, theme, accent string
+	if err := db.QueryRow("SELECT locale, theme, accent FROM users WHERE id = "+upgradePlaceholder(cfg.Driver), "88888888-8888-4888-8888-888888888888").Scan(&locale, &theme, &accent); err != nil {
+		t.Fatalf("read upgraded accent: %v", err)
+	}
+	if locale != "en" || theme != "dark" || accent != "emerald" {
+		t.Fatalf("unexpected upgraded preferences: locale=%q theme=%q accent=%q", locale, theme, accent)
 	}
 }
 

@@ -404,8 +404,8 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) erro
 }
 
 const createUser = `-- name: CreateUser :exec
-INSERT INTO users (id, username, username_normalized, password_hash, locale, theme, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO users (id, username, username_normalized, password_hash, locale, theme, accent, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateUserParams struct {
@@ -415,6 +415,7 @@ type CreateUserParams struct {
 	PasswordHash       string
 	Locale             string
 	Theme              string
+	Accent             string
 	CreatedAt          string
 }
 
@@ -426,6 +427,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.PasswordHash,
 		arg.Locale,
 		arg.Theme,
+		arg.Accent,
 		arg.CreatedAt,
 	)
 	return err
@@ -589,7 +591,7 @@ func (q *Queries) EnsureVariant(ctx context.Context, arg EnsureVariantParams) (s
 }
 
 const findAccountByUsername = `-- name: FindAccountByUsername :one
-SELECT u.id AS user_id, u.username, u.password_hash, u.locale, u.theme,
+SELECT u.id AS user_id, u.username, u.password_hash, u.locale, u.theme, u.accent,
        tm.tenant_id, tm.role, t.name AS tenant_name
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
@@ -605,6 +607,7 @@ type FindAccountByUsernameRow struct {
 	PasswordHash string
 	Locale       string
 	Theme        string
+	Accent       string
 	TenantID     string
 	Role         string
 	TenantName   string
@@ -619,6 +622,7 @@ func (q *Queries) FindAccountByUsername(ctx context.Context, usernameNormalized 
 		&i.PasswordHash,
 		&i.Locale,
 		&i.Theme,
+		&i.Accent,
 		&i.TenantID,
 		&i.Role,
 		&i.TenantName,
@@ -651,7 +655,7 @@ func (q *Queries) FindLifecycleRequest(ctx context.Context, arg FindLifecycleReq
 
 const firstPrincipal = `-- name: FirstPrincipal :one
 SELECT tm.tenant_id, u.id AS user_id, u.username, tm.role, t.name AS tenant_name,
-       u.locale, u.theme
+       u.locale, u.theme, u.accent
 FROM users u
 JOIN tenant_memberships tm ON tm.user_id = u.id
 JOIN tenants t ON t.id = tm.tenant_id
@@ -667,6 +671,7 @@ type FirstPrincipalRow struct {
 	TenantName string
 	Locale     string
 	Theme      string
+	Accent     string
 }
 
 func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error) {
@@ -680,6 +685,7 @@ func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error)
 		&i.TenantName,
 		&i.Locale,
 		&i.Theme,
+		&i.Accent,
 	)
 	return i, err
 }
@@ -912,7 +918,7 @@ func (q *Queries) GetPortfolioSummary(ctx context.Context, tenantID string) (Get
 
 const getSessionPrincipal = `-- name: GetSessionPrincipal :one
 SELECT s.tenant_id, s.user_id, u.username, tm.role, t.name AS tenant_name,
-       u.locale, u.theme
+       u.locale, u.theme, u.accent
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 JOIN tenant_memberships tm ON tm.tenant_id = s.tenant_id AND tm.user_id = s.user_id
@@ -933,6 +939,7 @@ type GetSessionPrincipalRow struct {
 	TenantName string
 	Locale     string
 	Theme      string
+	Accent     string
 }
 
 func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincipalParams) (GetSessionPrincipalRow, error) {
@@ -946,6 +953,7 @@ func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincip
 		&i.TenantName,
 		&i.Locale,
 		&i.Theme,
+		&i.Accent,
 	)
 	return i, err
 }
@@ -1993,17 +2001,23 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (int64
 }
 
 const updateUserPreferences = `-- name: UpdateUserPreferences :exec
-UPDATE users SET locale = ?, theme = ? WHERE id = ?
+UPDATE users SET locale = ?, theme = ?, accent = ? WHERE id = ?
 `
 
 type UpdateUserPreferencesParams struct {
 	Locale string
 	Theme  string
+	Accent string
 	ID     string
 }
 
 func (q *Queries) UpdateUserPreferences(ctx context.Context, arg UpdateUserPreferencesParams) error {
-	_, err := q.db.ExecContext(ctx, updateUserPreferences, arg.Locale, arg.Theme, arg.ID)
+	_, err := q.db.ExecContext(ctx, updateUserPreferences,
+		arg.Locale,
+		arg.Theme,
+		arg.Accent,
+		arg.ID,
+	)
 	return err
 }
 

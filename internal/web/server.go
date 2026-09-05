@@ -55,6 +55,7 @@ type pageData struct {
 	Title              string
 	Locale             application.Locale
 	Theme              application.Theme
+	Accent             application.Accent
 	Strings            map[string]string
 	ReturnTo           string
 	CSRFToken          string
@@ -147,6 +148,9 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"money": domain.FormatMinor, "eventClass": eventClass,
 		"currencyOptions":    domain.SelectableCurrencyCodes,
 		"currencyMinorUnits": domain.CurrencyMinorUnits,
+		"accentOptions": func() []application.Accent {
+			return []application.Accent{application.AccentEmerald, application.AccentBlue, application.AccentViolet, application.AccentAmber, application.AccentRose}
+		},
 		"t": func(values map[string]string, key string) string {
 			if value := values[key]; value != "" {
 				return value
@@ -1174,10 +1178,14 @@ func (s *Server) updatePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 	locale, localeOK := supportedLocale(r.FormValue("locale"))
 	theme := application.Theme(r.FormValue("theme"))
-	if !localeOK || (theme != application.ThemeSystem && theme != application.ThemeLight && theme != application.ThemeDark) {
+	accent := application.Accent(r.FormValue("accent"))
+	if !localeOK || (theme != application.ThemeSystem && theme != application.ThemeLight && theme != application.ThemeDark) || !supportedAccent(accent) {
 		key := "validation.locale_invalid"
 		if localeOK {
 			key = "validation.theme_invalid"
+		}
+		if localeOK && (theme == application.ThemeSystem || theme == application.ThemeLight || theme == application.ThemeDark) {
+			key = "validation.accent_invalid"
 		}
 		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, CSRFToken: s.ensureCSRF(w, r), Error: textFor(principal.Locale, key), ReturnTo: "/"})
 		return
@@ -1187,7 +1195,7 @@ func (s *Server) updatePreferences(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, CSRFToken: s.ensureCSRF(w, r), Error: textFor(principal.Locale, "error.return_to"), ReturnTo: "/"})
 		return
 	}
-	if _, err := s.auth.UpdatePreferences(r.Context(), principal, application.UpdatePreferences{Locale: locale, Theme: theme}); err != nil {
+	if _, err := s.auth.UpdatePreferences(r.Context(), principal, application.UpdatePreferences{Locale: locale, Theme: theme, Accent: accent}); err != nil {
 		s.render(w, http.StatusUnprocessableEntity, "error", pageData{Title: textFor(principal.Locale, "title.error"), Principal: &principal, CSRFToken: s.ensureCSRF(w, r), Error: s.userError(principal.Locale, err), ReturnTo: "/"})
 		return
 	}
@@ -1355,12 +1363,16 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 	if data.Principal != nil {
 		data.Locale = data.Principal.Locale
 		data.Theme = data.Principal.Theme
+		data.Accent = data.Principal.Accent
 	}
 	if _, ok := supportedLocale(string(data.Locale)); !ok {
 		data.Locale = application.LocaleZhCN
 	}
 	if data.Theme != application.ThemeLight && data.Theme != application.ThemeDark {
 		data.Theme = application.ThemeSystem
+	}
+	if !supportedAccent(data.Accent) {
+		data.Accent = application.AccentEmerald
 	}
 	data.Strings = stringsFor(data.Locale)
 	if data.ReturnTo == "" {
@@ -1376,6 +1388,10 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 	if err := s.templates[name].ExecuteTemplate(w, "base", data); err != nil {
 		panic(err)
 	}
+}
+
+func supportedAccent(accent application.Accent) bool {
+	return accent == application.AccentEmerald || accent == application.AccentBlue || accent == application.AccentViolet || accent == application.AccentAmber || accent == application.AccentRose
 }
 
 func (s *Server) renderError(w http.ResponseWriter, r *http.Request, status int, err error) {

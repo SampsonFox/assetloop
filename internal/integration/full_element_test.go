@@ -63,12 +63,12 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil {
 		t.Fatalf("authenticate owner: %v", err)
 	}
-	owner, err = auth.UpdatePreferences(ctx, owner, application.UpdatePreferences{Locale: application.LocaleEn, Theme: application.ThemeDark})
+	owner, err = auth.UpdatePreferences(ctx, owner, application.UpdatePreferences{Locale: application.LocaleEn, Theme: application.ThemeDark, Accent: application.AccentRose})
 	if err != nil {
 		t.Fatalf("update owner preferences: %v", err)
 	}
 	reauthenticated, err := auth.Login(ctx, application.Login{Username: "owner", Password: "owner secure password"})
-	if err != nil || reauthenticated.Principal.Locale != application.LocaleEn || reauthenticated.Principal.Theme != application.ThemeDark {
+	if err != nil || reauthenticated.Principal.Locale != application.LocaleEn || reauthenticated.Principal.Theme != application.ThemeDark || reauthenticated.Principal.Accent != application.AccentRose {
 		t.Fatalf("preferences did not survive reauthentication: principal=%+v err=%v", reauthenticated.Principal, err)
 	}
 	owner = reauthenticated.Principal

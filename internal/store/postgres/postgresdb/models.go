@@ -156,4 +156,5 @@ type User struct {
 	CreatedAt          time.Time
 	Locale             string
 	Theme              string
+	Accent             string
 }

@@ -1,19 +1,25 @@
 :root {
   color-scheme:light;
+  --accent-light:#166b4f; --accent-light-contrast:#fff; --accent-light-soft:#dff2e9;
+  --accent-dark:#65d0a4; --accent-dark-contrast:#0b2118; --accent-dark-soft:#203e32;
   --ink:#17211d; --muted:#64706a; --line:#dce4df; --line-strong:#bdc9c1;
   --paper:#f7f8f5; --card:#fff; --field:#fff; --topbar:rgba(255,255,255,.92);
-  --accent:#166b4f; --accent-contrast:#fff; --accent-soft:#dff2e9;
+  --accent:var(--accent-light); --accent-contrast:var(--accent-light-contrast); --accent-soft:var(--accent-light-soft);
   --danger:#a52c2c; --danger-bg:#fff0f0; --danger-line:#f2caca;
   --warning:#8a5a00; --warning-soft:#fff1cc;
   --income-soft:#e3f4e8; --void-soft:#ececec; --void-ink:#666;
   --hover:rgba(0,0,0,.04); --segment-track:#f0f0f0; --segment-selected:#fff; --product-stage:#000;
   --shadow:rgba(23,33,29,.07); --popup-shadow:rgba(0,0,0,.12); --drawer-shadow:rgba(23,33,29,.16); --backdrop:rgba(23,33,29,.38);
 }
+:root[data-accent="blue"] { --accent-light:#245fb5; --accent-light-soft:#e5efff; --accent-dark:#82b1ff; --accent-dark-contrast:#0d1c34; --accent-dark-soft:#203653; }
+:root[data-accent="violet"] { --accent-light:#6840a8; --accent-light-soft:#efe8fb; --accent-dark:#c3a4ff; --accent-dark-contrast:#211336; --accent-dark-soft:#392b50; }
+:root[data-accent="amber"] { --accent-light:#94500c; --accent-light-soft:#fff0dc; --accent-dark:#f2ad5f; --accent-dark-contrast:#2d1704; --accent-dark-soft:#49331d; }
+:root[data-accent="rose"] { --accent-light:#9d3d61; --accent-light-soft:#fae7ee; --accent-dark:#f29aba; --accent-dark-contrast:#34101e; --accent-dark-soft:#4a2935; }
 :root[data-theme="dark"] {
   color-scheme:dark;
   --ink:#e7eee9; --muted:#aab8b0; --line:#34453c; --line-strong:#52665b;
   --paper:#111714; --card:#19211d; --field:#202a25; --topbar:rgba(25,33,29,.94);
-  --accent:#65d0a4; --accent-contrast:#0b2118; --accent-soft:#203e32;
+  --accent:var(--accent-dark); --accent-contrast:var(--accent-dark-contrast); --accent-soft:var(--accent-dark-soft);
   --danger:#ff9d9d; --danger-bg:#3a2022; --danger-line:#714044;
   --warning:#f2c66d; --warning-soft:#42371f;
   --income-soft:#244631; --void-soft:#303733; --void-ink:#c0c8c3;
@@ -25,7 +31,7 @@
     color-scheme:dark;
     --ink:#e7eee9; --muted:#aab8b0; --line:#34453c; --line-strong:#52665b;
     --paper:#111714; --card:#19211d; --field:#202a25; --topbar:rgba(25,33,29,.94);
-    --accent:#65d0a4; --accent-contrast:#0b2118; --accent-soft:#203e32;
+    --accent:var(--accent-dark); --accent-contrast:var(--accent-dark-contrast); --accent-soft:var(--accent-dark-soft);
     --danger:#ff9d9d; --danger-bg:#3a2022; --danger-line:#714044;
     --warning:#f2c66d; --warning-soft:#42371f;
     --income-soft:#244631; --void-soft:#303733; --void-ink:#c0c8c3;
@@ -72,6 +78,15 @@ a { color:var(--accent); text-decoration:none; }
 .segmented input:focus-visible + span { outline:2px solid var(--accent); outline-offset:1px; }
 .theme-segmented label > span { min-width:30px; padding:0 6px; }
 .theme-segmented svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.accent-row { align-items:flex-start; }
+.accent-picker { display:flex; gap:3px; padding-top:2px; }
+.accent-option { position:relative; display:grid; width:29px; height:29px; place-items:center; cursor:pointer; }
+.accent-option input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+.accent-option span { display:block; width:19px; height:19px; border:2px solid var(--card); border-radius:50%; background:var(--swatch); box-shadow:0 0 0 1px var(--line-strong); transition:transform .16s ease-out,box-shadow .16s ease-out; }
+.accent-option:hover span { transform:scale(1.12); }
+.accent-option input:checked + span { box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--swatch); }
+.accent-option input:focus-visible + span { outline:2px solid var(--ink); outline-offset:4px; }
+.accent-emerald { --swatch:#25815f; } .accent-blue { --swatch:#3975ca; } .accent-violet { --swatch:#7955b7; } .accent-amber { --swatch:#b66a1b; } .accent-rose { --swatch:#b65077; }
 .account-menu-panel form.logout-form { margin:0; padding-top:4px; border-top:1px solid var(--line); }
 .menu-item.danger { color:var(--danger); }
 .menu-item.danger:hover { background:var(--danger-bg); color:var(--danger); }

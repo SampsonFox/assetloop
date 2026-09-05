@@ -180,6 +180,7 @@
     const form = autoSubmit.matches("form") ? autoSubmit : autoSubmit.form;
     if (!form) return;
     if (event.target.name === "theme") document.documentElement.dataset.theme = event.target.value;
+    if (event.target.name === "accent") document.documentElement.dataset.accent = event.target.value;
     form.requestSubmit();
   });
 

@@ -116,7 +116,7 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	setupPage := httptest.NewRecorder()
 	handler.ServeHTTP(setupPage, req)
-	if setupPage.Code != http.StatusOK || !strings.Contains(setupPage.Body.String(), `<html lang="en" data-theme="system">`) || !strings.Contains(setupPage.Body.String(), "Create your AssetLoop workspace") {
+	if setupPage.Code != http.StatusOK || !strings.Contains(setupPage.Body.String(), `<html lang="en" data-theme="system" data-accent="emerald">`) || !strings.Contains(setupPage.Body.String(), "Create your AssetLoop workspace") {
 		t.Fatalf("anonymous browser locale was not applied: status=%d body=%s", setupPage.Code, setupPage.Body.String())
 	}
 	csrf := responseCookie(t, setupPage, csrfCookie)
@@ -148,7 +148,7 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	if strings.Contains(home.Body.String(), `href="/imports"`) || strings.Contains(home.Body.String(), "待确认导入") {
 		t.Fatalf("account menu must not expose a second confirmation queue: %s", home.Body.String())
 	}
-	for _, want := range []string{`class="account-avatar"`, `class="menu-icon"`, `data-auto-submit`, `class="segmented language-segmented"`, `role="radiogroup"`, `type="radio" name="locale"`, `type="radio" name="theme"`} {
+	for _, want := range []string{`class="account-avatar"`, `class="menu-icon"`, `data-auto-submit`, `class="segmented language-segmented"`, `role="radiogroup"`, `type="radio" name="locale"`, `type="radio" name="theme"`, `type="radio" name="accent"`, `class="accent-picker"`} {
 		if !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("compact account control missing %q: %s", want, home.Body.String())
 		}
@@ -158,41 +158,41 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	}
 
 	updated := request(t, handler, http.MethodPost, "/preferences", url.Values{
-		"csrf_token": {csrf.Value}, "locale": {"en"}, "theme": {"dark"}, "return_to": {"/?view=grid"},
+		"csrf_token": {csrf.Value}, "locale": {"en"}, "theme": {"dark"}, "accent": {"violet"}, "return_to": {"/?view=grid"},
 	}, []*http.Cookie{session, csrf})
 	if updated.Code != http.StatusSeeOther || updated.Header().Get("Location") != "/?view=grid" {
 		t.Fatalf("preference update: status=%d location=%q body=%s", updated.Code, updated.Header().Get("Location"), updated.Body.String())
 	}
 	zhCookie := &http.Cookie{Name: localeCookie, Value: "zh-CN"}
 	english := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, zhCookie})
-	for _, want := range []string{`<html lang="en" data-theme="dark">`, "My assets", "Asset type settings", "Log out"} {
+	for _, want := range []string{`<html lang="en" data-theme="dark" data-accent="violet">`, "My assets", "Asset type settings", "Log out"} {
 		if !strings.Contains(english.Body.String(), want) {
 			t.Fatalf("stored preference missing %q: %s", want, english.Body.String())
 		}
 	}
 
 	invalidReturn := request(t, handler, http.MethodPost, "/preferences", url.Values{
-		"csrf_token": {csrf.Value}, "locale": {"zh-CN"}, "theme": {"light"}, "return_to": {"https://example.com"},
+		"csrf_token": {csrf.Value}, "locale": {"zh-CN"}, "theme": {"light"}, "accent": {"rose"}, "return_to": {"https://example.com"},
 	}, []*http.Cookie{session, csrf})
 	if invalidReturn.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidReturn.Body.String(), "Invalid return address") {
 		t.Fatalf("external return target: status=%d body=%s", invalidReturn.Code, invalidReturn.Body.String())
 	}
 	unchanged := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	if !strings.Contains(unchanged.Body.String(), `lang="en" data-theme="dark"`) {
+	if !strings.Contains(unchanged.Body.String(), `lang="en" data-theme="dark" data-accent="violet"`) {
 		t.Fatalf("invalid return target mutated preferences: %s", unchanged.Body.String())
 	}
 	light := request(t, handler, http.MethodPost, "/preferences", url.Values{
-		"csrf_token": {csrf.Value}, "locale": {"zh-CN"}, "theme": {"light"}, "return_to": {"/"},
+		"csrf_token": {csrf.Value}, "locale": {"zh-CN"}, "theme": {"light"}, "accent": {"amber"}, "return_to": {"/"},
 	}, []*http.Cookie{session, csrf})
 	if light.Code != http.StatusSeeOther {
 		t.Fatalf("light theme update: status=%d body=%s", light.Code, light.Body.String())
 	}
 	lightPage := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	if !strings.Contains(lightPage.Body.String(), `lang="zh-CN" data-theme="light"`) {
+	if !strings.Contains(lightPage.Body.String(), `lang="zh-CN" data-theme="light" data-accent="amber"`) {
 		t.Fatalf("light theme did not render server-side: %s", lightPage.Body.String())
 	}
 
-	withoutCSRF := request(t, handler, http.MethodPost, "/preferences", url.Values{"locale": {"zh-CN"}, "theme": {"light"}}, []*http.Cookie{session})
+	withoutCSRF := request(t, handler, http.MethodPost, "/preferences", url.Values{"locale": {"zh-CN"}, "theme": {"light"}, "accent": {"emerald"}}, []*http.Cookie{session})
 	if withoutCSRF.Code != http.StatusForbidden {
 		t.Fatalf("preferences without CSRF: got %d", withoutCSRF.Code)
 	}
@@ -201,13 +201,13 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 func TestThemeStylesUseSemanticSurfaces(t *testing.T) {
 	handler := newTestHandler(t)
 	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
-	for _, want := range []string{`:root[data-theme="dark"]`, `:root[data-theme="system"]`, `prefers-color-scheme:dark`, `background:var(--card)`, `background:var(--field)`, `.account-menu-panel`} {
+	for _, want := range []string{`:root[data-theme="dark"]`, `:root[data-theme="system"]`, `:root[data-accent="violet"]`, `prefers-color-scheme:dark`, `background:var(--card)`, `background:var(--field)`, `.account-menu-panel`, `.accent-picker`} {
 		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
 			t.Fatalf("theme stylesheet missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
 		}
 	}
 	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
-	for _, want := range []string{`[data-auto-submit]`, `document.documentElement.dataset.theme`, `form.requestSubmit()`} {
+	for _, want := range []string{`[data-auto-submit]`, `document.documentElement.dataset.theme`, `document.documentElement.dataset.accent`, `form.requestSubmit()`} {
 		if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
 			t.Fatalf("preference interaction missing %q: status=%d body=%s", want, script.Code, script.Body.String())
 		}
