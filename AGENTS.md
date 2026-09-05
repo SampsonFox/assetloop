@@ -122,6 +122,8 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 - `uat` and `prod` MUST use the same packaging workflow with separate GitHub environments. Production publication MUST consume artifacts produced and smoke-tested by that workflow.
 - Windows release archives MUST be `.zip`; Linux and macOS release archives MUST be `.tar.gz`.
 - A production defect follows `fix/<scope> -> uat -> prod`; it MUST NOT bypass UAT validation.
+- Ordinary work branches start from `dev`; a production defect or production rollback starts from current `prod` on `fix/<scope>`, then follows the same explicit UAT and production approval gates. The production starting point is an exception to the ordinary development baseline, not to validation.
+- Before UAT merge, verify permanent `dev` can fast-forward to the expected accepted baseline. Preserve any divergent commits on a work branch and reconcile through a pull request; never force-update or silently discard permanent-branch history.
 
 ### 14. Grow regression coverage with every feature
 

@@ -37,7 +37,7 @@ If a secret may have been exposed, stop promotion. Revoke or rotate it first; th
 - `fix/<scope>`: a defect correction.
 - `release/<scope>`: a production candidate based on current `prod` that reconciles one accepted UAT tree.
 
-Create a work branch from the latest permanent `dev` baseline. Keep its scope singular. Commit and push whenever a checkpoint is independently testable and safe to restore; do not wait for the whole feature, and do not commit failing intermediate states merely to create volume.
+Create ordinary development work branches from the latest permanent `dev` baseline. Production defects and production rollbacks are the explicit exception: start `fix/<scope>` from current `prod`, then follow the UAT and production gates below. Keep scope singular. Commit and push whenever a checkpoint is independently testable and safe to restore; do not wait for the whole feature, and do not commit failing intermediate states merely to create volume.
 
 Examples:
 
@@ -68,7 +68,7 @@ Passing a narrow test, finishing one bug fix, or pushing a checkpoint does not i
 
 1. After the user explicitly identifies the accumulated batch as a UAT checkpoint, run formatting, sqlc generation, tests, vet, secret scanning, the full-element scenario, and the relevant local smoke test.
 2. Push the work branch and open a pull request to `uat`.
-3. Squash merge after CI passes so UAT receives one coherent change.
+3. Before squash merge, verify `dev` is an ancestor of current `uat` so it can fast-forward to the accepted UAT commit. If it has diverged, preserve its commits on a work branch and reconcile the desired changes through a PR; do not force-update either permanent branch. Resolve any remaining baseline choice before promotion. Squash merge after CI passes so UAT receives one coherent change.
 4. Delete the short-lived branch.
 5. Fast-forward permanent `dev` to the accepted `uat` commit before starting the next baseline.
 6. Let the UAT packaging workflow build and smoke-test its artifacts.
@@ -102,6 +102,8 @@ any artifact is built. The packaged-binary smoke test remains mandatory after th
 
 - A UAT defect uses `fix/<scope>` from the current UAT-aligned `dev`, then returns through UAT packaging.
 - A production defect starts from the current `prod` source, is fixed on `fix/<scope>`, and is promoted to `uat` first. Only the tested UAT result may proceed to `prod`.
+- A production rollback uses the same route: revert the offending production change on `fix/<scope>` from `prod`, validate through UAT, then promote the specifically approved UAT result on `release/<scope>`. This is not permission to send an untested revert directly to `prod`.
+- Before merging a production-based fix into UAT, inspect the complete resulting candidate. Reconcile divergent history on the work branch without overwriting unrelated UAT changes. If UAT already contains other unreleased content, explicitly identify that content in the acceptance candidate; fixing production does not by itself authorize releasing it.
 - No fix may be pushed directly to `prod`.
 
 ## Packaging and environment isolation
@@ -123,5 +125,5 @@ Environment-specific secrets and variables belong in their matching GitHub Envir
 
 - Development rollback: revert the smallest checkpoint commit on the work branch.
 - UAT rollback: revert the squash commit or promotion pull request, then rebuild UAT artifacts.
-- Production rollback: revert through a new pull request to `prod`; do not rewrite production history.
+- Production rollback: revert on `fix/<scope>` from `prod`, pass the explicitly requested UAT checkpoint, and promote the specifically accepted UAT result through `release/<scope> -> prod`; do not rewrite production history or bypass UAT.
 - Database rollback: add a corrective forward migration. Never use a destructive down migration on user data.
