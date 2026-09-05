@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -20,15 +22,38 @@ import (
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	args := os.Args[1:]
+	doubleClicked := len(args) == 0 && ownsConsole()
+	err := launch(args, doubleClicked)
+	if err != nil {
 		slog.Error("assetloop stopped", "error", err)
+		if doubleClicked {
+			fmt.Fprintln(os.Stderr, "Press Enter to close / 按回车键关闭")
+			_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+		}
 		os.Exit(1)
 	}
 }
 
+func launch(args []string, doubleClicked bool) error {
+	if doubleClicked {
+		path, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		if err := os.Chdir(filepath.Dir(path)); err != nil {
+			return err
+		}
+	}
+	return run(args)
+}
+
 func run(args []string) error {
-	if len(args) != 1 {
-		return errors.New("usage: assetloop <serve|migrate>")
+	if len(args) == 0 {
+		args = []string{"serve"}
+	}
+	if len(args) != 1 || (args[0] != "serve" && args[0] != "migrate") {
+		return errors.New("usage: assetloop [serve|migrate] (default: serve)")
 	}
 
 	cfg, err := config.Load(".env")

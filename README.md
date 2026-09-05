@@ -25,11 +25,17 @@ The repository contains the v0.1 foundation plus authentication/RBAC, tenant-iso
 Go 1.26 or newer is required for development. Runtime defaults need no external service.
 
 ```sh
-go run ./cmd/assetloop migrate
-go run ./cmd/assetloop serve
+go run ./cmd/assetloop
 ```
 
 The default SQLite database is `./data/assetloop.db`; health is available at `http://127.0.0.1:8080/healthz`. Open `http://127.0.0.1:8080/setup` on first start to create the tenant Owner. Copy `.env.example` to `.env` only when overriding defaults.
+
+No arguments defaults to `serve`: SQLite is checked and safely migrated before the Web server
+starts. On Windows, extract the release and double-click `assetloop.exe`; configuration and data
+are resolved beside the executable, and startup errors remain visible until Enter is pressed.
+Then open `http://127.0.0.1:8080/` in a browser. Command-line launches keep their working directory.
+Explicit `serve` and `migrate` remain supported. PostgreSQL deployments run `assetloop migrate`
+as a separate release step; server startup only checks schema compatibility.
 
 After setup, `/` opens the concrete asset list. It supports list/card views, a deliberate empty state, and one shared drawer for creating or editing an asset. Owner and Editor users maintain categories, models, price-distinguishing variants such as 256GB/512GB, and category icons at `/admin/catalog`; Viewer users receive no management controls. `/overview` contains the base-currency summary.
 

@@ -18,7 +18,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, and append-only
 
 | Path | Responsibility |
 |---|---|
-| `cmd/assetloop/` | Single binary; current `serve` and `migrate` subcommands |
+| `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |
 | `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, code-defined zh-CN/en language packs, account menu, semantic light/dark themes, shared catalog drawers, inline custom lifecycle event types, and progressively disclosed FX evidence forms |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
