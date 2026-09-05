@@ -94,6 +94,14 @@ func SelectableCurrencyCodes() []string {
 	return result
 }
 
+func CurrencyMinorUnits(value string) (int, error) {
+	value, err := NormalizeCurrency(value)
+	if err != nil {
+		return 0, err
+	}
+	return currencyExponents[value], nil
+}
+
 func NormalizeCurrency(value string) (string, error) {
 	value = strings.ToUpper(strings.TrimSpace(value))
 	if len(value) != 3 {

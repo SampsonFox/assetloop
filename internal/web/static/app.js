@@ -9,12 +9,52 @@
   };
   const dialogOpeners = new WeakMap();
 
+  const decimalProduct = (left, right, exponent) => {
+    const parse = (value) => {
+      const match = String(value).trim().match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
+      if (!match) return null;
+      const fraction = match[3] || "";
+      return { value: BigInt(`${match[1] === "-" ? "-" : ""}${match[2]}${fraction}`), scale: fraction.length };
+    };
+    const amount = parse(left);
+    const rate = parse(right);
+    if (!amount || !rate || rate.value <= 0n) return null;
+    let value = amount.value * rate.value;
+    const scale = amount.scale + rate.scale;
+    if (scale > exponent) {
+      const divisor = 10n ** BigInt(scale - exponent);
+      const negative = value < 0n;
+      let magnitude = negative ? -value : value;
+      let rounded = magnitude / divisor;
+      if ((magnitude % divisor) * 2n >= divisor) rounded += 1n;
+      value = negative ? -rounded : rounded;
+    } else {
+      value *= 10n ** BigInt(exponent - scale);
+    }
+    const negative = value < 0n;
+    let digits = (negative ? -value : value).toString().padStart(exponent + 1, "0");
+    if (exponent) digits = `${digits.slice(0, -exponent)}.${digits.slice(-exponent)}`;
+    return `${negative ? "-" : ""}${digits}`;
+  };
+
+  const syncFXPreview = (form) => {
+    const output = form.querySelector("[data-fx-result]");
+    if (!output) return;
+    const amount = form.elements.namedItem("amount")?.value;
+    const rate = form.elements.namedItem("fx_rate")?.value;
+    const converted = decimalProduct(amount, rate, Number(output.dataset.baseMinorUnits));
+    output.hidden = converted === null;
+    const value = output.querySelector("[data-fx-result-value]");
+    if (value && converted !== null) value.textContent = `${converted} ${output.dataset.baseCurrency}`;
+  };
+
   const syncFXFields = (select) => {
     const neutral = select.form.querySelector("[data-event-type-select] option:checked")?.dataset.cashflow === "neutral";
     const foreign = !neutral && select.value !== select.dataset.baseCurrency;
     for (const field of select.form.querySelectorAll("[data-fx-field]")) field.hidden = !foreign;
     for (const input of select.form.querySelectorAll("[data-fx-required]")) input.required = foreign;
     for (const unit of select.form.querySelectorAll("[data-fx-rate-from]")) unit.textContent = select.value.toUpperCase();
+    syncFXPreview(select.form);
   };
 
   const syncEventTypeFields = (select) => {
@@ -123,6 +163,7 @@
   document.addEventListener("input", (event) => {
     const form = event.target.closest("form[data-guard-dirty]");
     if (form) form.dataset.dirty = "true";
+    if (form && event.target.matches("[name='amount'], [name='fx_rate']")) syncFXPreview(form);
   });
 
   document.addEventListener("change", (event) => {

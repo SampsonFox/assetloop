@@ -725,14 +725,16 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("expected purchase, custom, and repair correction links: %s", detail.Body.String())
 	}
 	correctionForm := request(t, handler, http.MethodGet, "/events/"+correctionLinks[2][1]+"/correct", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`class="money-input-group"`, `class="currency-suffix"`, `list="correction-currencies"`, `aria-label="原始货币"`, `class="fx-rate-input-group"`, `1 <span data-fx-rate-from>CNY</span> =`, `type="number" name="fx_rate"`, `min="0.00000001" step="any"`} {
+	for _, want := range []string{`class="money-input-group"`, `class="currency-suffix"`, `list="correction-currencies"`, `aria-label="原始货币"`, `class="fx-rate-input-group"`, `1 <span data-fx-rate-from>CNY</span> =`, `type="number" name="fx_rate"`, `min="0" step="any"`, `class="fx-conversion-preview"`, `data-base-minor-units="2"`, `data-fx-result-value`} {
 		if correctionForm.Code != http.StatusOK || !strings.Contains(correctionForm.Body.String(), want) {
 			t.Fatalf("correction money input missing %q: status=%d body=%s", want, correctionForm.Code, correctionForm.Body.String())
 		}
 	}
 	interactionScript := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
-	if interactionScript.Code != http.StatusOK || !strings.Contains(interactionScript.Body.String(), `unit.textContent = select.value.toUpperCase()`) {
-		t.Fatalf("currency changes must update the visible FX rate unit: status=%d body=%s", interactionScript.Code, interactionScript.Body.String())
+	for _, want := range []string{`unit.textContent = select.value.toUpperCase()`, `const decimalProduct =`, `BigInt(`, `syncFXPreview(form)`} {
+		if interactionScript.Code != http.StatusOK || !strings.Contains(interactionScript.Body.String(), want) {
+			t.Fatalf("FX preview interaction missing %q: status=%d body=%s", want, interactionScript.Code, interactionScript.Body.String())
+		}
 	}
 	if strings.Contains(correctionForm.Body.String(), `name="fx_confirmed"`) {
 		t.Fatalf("correction form must not ask for redundant FX confirmation: %s", correctionForm.Body.String())

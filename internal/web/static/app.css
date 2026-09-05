@@ -247,6 +247,8 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .fx-rate-addon:first-child { gap:4px; border-radius:10px 0 0 10px; }
 .fx-rate-addon:last-child { min-width:64px; border-radius:0 10px 10px 0; }
 .fx-rate-input-group input:focus { position:relative; z-index:1; }
+.fx-conversion-preview { display:flex; justify-content:space-between; gap:16px; padding-top:8px; color:var(--muted); font-size:14px; }
+.fx-conversion-preview strong { color:var(--ink); font-variant-numeric:tabular-nums; }
 .field-heading label { display:block; }
 .field-heading .link-button { width:auto; }
 .empty-inline { padding:18px; border-radius:10px; background:var(--paper); color:var(--muted); }

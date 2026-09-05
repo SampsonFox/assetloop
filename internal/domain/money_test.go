@@ -29,6 +29,9 @@ func TestCurrencyCatalogDrivesParsingAndSelection(t *testing.T) {
 		if got := currencyExponents[code]; got != units {
 			t.Fatalf("minor units for %s: got %d want %d", code, got, units)
 		}
+		if got, err := CurrencyMinorUnits(code); err != nil || got != units {
+			t.Fatalf("public minor units for %s: got %d want %d err=%v", code, got, units, err)
+		}
 	}
 	if _, err := NormalizeSelectableCurrency("BGN"); err == nil {
 		t.Fatal("retired BGN must not be selectable from the current catalog")

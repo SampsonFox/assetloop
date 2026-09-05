@@ -144,7 +144,8 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 	templates := map[string]*template.Template{}
 	funcs := template.FuncMap{
 		"money": domain.FormatMinor, "eventClass": eventClass,
-		"currencyOptions": domain.SelectableCurrencyCodes,
+		"currencyOptions":    domain.SelectableCurrencyCodes,
+		"currencyMinorUnits": domain.CurrencyMinorUnits,
 		"t": func(values map[string]string, key string) string {
 			if value := values[key]; value != "" {
 				return value
