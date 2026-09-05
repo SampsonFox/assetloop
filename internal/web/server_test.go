@@ -3,7 +3,9 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -389,9 +391,16 @@ func TestProductModel3DUploadViewerAndETag(t *testing.T) {
 	if !strings.Contains(detail.Body.String(), "data-model-viewer") || !strings.Contains(detail.Body.String(), "asset-model-viewer.js") {
 		t.Fatalf("viewer markup missing: %s", detail.Body.String())
 	}
+	digest := sha256.Sum256(glb)
+	if want := "/assets/" + assetID + "/model.glb?v=" + hex.EncodeToString(digest[:]); !strings.Contains(detail.Body.String(), want) {
+		t.Fatalf("versioned model URL missing: %s", detail.Body.String())
+	}
 	model := request(t, handler, http.MethodGet, "/assets/"+assetID+"/model.glb", nil, []*http.Cookie{session, csrf})
 	if model.Code != http.StatusOK || model.Header().Get("Content-Type") != "model/gltf-binary" || !bytes.Equal(model.Body.Bytes(), glb) {
 		t.Fatalf("model response status=%d headers=%v", model.Code, model.Header())
+	}
+	if got := model.Header().Get("Cache-Control"); got != "private, max-age=86400" {
+		t.Fatalf("cache control=%q", got)
 	}
 	req := httptest.NewRequest(http.MethodGet, "/assets/"+assetID+"/model.glb", nil)
 	req.Header.Set("If-None-Match", model.Header().Get("ETag"))

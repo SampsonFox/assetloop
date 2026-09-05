@@ -3,7 +3,7 @@
   <div><p class="eyebrow">具体物品</p><h1>{{.Asset.DisplayName}}</h1></div>
 	<a href="/">返回物品列表</a>
 </div>
-<figure class="asset-product-visual{{if .Model3D}} has-model{{end}}"{{if .Model3D}} data-model-viewer data-model-url="/assets/{{.Asset.ID}}/model.glb"{{end}}>
+<figure class="asset-product-visual{{if .Model3D}} has-model{{end}}"{{if .Model3D}} data-model-viewer data-model-url="/assets/{{.Asset.ID}}/model.glb?v={{.Model3D.SHA256}}"{{end}}>
   <div class="asset-model-fallback" data-model-fallback>
     <svg class="category-icon product-icon" aria-hidden="true"><use href="/static/category-icons.svg#{{.Asset.CategoryIcon}}"></use></svg>
     <p>{{.Asset.Model}} · {{.Asset.Variant}}</p>
