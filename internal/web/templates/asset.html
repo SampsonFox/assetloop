@@ -38,13 +38,10 @@
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>
 </section>
-<section class="card section-gap" id="lifecycle-timeline">
+<div class="asset-cost-layout section-gap">
+{{template "cost_dashboard" .}}
+<section class="compact-timeline" id="lifecycle-timeline">
   <header class="timeline-heading"><h2>{{t $s "asset.timeline"}}</h2>{{if .CanManageLifecycle}}<button class="icon-button" id="add-event" type="button" data-dialog-open="event-drawer" data-title="{{t $s "asset.add_event"}}" data-action="/assets/{{.Asset.ID}}/events" aria-controls="event-drawer" aria-label="{{t $s "asset.add_event"}}" title="{{t $s "asset.add_event"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>{{end}}</header>
-  <dl class="timeline-summary" aria-label="{{t $s "asset.cashflow_summary"}}">
-    <div class="timeline-summary-item"><dt>{{t $s "overview.expense"}}</dt><dd>{{money .Summary.ExpenseMinor .Summary.BaseCurrency}}</dd></div>
-    <div class="timeline-summary-item"><dt>{{t $s "asset.income"}}</dt><dd>{{money .Summary.IncomeMinor .Summary.BaseCurrency}}</dd></div>
-    <div class="timeline-summary-item"><dt>{{t $s "overview.net"}} · {{statusLabel $s .Summary.Status}}</dt><dd class="net-value {{if gt .Summary.NetCashflowMinor 0}}is-positive{{else if lt .Summary.NetCashflowMinor 0}}is-negative{{end}}">{{money .Summary.NetCashflowMinor .Summary.BaseCurrency}}</dd></div>
-  </dl>
   <form class="timeline-filters asset-search-shell" method="get" action="/assets/{{.Asset.ID}}#lifecycle-timeline">
     <div class="asset-search"><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "asset.search_events_placeholder"}}" aria-label="{{t $s "asset.search_events"}}"></div>
     <div class="asset-filter-actions">
@@ -62,10 +59,12 @@
       {{if .TableHasFilters}}<a class="button secondary" href="{{.TableClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
     </div>
   </form>
-  {{if .Events}}<ol class="timeline-list">{{range .Events}}<li class="timeline-item event-{{eventClass .}} {{if .IsVoided}}is-voided{{end}}"><span class="timeline-dot" aria-hidden="true"></span><article class="timeline-entry"><header class="timeline-entry-heading"><div class="timeline-entry-title"><span class="badge">{{eventLabel $s .Type}}</span>{{if .IsVoided}}<span class="muted">{{t $s "asset.voided"}}</span>{{end}}<time>{{dateTime .OccurredAt}}</time></div><strong class="timeline-amount">{{money .BaseAmountMinor .BaseCurrency}}</strong></header>{{if .FX}}<p class="timeline-evidence">{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span></p>{{end}}{{if .Notes}}<p class="timeline-note">{{.Notes}}</p>{{end}}{{if $.CanManageLifecycle}}{{if canCorrect .}}<footer class="timeline-entry-footer"><a href="/events/{{.ID}}/correct">{{t $s "asset.correct"}}</a></footer>{{end}}{{end}}</article></li>{{end}}</ol>{{else}}<p class="muted">{{t $s "asset.no_events"}}</p>{{end}}
+  {{if .Events}}<ol class="timeline-list">{{range .Events}}<li class="timeline-item event-{{eventClass .}} {{if .IsVoided}}is-voided{{end}}" data-timeline-item><span class="timeline-dot" aria-hidden="true"></span><article class="timeline-entry"><button class="timeline-trigger" type="button" aria-expanded="false" aria-controls="event-detail-{{.ID}}"><span><time>{{localDate .OccurredAt}}</time><span class="timeline-kind"><svg viewBox="0 0 24 24" aria-hidden="true">{{if lt .BaseAmountMinor 0}}<path d="m7 17 10-10M7 7h10v10"/>{{else if gt .BaseAmountMinor 0}}<path d="M17 7 7 17M7 7v10h10"/>{{else}}<circle cx="12" cy="12" r="7"/>{{end}}</svg>{{eventLabel $s .Type}}</span></span><strong class="timeline-amount">{{money .BaseAmountMinor .BaseCurrency}}</strong></button><div class="timeline-popover" id="event-detail-{{.ID}}" hidden><h3>{{eventLabel $s .Type}}</h3><time>{{dateTime .OccurredAt}}</time>{{if .IsVoided}}<span class="muted">{{t $s "asset.voided"}}</span>{{end}}{{if .FX}}<p class="timeline-evidence">{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span></p>{{end}}{{if .Notes}}<p class="timeline-note">{{.Notes}}</p>{{end}}{{if $.CanManageLifecycle}}{{if canCorrect .}}<footer class="timeline-entry-footer"><a href="/events/{{.ID}}/correct">{{t $s "asset.correct"}}</a></footer>{{end}}{{end}}</div></article></li>{{end}}</ol>{{else}}<p class="muted">{{t $s "asset.no_events"}}</p>{{end}}
   {{if gt .TableTotalPages 1}}<nav class="pagination" aria-label="{{t $s "asset.pagination"}}"><span>{{t $s "assets.page"}} {{.TablePage}} / {{.TableTotalPages}}</span><div>{{if .TablePreviousURL}}<a class="button secondary" href="{{.TablePreviousURL}}">{{t $s "assets.previous"}}</a>{{end}}{{if .TableNextURL}}<a class="button secondary" href="{{.TableNextURL}}">{{t $s "assets.next"}}</a>{{end}}</div></nav>{{end}}
 </section>
 
+</div>
+<script defer src="/static/cost-timeline.js"></script>
 {{if .CanManageLifecycle}}
 <dialog class="drawer" id="event-drawer" aria-labelledby="event-drawer-title">
   <form class="drawer-panel event-drawer-panel" id="event-form" action="/assets/{{.Asset.ID}}/events" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">

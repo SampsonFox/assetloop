@@ -75,6 +75,7 @@ type pageData struct {
 	CanManageCatalog   bool
 	Events             []domain.AssetEvent
 	Summary            domain.AssetSummary
+	Cost               domain.CostDashboard
 	BaseCurrency       string
 	BaseCurrencyLocked bool
 	NowValue           string
@@ -192,6 +193,9 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"statusLabel":   func(values map[string]string, value string) string { return values["status."+value] },
 		"productImage":  productImage,
+		"costChart":     costChart,
+		"costPercent":   costPercent,
+		"localDate":     func(value time.Time) string { return value.Local().Format("2006-01-02") },
 		"iconLabel":     func(values map[string]string, key string) string { return values["icon."+key] },
 		"dateTime":      func(value time.Time) string { return value.Local().Format("2006-01-02 15:04") },
 		"dateTimeInput": func(value time.Time) string { return value.Local().Format("2006-01-02T15:04") },
@@ -217,7 +221,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
 	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource"} {
-		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/"+page+".html")
+		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
 		}
@@ -743,6 +747,11 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	cost, err := s.lifecycle.CostDashboard(r.Context(), principal, assetID)
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
 	nowValue := time.Now().Local().Format("2006-01-02T15:04")
 	var model3D *domain.ProductModel3D
 	var modelBinding *application.Model3DBinding
@@ -757,7 +766,7 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 	s.render(w, status, "asset", pageData{
 		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: result.Events,
-		Summary: result.Summary, BaseCurrency: result.Summary.BaseCurrency, BaseCurrencyLocked: locked,
+		Summary: result.Summary, Cost: cost, BaseCurrency: result.Summary.BaseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           nowValue,
 		EventForm:          eventFormFromRequest(r, result.Summary.BaseCurrency, nowValue),
 		EventTypes:         eventTypes,

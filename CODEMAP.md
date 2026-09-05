@@ -61,6 +61,8 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 ## Regression spine
 
+Cost dashboard: `internal/application/cost_dashboard.go` reads the full authorized lifecycle; `internal/domain/cost_dashboard.go` owns exact net/daily cost, calendar-day duration, trend and expense grouping. `internal/web/cost_dashboard.go`, `templates/cost_dashboard.html` and `static/cost-timeline.js` render SVG reports and progressive timeline details without market estimates or persistence changes. Timeline list filters never scope dashboard calculations.
+
 | Path | Coverage |
 |---|---|
 | `internal/application/*_test.go` | validation, exact money/FX conversion, auth, catalog, lifecycle, and role policy |

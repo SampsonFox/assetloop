@@ -655,7 +655,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以所选规格为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `class="timeline-summary"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-positive-pattern=`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以所选规格为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `data-cost-dashboard`, `日均持有成本`, `class="cost-metrics"`, `class="compact-timeline"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-positive-pattern=`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -663,8 +663,8 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if strings.Contains(detail.Body.String(), "金额（正数）") {
 		t.Fatalf("the amount label must not repeat its positive-input constraint: %s", detail.Body.String())
 	}
-	if strings.Count(detail.Body.String(), `class="timeline-summary-item"`) != 3 || strings.Contains(detail.Body.String(), `cashflow-strip`) || strings.Index(detail.Body.String(), `class="timeline-summary"`) < strings.Index(detail.Body.String(), `id="lifecycle-timeline"`) {
-		t.Fatalf("asset cashflow summary must be a compact row inside the timeline: %s", detail.Body.String())
+	if strings.Contains(detail.Body.String(), `class="timeline-summary"`) || strings.Index(detail.Body.String(), `data-cost-dashboard`) > strings.Index(detail.Body.String(), `id="lifecycle-timeline"`) {
+		t.Fatal("cost dashboard must precede the compact timeline without the old summary row")
 	}
 	if strings.Contains(detail.Body.String(), `class="two-column"`) {
 		t.Fatalf("asset notes must remain inside the responsive details card: %s", detail.Body.String())
@@ -810,6 +810,13 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("technical void event must remain hidden from full lifecycle history: %s", fullHistory.Body.String())
 	}
 	filteredTimeline := request(t, handler, http.MethodGet, "/assets/"+match[1]+"?event_type=sale&sort=amount&direction=desc", nil, []*http.Cookie{ownerSession, csrf})
+	costSection := regexp.MustCompile(`(?s)<section class="cost-dashboard".*?</dl>`)
+	for _, suffix := range []string{"?q=not-found", "?event_type=sale&sort=amount&direction=desc", "?show_voided=1"} {
+		filtered := request(t, handler, http.MethodGet, "/assets/"+match[1]+suffix, nil, []*http.Cookie{ownerSession, csrf})
+		if filtered.Code != http.StatusOK || costSection.FindString(filtered.Body.String()) != costSection.FindString(detail.Body.String()) {
+			t.Fatal("timeline filters changed cost metrics")
+		}
+	}
 	if filteredTimeline.Code != http.StatusOK || !strings.Contains(filteredTimeline.Body.String(), "用户已在 Agent 对话中确认") || strings.Contains(filteredTimeline.Body.String(), "正确维修金额") || !strings.Contains(filteredTimeline.Body.String(), "730.00 CNY") || !strings.Contains(filteredTimeline.Body.String(), `class="asset-filter-disclosure has-active"`) {
 		t.Fatalf("server-filtered timeline must keep full summary while filtering rows: status=%d body=%s", filteredTimeline.Code, filteredTimeline.Body.String())
 	}

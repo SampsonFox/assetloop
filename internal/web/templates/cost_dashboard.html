@@ -1,0 +1,19 @@
+{{define "cost_dashboard"}}{{$s := .Strings}}{{$c := .Cost}}
+<section class="cost-dashboard" aria-labelledby="cost-title" data-cost-dashboard>
+<h2 id="cost-title">{{t $s "cost.title"}}</h2>
+<dl class="cost-metrics">
+<div><dt>{{t $s "cost.daily"}}</dt><dd>{{if $c.HasDuration}}{{money $c.DailyMinor $c.Currency}} <small>{{t $s "cost.per_day"}}</small>{{else}}—{{end}}</dd><p class="muted">{{if not $c.HasDuration}}{{t $s "cost.unknown"}}{{else if $c.Sold}}{{t $s "cost.sold"}}{{else}}{{t $s "cost.holding"}}{{end}}</p></div>
+<div><dt>{{t $s "cost.net"}}</dt><dd>{{money $c.NetMinor $c.Currency}}</dd><p class="muted">{{t $s "overview.expense"}} {{money $c.ExpenseMinor $c.Currency}} − {{t $s "asset.income"}} {{money $c.IncomeMinor $c.Currency}}</p>{{if lt $c.NetMinor 0}}<p>{{t $s "cost.gain"}}</p>{{end}}</div>
+<div><dt>{{t $s "cost.days"}}</dt><dd>{{if $c.HasDuration}}{{$c.Days}} <small>{{t $s "cost.day_unit"}}</small>{{else}}—{{end}}</dd>{{if $c.HasDuration}}<p class="muted">{{localDate $c.Start}} — {{localDate $c.End}}</p>{{end}}</div>
+<div><dt>{{t $s "overview.expense"}}</dt><dd>{{money $c.ExpenseMinor $c.Currency}}</dd></div>
+</dl>
+{{if $c.Points}}{{$chart := costChart $c}}
+<section class="cost-report"><h3>{{t $s "cost.trend"}}</h3><p class="muted" id="cost-chart-help">{{t $s "cost.trend_help"}}</p>
+<div class="cost-chart-scale"><span>{{money $chart.Min $c.Currency}} — {{money $chart.Max $c.Currency}}</span></div>
+<svg class="cost-chart" viewBox="0 0 640 200" role="img" aria-labelledby="cost-chart-help"><line x1="20" x2="620" y1="{{$chart.ZeroY}}" y2="{{$chart.ZeroY}}" class="cost-zero"/><path d="{{$chart.Path}}"/>{{range $chart.Points}}<circle cx="{{.X}}" cy="{{.Y}}" r="3" fill="currentColor"><title>{{dateTime .Point.At}} · {{eventLabel $s .Point.Type}} · {{money .Point.NetMinor $c.Currency}}</title></circle>{{end}}</svg>
+<div class="cost-chart-scale"><time>{{localDate $chart.Start}}</time><time>{{localDate $chart.End}}</time></div>
+<details class="cost-data"><summary>{{t $s "cost.data"}}</summary><div class="table-scroll"><table><thead><tr><th>{{t $s "asset.time"}}</th><th>{{t $s "asset.event_type"}}</th><th>{{t $s "cost.net"}}</th></tr></thead><tbody>{{range $c.Points}}<tr><td>{{dateTime .At}}</td><td>{{eventLabel $s .Type}}</td><td>{{money .NetMinor $c.Currency}}</td></tr>{{end}}</tbody></table></div></details></section>
+{{else}}<p class="muted">{{t $s "cost.empty"}}</p>{{end}}
+{{if $c.Categories}}<section class="cost-report"><h3>{{t $s "cost.breakdown"}}</h3><ul class="cost-categories">{{range $c.Categories}}<li><div><span>{{eventLabel $s .Type}}</span><strong>{{money .AmountMinor $c.Currency}}</strong><span>{{costPercent .PercentTenths}}%</span></div>{{if gt (len $c.Categories) 1}}<svg viewBox="0 0 1000 6" preserveAspectRatio="none" aria-hidden="true"><rect width="{{.PercentTenths}}" height="6"/></svg>{{end}}</li>{{end}}</ul></section>{{end}}
+</section>
+{{end}}

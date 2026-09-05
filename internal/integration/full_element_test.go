@@ -307,6 +307,23 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if _, err := lifecycle.Record(ctx, viewerSession.Principal, application.RecordEvent{}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer should not mutate lifecycle, got %v", err)
 	}
+	cost, err := lifecycle.CostDashboard(ctx, viewerSession.Principal, asset.ID)
+	if err != nil || cost.NetMinor != -73_000 || !cost.Sold || !cost.HasDuration || len(cost.Points) != 3 || len(cost.Categories) != 2 {
+		t.Fatalf("full cost dashboard mismatch: %+v %v", cost, err)
+	}
+	outsider := viewerSession.Principal
+	outsider.TenantID = "00000000-0000-4000-8000-000000000099"
+	if _, err := lifecycle.CostDashboard(ctx, outsider, asset.ID); err == nil {
+		t.Fatal("cost dashboard leaked across tenants")
+	}
+	filtered, err := lifecycle.TimelinePage(ctx, viewerSession.Principal, asset.ID, application.EventListOptions{Type: "sale", Page: 1, PageSize: 1})
+	if err != nil || len(filtered.Events) != 1 {
+		t.Fatalf("filtered timeline: %v", err)
+	}
+	again, err := lifecycle.CostDashboard(ctx, viewerSession.Principal, asset.ID)
+	if err != nil || again.NetMinor != cost.NetMinor || len(again.Points) != len(cost.Points) {
+		t.Fatal("cost dashboard depends on pagination")
+	}
 	var auditCount int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM security_audit_events WHERE tenant_id = "+placeholder(driver), owner.TenantID).Scan(&auditCount); err != nil {
 		t.Fatalf("count security audit events: %v", err)
