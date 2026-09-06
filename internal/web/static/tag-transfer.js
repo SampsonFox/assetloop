@@ -27,7 +27,7 @@ function button(label, action) {
 }
 function transfer(title, titles, items, move, reset) {
   const root=node('section','tag-transfer'); root.setAttribute('aria-label',title); root.dataset.transferUi='';
-  const heading=node('div','field-heading');heading.append(node('h4','',title));
+  const heading=node('div','field-heading transfer-heading');heading.append(node('h4','',title));
   if(reset)heading.append(button(text.reset,()=>reset()));
   root.append(heading);
   const tabs=node('div','transfer-mobile-tabs'), grid=node('div','transfer-grid'), arrows=node('div','transfer-arrows');

@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,6 +12,31 @@ import (
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 )
+
+func resourceSize(size int64) string {
+	if size >= 1<<20 {
+		return fmt.Sprintf("%.1f MiB", float64(size)/(1<<20))
+	}
+	if size >= 1<<10 {
+		return fmt.Sprintf("%.1f KiB", float64(size)/(1<<10))
+	}
+	return fmt.Sprintf("%d B", size)
+}
+
+func resourceLicenseSummary(license string) string {
+	label := license
+	if i := strings.Index(label, "http"); i >= 0 {
+		label = strings.Trim(label[:i], " —-·\n\t")
+	}
+	if label == "" {
+		label = license
+	}
+	runes := []rune(label)
+	if len(runes) > 36 {
+		return string(runes[:36]) + "…"
+	}
+	return label
+}
 
 func (s *Server) resourcePrincipal(w http.ResponseWriter, r *http.Request) (application.Principal, bool) {
 	p, ok := s.requirePrincipal(w, r)

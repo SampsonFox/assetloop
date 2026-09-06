@@ -174,6 +174,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 	}
 	templates := map[string]*template.Template{}
 	funcs := template.FuncMap{
+		"resourceSize": resourceSize, "resourceLicenseSummary": resourceLicenseSummary,
 		"tagEditor": func(editor modelTagEditor, values map[string]string) any {
 			return struct {
 				Editor  modelTagEditor
@@ -242,7 +243,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
 	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance"} {
-		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/"+page+".html")
+		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
 		}

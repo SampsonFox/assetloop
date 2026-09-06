@@ -21,6 +21,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |
 | `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, inherited GLB viewer, code-defined zh-CN/en language packs, account menu, semantic light/dark themes with user accent palettes, shared catalog drawers, inline custom lifecycle event types, and progressively disclosed FX evidence forms |
 | `internal/web/resources.go`, `resource_tags.go`, `resources_i18n.go`, `templates/resources.html`, `templates/resource.html` | Paged 3D library, on-demand preview, shared attribution, descriptive tags/categories, current reference navigation and deletion retry |
+| `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons, compact tag/resource management presentation and accessible-label/layout regression checks |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
