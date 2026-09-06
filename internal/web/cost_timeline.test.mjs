@@ -44,6 +44,15 @@ test('expanded record keeps a gutter clear of the timeline rail',()=>{
   assert.match(css,/\.compact-timeline \.timeline-dot\s*\{[^}]*box-shadow:none/);
   assert.ok(!css.includes('transform:scale(1.045)'));
 });
+
+test('record has one timestamp which reveals clock time inline on expansion',()=>{
+  const template=readFileSync(new URL('./templates/asset.html',import.meta.url),'utf8');
+  const row=template.split('\n').find(line=>line.includes('data-timeline-item'));
+  assert.equal((row.match(/<time\b/g)||[]).length,1);
+  assert.ok(row.includes('class="timeline-clock"'));
+  const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+  assert.match(css,/\.timeline-trigger\[aria-expanded="true"\] \.timeline-clock/);
+});
 test('touch pins one item, outside click and Escape close',()=>{
   const {items:[a,b],doc,tick}=harness();
   a.listeners.pointerenter({pointerType:'touch'});tick();assert.equal(a.panel.hidden,true);
