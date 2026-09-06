@@ -302,7 +302,7 @@ func TestLifecycleFormUsesResponsiveDrawerInteraction(t *testing.T) {
 		}
 	}
 	script := request(t, handler, http.MethodGet, "/static/app.js", nil, nil)
-	for _, want := range []string{`window.location.hash === "#add-event"`, `document.querySelector("#event-drawer .error")`, `document.querySelector('[data-dialog-open="event-drawer"]')`, `event.target.matches("dialog.drawer")`, `event.target.close()`} {
+	for _, want := range []string{`window.location.hash === "#add-event"`, `document.querySelector("#event-drawer .error")`, `document.querySelector('[data-dialog-open="event-drawer"]')`, `event.target.matches("dialog.drawer")`, `closeDialog(event.target)`, `confirmDiscard`, `rememberDialogForms`} {
 		if script.Code != http.StatusOK || !strings.Contains(script.Body.String(), want) {
 			t.Fatalf("lifecycle drawer interaction missing %q: status=%d body=%s", want, script.Code, script.Body.String())
 		}

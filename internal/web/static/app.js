@@ -87,11 +87,59 @@
     if (currency) syncFXFields(currency);
   };
 
-  const dirtyForm = (dialog) => dialog?.querySelector("form[data-guard-dirty][data-dirty='true']");
-  const canDiscardDialog = (dialog) => {
-    const form = dirtyForm(dialog);
-    return !form || window.confirm(form.dataset.discardConfirm);
+  const formBaselines = new WeakMap();
+  const formValues = (form) => JSON.stringify([...form.elements]
+    .filter((field) => field.name && !['submit', 'button', 'reset'].includes(field.type))
+    .map((field) => [field.name, field.type === 'file'
+      ? [...field.files].map((file) => [file.name, file.size, file.lastModified])
+      : ['checkbox', 'radio'].includes(field.type) ? field.checked
+      : field.multiple ? [...field.selectedOptions].map((option) => option.value) : field.value]));
+  const rememberDialogForms = (dialog) => {
+    for (const form of dialog.querySelectorAll('form[data-guard-dirty]')) {
+      formBaselines.set(form, formValues(form));
+      form.dataset.dirty = 'false';
+    }
   };
+  const updateDirty = (form) => {
+    if (form) form.dataset.dirty = String(formBaselines.has(form)
+      ? formValues(form) !== formBaselines.get(form) : true);
+  };
+  const dirtyForm = (dialog) => {
+    const forms = [...dialog.querySelectorAll('form[data-guard-dirty]')];
+    for (const form of forms) {
+      if (formBaselines.has(form)) updateDirty(form);
+    }
+    return forms.find((form) => form.dataset.dirty === 'true');
+  };
+  // Use an in-page modal: embedded browsers may suppress native confirm UI.
+  const confirmDiscard = (message) => new Promise((resolve) => {
+    const english = document.documentElement.lang.startsWith('en');
+    const prompt = document.createElement('dialog');
+    prompt.className = 'discard-dialog';
+    prompt.setAttribute('aria-labelledby', 'discard-dialog-title');
+    prompt.setAttribute('aria-describedby', 'discard-dialog-message');
+    const title = document.createElement('h2');
+    title.id = 'discard-dialog-title';
+    title.textContent = english ? 'Discard changes?' : '放弃修改？';
+    const description = document.createElement('p');
+    description.id = 'discard-dialog-message';
+    description.textContent = message;
+    const actions = document.createElement('div');
+    actions.className = 'discard-actions';
+    const stay = document.createElement('button');
+    stay.type = 'button'; stay.className = 'secondary auto';
+    stay.textContent = english ? 'Keep editing' : '继续编辑';
+    const discard = document.createElement('button');
+    discard.type = 'button'; discard.className = 'auto';
+    discard.textContent = english ? 'Discard changes' : '放弃修改';
+    const finish = (accepted) => { prompt.close(); prompt.remove(); resolve(accepted); };
+    stay.addEventListener('click', () => finish(false));
+    discard.addEventListener('click', () => finish(true));
+    prompt.addEventListener('cancel', (event) => { event.preventDefault(); finish(false); });
+    prompt.addEventListener('click', (event) => { if (event.target === prompt) finish(false); });
+    actions.append(stay, discard); prompt.append(title, description, actions);
+    document.body.append(prompt); prompt.showModal(); stay.focus();
+  });
   // Deep links open a drawer once; refreshing after dismissal must not reopen it.
   const consumeDialogURL = (dialog) => {
     if (!dialog) return;
@@ -113,11 +161,17 @@
       form.dataset.dirty = "false";
     }
   };
-  const closeDialog = (dialog) => {
-    if (!dialog || !canDiscardDialog(dialog)) return false;
-    discardDialogForms(dialog);
-    dialog.close();
-    return true;
+  const closingDialogs = new WeakSet();
+  const closeDialog = async (dialog) => {
+    if (!dialog?.open || closingDialogs.has(dialog)) return false;
+    closingDialogs.add(dialog);
+    try {
+      const form = dirtyForm(dialog);
+      if (form && !await confirmDiscard(form.dataset.discardConfirm)) return false;
+      discardDialogForms(dialog);
+      dialog.close();
+      return true;
+    } finally { closingDialogs.delete(dialog); }
   };
   const focusDialog = (dialog) => {
     const target = dialog.querySelector("[data-error-summary]")
@@ -132,11 +186,8 @@
     if (initializedDialogs.has(dialog)) continue;
     initializedDialogs.add(dialog);
     dialog.addEventListener("cancel", (event) => {
-      if (!canDiscardDialog(dialog)) {
-        event.preventDefault();
-        return;
-      }
-      discardDialogForms(dialog);
+      event.preventDefault();
+      closeDialog(dialog);
     });
     dialog.addEventListener("close", () => {
       consumeDialogURL(dialog);
@@ -151,10 +202,7 @@
       if (!menu.contains(event.target)) menu.removeAttribute("open");
     }
     if (event.target.matches("dialog.drawer")) {
-      if (canDiscardDialog(event.target)) {
-        discardDialogForms(event.target);
-        event.target.close();
-      }
+      closeDialog(event.target);
       return;
     }
 
@@ -207,13 +255,17 @@
       if (currency) syncFXFields(currency);
       const eventType = form.querySelector("[data-event-type-select]");
       if (eventType) syncEventTypeFields(eventType);
+      rememberDialogForms(dialog);
       dialog.showModal();
       queueMicrotask(() => focusDialog(dialog));
       return;
     }
 
     const closer = event.target.closest("[data-dialog-close]");
-    if (closer) closeDialog(closer.closest("dialog"));
+    if (closer) {
+      event.preventDefault();
+      closeDialog(closer.closest("dialog"));
+    }
   });
 
   document.addEventListener("keydown", (event) => {
@@ -224,17 +276,19 @@
   document.addEventListener("input", (event) => {
     if (event.target.closest("[data-transfer-ui]")) return;
     const form = event.target.closest("form[data-guard-dirty]");
-    if (form) form.dataset.dirty = "true";
+    updateDirty(form);
     if (form && event.target.matches("[name='amount'], [name='fx_rate']")) syncFXPreview(form);
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.closest("[data-transfer-ui]")) return;
     const dirty = event.target.closest("form[data-guard-dirty]");
-    if (dirty) dirty.dataset.dirty = "true";
+    updateDirty(dirty);
     const currency = event.target.closest("[data-currency-select]");
     if (currency) syncFXFields(currency);
     const eventType = event.target.closest("[data-event-type-select]");
     if (eventType) syncEventTypeFields(eventType);
+    updateDirty(dirty);
     const autoSubmit = event.target.closest("[data-auto-submit]");
     if (!autoSubmit) return;
     const form = autoSubmit.matches("form") ? autoSubmit : autoSubmit.form;
@@ -296,6 +350,7 @@
   } else {
     const erroredDialog = [...document.querySelectorAll("dialog.drawer")].find((dialog) => dialog.querySelector("[data-error-summary]"));
     if (erroredDialog) {
+      rememberDialogForms(erroredDialog);
       erroredDialog.showModal();
       queueMicrotask(() => focusDialog(erroredDialog));
     } else {
