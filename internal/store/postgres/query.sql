@@ -18,7 +18,10 @@ ON CONFLICT (tenant_id, model_id, name, color) DO UPDATE SET name = excluded.nam
 RETURNING id;
 
 -- name: CreateAsset :exec
-INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES ($1, $2, $3, $4, $5);
+INSERT INTO assets (id, tenant_id, variant_id, model_id, display_name, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.narg(variant_id),
+ COALESCE(sqlc.narg(model_id)::uuid, (SELECT model_id FROM product_variants WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.narg(variant_id))),
+ sqlc.arg(display_name), sqlc.arg(created_at));
 
 -- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
@@ -70,8 +73,10 @@ WHERE variant.tenant_id = $1 AND variant.id = $2
 
 -- name: CreateCatalogAsset :exec
 INSERT INTO assets
-    (id, tenant_id, variant_id, display_name, serial_number, purchase_channel, notes, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+    (id, tenant_id, variant_id, model_id, display_name, serial_number, purchase_channel, notes, created_at)
+VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.narg(variant_id),
+ COALESCE(sqlc.narg(model_id)::uuid, (SELECT model_id FROM product_variants WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.narg(variant_id))),
+ sqlc.arg(display_name), sqlc.arg(serial_number), sqlc.arg(purchase_channel), sqlc.arg(notes), sqlc.arg(created_at));
 
 -- name: UpdateCatalogAsset :execrows
 UPDATE assets

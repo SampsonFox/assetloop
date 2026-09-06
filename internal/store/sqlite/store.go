@@ -47,7 +47,7 @@ func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Ass
 	if err != nil {
 		return domain.Asset{}, err
 	}
-	if err := q.CreateAsset(ctx, sqlitedb.CreateAssetParams{ID: asset.ID, TenantID: asset.TenantID, VariantID: asset.VariantID, DisplayName: asset.DisplayName, CreatedAt: createdAt}); err != nil {
+	if err := q.CreateAsset(ctx, sqlitedb.CreateAssetParams{ID: asset.ID, TenantID: asset.TenantID, VariantID: sql.NullString{String: asset.VariantID, Valid: asset.VariantID != ""}, DisplayName: asset.DisplayName, CreatedAt: createdAt}); err != nil {
 		return domain.Asset{}, err
 	}
 	if err := tx.Commit(); err != nil {

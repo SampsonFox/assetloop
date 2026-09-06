@@ -52,7 +52,7 @@ func (s *Store) DeleteVariant(ctx context.Context, tenantID, variantID string) (
 
 func (s *Store) CreateCatalogAsset(ctx context.Context, asset domain.Asset) error {
 	return sqlitedb.New(s.db).CreateCatalogAsset(ctx, sqlitedb.CreateCatalogAssetParams{
-		ID: asset.ID, TenantID: asset.TenantID, VariantID: asset.VariantID,
+		ID: asset.ID, TenantID: asset.TenantID, VariantID: sql.NullString{String: asset.VariantID, Valid: asset.VariantID != ""},
 		DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
 		PurchaseChannel: asset.PurchaseChannel, Notes: asset.Notes, CreatedAt: sqliteTime(asset.CreatedAt),
 	})
@@ -60,7 +60,7 @@ func (s *Store) CreateCatalogAsset(ctx context.Context, asset domain.Asset) erro
 
 func (s *Store) UpdateCatalogAsset(ctx context.Context, asset domain.Asset) error {
 	count, err := sqlitedb.New(s.db).UpdateCatalogAsset(ctx, sqlitedb.UpdateCatalogAssetParams{
-		VariantID: asset.VariantID, DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
+		VariantID: sql.NullString{String: asset.VariantID, Valid: asset.VariantID != ""}, DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
 		PurchaseChannel: asset.PurchaseChannel, Notes: asset.Notes,
 		TenantID: asset.TenantID, ID: asset.ID,
 	})

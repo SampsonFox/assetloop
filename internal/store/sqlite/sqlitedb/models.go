@@ -11,13 +11,14 @@ import (
 type Asset struct {
 	ID                string
 	TenantID          string
-	VariantID         string
+	ModelID           string
+	VariantID         sql.NullString
 	DisplayName       string
-	CreatedAt         string
 	SerialNumber      string
 	Color             string
 	PurchaseChannel   string
 	Notes             string
+	CreatedAt         string
 	Model3dResourceID sql.NullString
 }
 
@@ -54,6 +55,13 @@ type AssetEventType struct {
 	SystemCode        string
 	Enabled           int64
 	UpdatedAt         string
+}
+
+type AssetSpecificationTag struct {
+	TenantID string
+	AssetID  string
+	ModelID  string
+	TagID    string
 }
 
 type AssetTransaction struct {
@@ -93,6 +101,21 @@ type ItemCategory struct {
 	IconKey   string
 }
 
+type LegacyVariantMedium struct {
+	TenantID   string
+	VariantID  string
+	ModelID    string
+	ResourceID string
+	Reason     string
+	Resolved   int64
+}
+
+type LegacyVariantTag struct {
+	TenantID  string
+	VariantID string
+	TagID     string
+}
+
 type LifecycleRequest struct {
 	TenantID    string
 	UserID      string
@@ -115,6 +138,35 @@ type Model3dResource struct {
 	License   string
 	CreatedAt string
 	UpdatedAt string
+}
+
+type ModelAllowedTag struct {
+	TenantID string
+	ModelID  string
+	TagID    string
+}
+
+type ModelAppearanceCondition struct {
+	TenantID string
+	RuleID   string
+	ModelID  string
+	TagID    string
+}
+
+type ModelAppearanceDefault struct {
+	ID         string
+	TenantID   string
+	ModelID    string
+	ResourceID string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+type ModelAppearanceDimension struct {
+	TenantID          string
+	ModelID           string
+	TypeID            string
+	AffectsAppearance int64
 }
 
 type ProductModel struct {
@@ -144,6 +196,18 @@ type ProductVariant struct {
 	Model3dResourceID sql.NullString
 }
 
+type ResourceCategory struct {
+	TenantID   string
+	ResourceID string
+	CategoryID string
+}
+
+type ResourceSpecificationTag struct {
+	TenantID   string
+	ResourceID string
+	TagID      string
+}
+
 type SecurityAuditEvent struct {
 	ID           string
 	TenantID     string
@@ -160,6 +224,30 @@ type Session struct {
 	UserID    string
 	ExpiresAt string
 	CreatedAt string
+}
+
+type SpecificationTag struct {
+	ID             string
+	TenantID       string
+	TypeID         string
+	Name           string
+	NormalizedName string
+	Enabled        int64
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+type SpecificationTagType struct {
+	ID                string
+	TenantID          string
+	Name              string
+	NormalizedName    string
+	Multiple          int64
+	AffectsAppearance int64
+	Enabled           int64
+	SystemCode        string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 type Tenant struct {

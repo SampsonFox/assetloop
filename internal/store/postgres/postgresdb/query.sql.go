@@ -165,13 +165,17 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 }
 
 const createAsset = `-- name: CreateAsset :exec
-INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES ($1, $2, $3, $4, $5)
+INSERT INTO assets (id, tenant_id, variant_id, model_id, display_name, created_at)
+VALUES ($1, $2, $3,
+ COALESCE($4::uuid, (SELECT model_id FROM product_variants WHERE tenant_id=$2 AND id=$3)),
+ $5, $6)
 `
 
 type CreateAssetParams struct {
 	ID          uuid.UUID
 	TenantID    uuid.UUID
-	VariantID   uuid.UUID
+	VariantID   uuid.NullUUID
+	ModelID     uuid.NullUUID
 	DisplayName string
 	CreatedAt   time.Time
 }
@@ -181,6 +185,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) error 
 		arg.ID,
 		arg.TenantID,
 		arg.VariantID,
+		arg.ModelID,
 		arg.DisplayName,
 		arg.CreatedAt,
 	)
@@ -307,14 +312,17 @@ func (q *Queries) CreateAssetTransaction(ctx context.Context, arg CreateAssetTra
 
 const createCatalogAsset = `-- name: CreateCatalogAsset :exec
 INSERT INTO assets
-    (id, tenant_id, variant_id, display_name, serial_number, purchase_channel, notes, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    (id, tenant_id, variant_id, model_id, display_name, serial_number, purchase_channel, notes, created_at)
+VALUES ($1, $2, $3,
+ COALESCE($4::uuid, (SELECT model_id FROM product_variants WHERE tenant_id=$2 AND id=$3)),
+ $5, $6, $7, $8, $9)
 `
 
 type CreateCatalogAssetParams struct {
 	ID              uuid.UUID
 	TenantID        uuid.UUID
-	VariantID       uuid.UUID
+	VariantID       uuid.NullUUID
+	ModelID         uuid.NullUUID
 	DisplayName     string
 	SerialNumber    string
 	PurchaseChannel string
@@ -327,6 +335,7 @@ func (q *Queries) CreateCatalogAsset(ctx context.Context, arg CreateCatalogAsset
 		arg.ID,
 		arg.TenantID,
 		arg.VariantID,
+		arg.ModelID,
 		arg.DisplayName,
 		arg.SerialNumber,
 		arg.PurchaseChannel,
@@ -2554,7 +2563,7 @@ WHERE tenant_id = $6 AND id = $7
 `
 
 type UpdateCatalogAssetParams struct {
-	VariantID       uuid.UUID
+	VariantID       uuid.NullUUID
 	DisplayName     string
 	SerialNumber    string
 	PurchaseChannel string

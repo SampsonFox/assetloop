@@ -103,7 +103,7 @@ func (s *Store) CreateCatalogAsset(ctx context.Context, asset domain.Asset) erro
 		return fmt.Errorf("parse variant ID: %w", err)
 	}
 	return postgresdb.New(s.db).CreateCatalogAsset(ctx, postgresdb.CreateCatalogAssetParams{
-		ID: id, TenantID: tenantID, VariantID: variantID, DisplayName: asset.DisplayName,
+		ID: id, TenantID: tenantID, VariantID: uuid.NullUUID{UUID: variantID, Valid: true}, DisplayName: asset.DisplayName,
 		SerialNumber: asset.SerialNumber, PurchaseChannel: asset.PurchaseChannel,
 		Notes: asset.Notes, CreatedAt: asset.CreatedAt,
 	})
@@ -119,7 +119,7 @@ func (s *Store) UpdateCatalogAsset(ctx context.Context, asset domain.Asset) erro
 		return fmt.Errorf("parse variant ID: %w", err)
 	}
 	count, err := postgresdb.New(s.db).UpdateCatalogAsset(ctx, postgresdb.UpdateCatalogAssetParams{
-		VariantID: variantID, DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
+		VariantID: uuid.NullUUID{UUID: variantID, Valid: true}, DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
 		PurchaseChannel: asset.PurchaseChannel, Notes: asset.Notes,
 		TenantID: tenantID, ID: id,
 	})

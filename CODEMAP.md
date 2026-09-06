@@ -61,7 +61,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 ## Regression spine
 
-Specification-tag refactor (in progress): `internal/domain/specifications.go` owns optional typed selections, retained disabled values, per-model appearance overrides and deterministic confirmed-rule matching. `specifications_test.go` covers these pure policies. They are not yet wired into persistence or Web; the running catalogue still uses variants until the paired migration and application integration land.
+Specification-tag refactor (in progress): `internal/domain/specifications.go` owns optional typed selections, retained disabled values, per-model appearance overrides and deterministic confirmed-rule matching. Paired `00013` SQL files define the direct asset/model relation and typed associations; `internal/store/specification_upgrade.go` executes their DDL and Unicode-aware legacy backfill in one Goose transaction. `specification_migration_test.go` covers rollback/retry, old colors/descriptions, conflicting GLBs and preserved history. Application and Web integration remain in progress; do not deploy this checkpoint as the completed tag UI.
 
 Cost dashboard: `internal/application/cost_dashboard.go` reads the full authorized lifecycle; `internal/domain/cost_dashboard.go` owns exact net/daily cost, calendar-day duration, trend and expense grouping. `internal/web/cost_dashboard.go`, `templates/cost_dashboard.html` and `static/cost-timeline.js` render SVG reports and progressive timeline details without market estimates or persistence changes. Timeline list filters never scope dashboard calculations.
 

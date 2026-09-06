@@ -50,7 +50,7 @@ func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Ass
 	if err != nil {
 		return domain.Asset{}, err
 	}
-	if err := q.CreateAsset(ctx, postgresdb.CreateAssetParams{ID: ids.asset, TenantID: ids.tenant, VariantID: ids.variant, DisplayName: asset.DisplayName, CreatedAt: asset.CreatedAt}); err != nil {
+	if err := q.CreateAsset(ctx, postgresdb.CreateAssetParams{ID: ids.asset, TenantID: ids.tenant, VariantID: uuid.NullUUID{UUID: ids.variant, Valid: true}, DisplayName: asset.DisplayName, CreatedAt: asset.CreatedAt}); err != nil {
 		return domain.Asset{}, err
 	}
 	if err := tx.Commit(); err != nil {

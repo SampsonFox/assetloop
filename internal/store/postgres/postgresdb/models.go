@@ -14,7 +14,7 @@ import (
 type Asset struct {
 	ID                    uuid.UUID
 	TenantID              uuid.UUID
-	VariantID             uuid.UUID
+	VariantID             uuid.NullUUID
 	DisplayName           string
 	CreatedAt             time.Time
 	SerialNumber          string
@@ -23,6 +23,7 @@ type Asset struct {
 	Notes                 string
 	Model3dResourceID     uuid.NullUUID
 	Model3dResourceStatus string
+	ModelID               uuid.UUID
 }
 
 type AssetEvent struct {
@@ -58,6 +59,13 @@ type AssetEventType struct {
 	SystemCode        string
 	Enabled           bool
 	UpdatedAt         time.Time
+}
+
+type AssetSpecificationTag struct {
+	TenantID uuid.UUID
+	AssetID  uuid.UUID
+	ModelID  uuid.UUID
+	TagID    uuid.UUID
 }
 
 type AssetTransaction struct {
@@ -97,6 +105,21 @@ type ItemCategory struct {
 	IconKey   string
 }
 
+type LegacyVariantMedium struct {
+	TenantID   uuid.UUID
+	VariantID  uuid.UUID
+	ModelID    uuid.UUID
+	ResourceID uuid.UUID
+	Reason     string
+	Resolved   bool
+}
+
+type LegacyVariantTag struct {
+	TenantID  uuid.UUID
+	VariantID uuid.UUID
+	TagID     uuid.UUID
+}
+
 type LifecycleRequest struct {
 	TenantID    uuid.UUID
 	UserID      uuid.UUID
@@ -119,6 +142,36 @@ type Model3dResource struct {
 	License   string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type ModelAllowedTag struct {
+	TenantID uuid.UUID
+	ModelID  uuid.UUID
+	TagID    uuid.UUID
+}
+
+type ModelAppearanceCondition struct {
+	TenantID uuid.UUID
+	RuleID   uuid.UUID
+	ModelID  uuid.UUID
+	TagID    uuid.UUID
+}
+
+type ModelAppearanceDefault struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	ModelID        uuid.UUID
+	ResourceID     uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	ResourceStatus string
+}
+
+type ModelAppearanceDimension struct {
+	TenantID          uuid.UUID
+	ModelID           uuid.UUID
+	TypeID            uuid.UUID
+	AffectsAppearance bool
 }
 
 type ProductModel struct {
@@ -150,6 +203,18 @@ type ProductVariant struct {
 	Model3dResourceStatus string
 }
 
+type ResourceCategory struct {
+	TenantID   uuid.UUID
+	ResourceID uuid.UUID
+	CategoryID uuid.UUID
+}
+
+type ResourceSpecificationTag struct {
+	TenantID   uuid.UUID
+	ResourceID uuid.UUID
+	TagID      uuid.UUID
+}
+
 type SecurityAuditEvent struct {
 	ID           uuid.UUID
 	TenantID     uuid.UUID
@@ -166,6 +231,30 @@ type Session struct {
 	UserID    uuid.UUID
 	ExpiresAt time.Time
 	CreatedAt time.Time
+}
+
+type SpecificationTag struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	TypeID         uuid.UUID
+	Name           string
+	NormalizedName string
+	Enabled        bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type SpecificationTagType struct {
+	ID                uuid.UUID
+	TenantID          uuid.UUID
+	Name              string
+	NormalizedName    string
+	Multiple          bool
+	AffectsAppearance bool
+	Enabled           bool
+	SystemCode        string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type Tenant struct {

@@ -162,13 +162,17 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 }
 
 const createAsset = `-- name: CreateAsset :exec
-INSERT INTO assets (id, tenant_id, variant_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)
+INSERT INTO assets (id, tenant_id, variant_id, model_id, display_name, created_at)
+VALUES (?1, ?2, ?3,
+ COALESCE(?4, (SELECT model_id FROM product_variants WHERE tenant_id=?2 AND id=?3)),
+ ?5, ?6)
 `
 
 type CreateAssetParams struct {
 	ID          string
 	TenantID    string
-	VariantID   string
+	VariantID   sql.NullString
+	ModelID     interface{}
 	DisplayName string
 	CreatedAt   string
 }
@@ -178,6 +182,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) error 
 		arg.ID,
 		arg.TenantID,
 		arg.VariantID,
+		arg.ModelID,
 		arg.DisplayName,
 		arg.CreatedAt,
 	)
@@ -304,14 +309,17 @@ func (q *Queries) CreateAssetTransaction(ctx context.Context, arg CreateAssetTra
 
 const createCatalogAsset = `-- name: CreateCatalogAsset :exec
 INSERT INTO assets
-    (id, tenant_id, variant_id, display_name, serial_number, purchase_channel, notes, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (id, tenant_id, variant_id, model_id, display_name, serial_number, purchase_channel, notes, created_at)
+VALUES (?1, ?2, ?3,
+ COALESCE(?4, (SELECT model_id FROM product_variants WHERE tenant_id=?2 AND id=?3)),
+ ?5, ?6, ?7, ?8, ?9)
 `
 
 type CreateCatalogAssetParams struct {
 	ID              string
 	TenantID        string
-	VariantID       string
+	VariantID       sql.NullString
+	ModelID         interface{}
 	DisplayName     string
 	SerialNumber    string
 	PurchaseChannel string
@@ -324,6 +332,7 @@ func (q *Queries) CreateCatalogAsset(ctx context.Context, arg CreateCatalogAsset
 		arg.ID,
 		arg.TenantID,
 		arg.VariantID,
+		arg.ModelID,
 		arg.DisplayName,
 		arg.SerialNumber,
 		arg.PurchaseChannel,
@@ -2566,7 +2575,7 @@ WHERE tenant_id = ? AND id = ?
 `
 
 type UpdateCatalogAssetParams struct {
-	VariantID       string
+	VariantID       sql.NullString
 	DisplayName     string
 	SerialNumber    string
 	PurchaseChannel string
