@@ -801,7 +801,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	fullHistory := request(t, handler, http.MethodGet, "/assets/"+match[1]+"?show_voided=1", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"初始维修金额", "正确维修金额", `<span class="muted">已作废</span>`, `name="show_voided" value="1" data-auto-submit checked`} {
+	for _, want := range []string{"初始维修金额", "正确维修金额", `<span class="muted">已作废</span>`, `name="show_voided" value="1" checked`, `data-timeline-results`, `data-timeline-apply`} {
 		if fullHistory.Code != http.StatusOK || !strings.Contains(fullHistory.Body.String(), want) {
 			t.Fatalf("full lifecycle history missing %q: status=%d body=%s", want, fullHistory.Code, fullHistory.Body.String())
 		}

@@ -235,6 +235,7 @@
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.defaultPrevented) return;
     const form = event.target;
     const message = form.dataset.confirm;
     if (message && !window.confirm(message)) {
