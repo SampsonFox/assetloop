@@ -36,6 +36,14 @@ test('details expand inside the same record, with no detached popup',()=>{
   assert.match(css,/\.timeline-details\[hidden\]\s*\{[^}]*grid-template-rows:0fr/);
   assert.match(css,/prefers-reduced-motion:reduce[^]*\.timeline-details/);
 });
+
+test('expanded record keeps a gutter clear of the timeline rail',()=>{
+  const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+  assert.match(css,/\.compact-timeline \.timeline-entry\s*\{[^}]*margin-inline:0/);
+  assert.match(css,/\.compact-timeline \.timeline-item\s*\{[^}]*gap:12px/);
+  assert.match(css,/\.compact-timeline \.timeline-dot\s*\{[^}]*box-shadow:none/);
+  assert.ok(!css.includes('transform:scale(1.045)'));
+});
 test('touch pins one item, outside click and Escape close',()=>{
   const {items:[a,b],doc,tick}=harness();
   a.listeners.pointerenter({pointerType:'touch'});tick();assert.equal(a.panel.hidden,true);
