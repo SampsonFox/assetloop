@@ -58,6 +58,36 @@ func RunSpecifications(t *testing.T, first, second Store) {
 	small, large := tagOf(storage, "128GB"), tagOf(storage, "256GB")
 	_ = tagOf(memory, "128GB") // Same label in a different dimension is valid.
 	matte := tagOf(finish, "Matte")
+	t.Run("dictionary database filtering and pagination", func(t *testing.T) {
+		literal := tagOf(memory, "Écran %_ test")
+		for _, status := range []string{"", "all", "enabled"} {
+			page, err := reader.ListTypes(ctx, actor, application.SpecificationListOptions{Query: " TEST ", Status: status, Page: 2, PageSize: 2})
+			if err != nil || page.Total != 4 || len(page.Types) != 2 || page.Types[0].ID != memory.ID || page.Types[1].ID != storage.ID {
+				t.Fatalf("type page status %q: %+v %v", status, page, err)
+			}
+			values, err := reader.ListTags(ctx, actor, application.SpecificationListOptions{Query: " ÉCRAN %_ ", Status: status, TypeID: memory.ID})
+			if err != nil || values.Total != 1 || len(values.Tags) != 1 || values.Tags[0].ID != literal.ID {
+				t.Fatalf("literal normalized value search: %+v %v", values, err)
+			}
+		}
+		page, err := reader.ListTags(ctx, actor, application.SpecificationListOptions{TypeID: storage.ID, Page: 2, PageSize: 1})
+		if err != nil || page.Total != 2 || len(page.Tags) != 1 || page.Tags[0].ID != large.ID {
+			t.Fatalf("value page: %+v %v", page, err)
+		}
+		if _, err := svc.SaveTag(ctx, actor, application.SaveSpecificationTag{ID: literal.ID, TypeID: memory.ID, Name: literal.Name, Enabled: false}); err != nil {
+			t.Fatal(err)
+		}
+		disabled, err := reader.ListTags(ctx, actor, application.SpecificationListOptions{Status: "disabled", TypeID: memory.ID})
+		if err != nil || disabled.Total != 1 || len(disabled.Tags) != 1 || disabled.Tags[0].ID != literal.ID {
+			t.Fatalf("disabled value page: %+v %v", disabled, err)
+		}
+		stranger := actor
+		stranger.TenantID = uuid.NewString()
+		foreign, err := reader.ListTags(ctx, stranger, application.SpecificationListOptions{})
+		if err != nil || foreign.Total != 0 || len(foreign.Tags) != 0 {
+			t.Fatalf("cross-space dictionary leak: %+v %v", foreign, err)
+		}
+	})
 	if _, err := svc.SaveTag(ctx, actor, application.SaveSpecificationTag{TypeID: color.ID, Name: " BLACK ", Enabled: true}); err == nil {
 		t.Fatal("normalized duplicate accepted")
 	}

@@ -1,3 +1,27 @@
+-- name: CountSpecificationTypes :one
+SELECT COUNT(*) FROM specification_tag_types t WHERE t.tenant_id=sqlc.arg(tenant_id)
+AND (sqlc.arg(status_filter)='' OR sqlc.arg(status_filter)='all' OR t.enabled=(sqlc.arg(status_filter)='enabled'))
+AND instr(t.normalized_name, sqlc.arg(search_query)) > 0;
+-- name: ListSpecificationTypes :many
+SELECT CAST(t.id AS TEXT) AS id,t.name,t.normalized_name,t.multiple,t.affects_appearance,t.enabled,t.system_code,t.created_at,t.updated_at,
+(SELECT COUNT(*) FROM model_allowed_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM legacy_variant_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id) AS reference_count
+FROM specification_tag_types t WHERE t.tenant_id=sqlc.arg(tenant_id)
+AND (sqlc.arg(status_filter)='' OR sqlc.arg(status_filter)='all' OR t.enabled=(sqlc.arg(status_filter)='enabled'))
+AND instr(t.normalized_name, sqlc.arg(search_query)) > 0
+ORDER BY t.normalized_name,t.id LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
+-- name: CountSpecificationTags :one
+SELECT COUNT(*) FROM specification_tags t JOIN specification_tag_types k ON k.tenant_id=t.tenant_id AND k.id=t.type_id WHERE t.tenant_id=sqlc.arg(tenant_id)
+AND (sqlc.arg(type_filter)='' OR CAST(t.type_id AS TEXT)=sqlc.arg(type_filter))
+AND (sqlc.arg(status_filter)='' OR sqlc.arg(status_filter)='all' OR t.enabled=(sqlc.arg(status_filter)='enabled'))
+AND instr((t.normalized_name || ' ' || k.normalized_name), sqlc.arg(search_query)) > 0;
+-- name: ListSpecificationTags :many
+SELECT CAST(t.id AS TEXT) AS id,CAST(t.type_id AS TEXT) AS type_id,t.name,t.normalized_name,t.enabled,t.created_at,t.updated_at,k.name AS type_name,
+(SELECT COUNT(*) FROM model_allowed_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM legacy_variant_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id) AS reference_count
+FROM specification_tags t JOIN specification_tag_types k ON k.tenant_id=t.tenant_id AND k.id=t.type_id WHERE t.tenant_id=sqlc.arg(tenant_id)
+AND (sqlc.arg(type_filter)='' OR CAST(t.type_id AS TEXT)=sqlc.arg(type_filter))
+AND (sqlc.arg(status_filter)='' OR sqlc.arg(status_filter)='all' OR t.enabled=(sqlc.arg(status_filter)='enabled'))
+AND instr((t.normalized_name || ' ' || k.normalized_name), sqlc.arg(search_query)) > 0
+ORDER BY t.type_id,t.normalized_name,t.id LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
 -- name: SpecificationTypes :many
 SELECT CAST(id AS TEXT) AS id,name,normalized_name,multiple,affects_appearance,enabled,system_code,created_at,updated_at
 FROM specification_tag_types WHERE tenant_id=sqlc.arg(tenant_id) ORDER BY normalized_name,id;

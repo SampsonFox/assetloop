@@ -31,6 +31,8 @@ type SpecificationStore interface {
 	CreateModel3DResource(context.Context, domain.Model3DResource) error
 	WithSpecificationWrite(context.Context, string, func(SpecificationStore) error) error
 	SpecificationSnapshot(context.Context, string) (SpecificationSnapshot, error)
+	ListSpecificationTypes(context.Context, string, SpecificationListOptions) (SpecificationTypeList, error)
+	ListSpecificationTags(context.Context, string, SpecificationListOptions) (SpecificationTagList, error)
 	PutSpecificationType(context.Context, domain.SpecificationTagType) error
 	PutSpecificationTag(context.Context, domain.SpecificationTag) error
 	AddModelAllowedTag(context.Context, string, string, string) error

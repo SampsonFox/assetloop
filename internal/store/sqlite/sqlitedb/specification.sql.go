@@ -166,6 +166,51 @@ func (q *Queries) ClearResourceSpecificationTags(ctx context.Context, arg ClearR
 	return err
 }
 
+const countSpecificationTags = `-- name: CountSpecificationTags :one
+SELECT COUNT(*) FROM specification_tags t JOIN specification_tag_types k ON k.tenant_id=t.tenant_id AND k.id=t.type_id WHERE t.tenant_id=?1
+AND (?2='' OR CAST(t.type_id AS TEXT)=?2)
+AND (?3='' OR ?3='all' OR t.enabled=(?3='enabled'))
+AND instr((t.normalized_name || ' ' || k.normalized_name), ?4) > 0
+`
+
+type CountSpecificationTagsParams struct {
+	TenantID     string
+	TypeFilter   interface{}
+	StatusFilter interface{}
+	SearchQuery  string
+}
+
+func (q *Queries) CountSpecificationTags(ctx context.Context, arg CountSpecificationTagsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSpecificationTags,
+		arg.TenantID,
+		arg.TypeFilter,
+		arg.StatusFilter,
+		arg.SearchQuery,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSpecificationTypes = `-- name: CountSpecificationTypes :one
+SELECT COUNT(*) FROM specification_tag_types t WHERE t.tenant_id=?1
+AND (?2='' OR ?2='all' OR t.enabled=(?2='enabled'))
+AND instr(t.normalized_name, ?3) > 0
+`
+
+type CountSpecificationTypesParams struct {
+	TenantID     string
+	StatusFilter interface{}
+	SearchQuery  string
+}
+
+func (q *Queries) CountSpecificationTypes(ctx context.Context, arg CountSpecificationTypesParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSpecificationTypes, arg.TenantID, arg.StatusFilter, arg.SearchQuery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createSelectedAsset = `-- name: CreateSelectedAsset :exec
 INSERT INTO assets(id,tenant_id,model_id,display_name,serial_number,purchase_channel,notes,created_at)
 VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
@@ -208,6 +253,147 @@ type DeleteAppearanceDefaultParams struct {
 func (q *Queries) DeleteAppearanceDefault(ctx context.Context, arg DeleteAppearanceDefaultParams) error {
 	_, err := q.db.ExecContext(ctx, deleteAppearanceDefault, arg.TenantID, arg.ID)
 	return err
+}
+
+const listSpecificationTags = `-- name: ListSpecificationTags :many
+SELECT CAST(t.id AS TEXT) AS id,CAST(t.type_id AS TEXT) AS type_id,t.name,t.normalized_name,t.enabled,t.created_at,t.updated_at,k.name AS type_name,
+(SELECT COUNT(*) FROM model_allowed_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM legacy_variant_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id) AS reference_count
+FROM specification_tags t JOIN specification_tag_types k ON k.tenant_id=t.tenant_id AND k.id=t.type_id WHERE t.tenant_id=?1
+AND (?2='' OR CAST(t.type_id AS TEXT)=?2)
+AND (?3='' OR ?3='all' OR t.enabled=(?3='enabled'))
+AND instr((t.normalized_name || ' ' || k.normalized_name), ?4) > 0
+ORDER BY t.type_id,t.normalized_name,t.id LIMIT ?6 OFFSET ?5
+`
+
+type ListSpecificationTagsParams struct {
+	TenantID     string
+	TypeFilter   interface{}
+	StatusFilter interface{}
+	SearchQuery  string
+	PageOffset   int64
+	PageSize     int64
+}
+
+type ListSpecificationTagsRow struct {
+	ID             string
+	TypeID         string
+	Name           string
+	NormalizedName string
+	Enabled        int64
+	CreatedAt      string
+	UpdatedAt      string
+	TypeName       string
+	ReferenceCount int64
+}
+
+func (q *Queries) ListSpecificationTags(ctx context.Context, arg ListSpecificationTagsParams) ([]ListSpecificationTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSpecificationTags,
+		arg.TenantID,
+		arg.TypeFilter,
+		arg.StatusFilter,
+		arg.SearchQuery,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSpecificationTagsRow
+	for rows.Next() {
+		var i ListSpecificationTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TypeID,
+			&i.Name,
+			&i.NormalizedName,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TypeName,
+			&i.ReferenceCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSpecificationTypes = `-- name: ListSpecificationTypes :many
+SELECT CAST(t.id AS TEXT) AS id,t.name,t.normalized_name,t.multiple,t.affects_appearance,t.enabled,t.system_code,t.created_at,t.updated_at,
+(SELECT COUNT(*) FROM model_allowed_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM legacy_variant_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id) AS reference_count
+FROM specification_tag_types t WHERE t.tenant_id=?1
+AND (?2='' OR ?2='all' OR t.enabled=(?2='enabled'))
+AND instr(t.normalized_name, ?3) > 0
+ORDER BY t.normalized_name,t.id LIMIT ?5 OFFSET ?4
+`
+
+type ListSpecificationTypesParams struct {
+	TenantID     string
+	StatusFilter interface{}
+	SearchQuery  string
+	PageOffset   int64
+	PageSize     int64
+}
+
+type ListSpecificationTypesRow struct {
+	ID                string
+	Name              string
+	NormalizedName    string
+	Multiple          int64
+	AffectsAppearance int64
+	Enabled           int64
+	SystemCode        string
+	CreatedAt         string
+	UpdatedAt         string
+	ReferenceCount    int64
+}
+
+func (q *Queries) ListSpecificationTypes(ctx context.Context, arg ListSpecificationTypesParams) ([]ListSpecificationTypesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSpecificationTypes,
+		arg.TenantID,
+		arg.StatusFilter,
+		arg.SearchQuery,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSpecificationTypesRow
+	for rows.Next() {
+		var i ListSpecificationTypesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.NormalizedName,
+			&i.Multiple,
+			&i.AffectsAppearance,
+			&i.Enabled,
+			&i.SystemCode,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ReferenceCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const putAppearanceDefault = `-- name: PutAppearanceDefault :exec

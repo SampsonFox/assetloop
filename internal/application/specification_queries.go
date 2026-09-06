@@ -135,39 +135,26 @@ func (s *SpecificationService) DescribeAssets(ctx context.Context, actor Princip
 }
 
 func (s *SpecificationService) ListTypes(ctx context.Context, actor Principal, opts SpecificationListOptions) (SpecificationTypeList, error) {
-	state, err := s.Snapshot(ctx, actor)
-	if err != nil {
+	if err := actor.Require(CapabilityView); err != nil {
 		return SpecificationTypeList{}, err
 	}
 	if !validSpecificationStatus(opts.Status) {
 		return SpecificationTypeList{}, NewInputError("validation.filter_invalid")
 	}
-	query := domain.NormalizeSpecificationName(opts.Query)
-	var items []SpecificationTypeSummary
-	for _, kind := range state.Types {
-		if specificationStatusMatches(opts.Status, kind.Enabled) && strings.Contains(kind.NormalizedName, query) {
-			items = append(items, SpecificationTypeSummary{SpecificationTagType: kind, ReferenceCount: len(state.TypeReferences(kind.ID))})
-		}
-	}
-	return SpecificationTypeList{Types: specificationPage(items, opts.Page, opts.PageSize), Total: len(items)}, nil
+	opts.Query = domain.NormalizeSpecificationName(opts.Query)
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
+	return s.store.ListSpecificationTypes(ctx, actor.TenantID, opts)
 }
 func (s *SpecificationService) ListTags(ctx context.Context, actor Principal, opts SpecificationListOptions) (SpecificationTagList, error) {
-	state, err := s.Snapshot(ctx, actor)
-	if err != nil {
+	if err := actor.Require(CapabilityView); err != nil {
 		return SpecificationTagList{}, err
 	}
 	if !validSpecificationStatus(opts.Status) {
 		return SpecificationTagList{}, NewInputError("validation.filter_invalid")
 	}
-	query := domain.NormalizeSpecificationName(opts.Query)
-	var items []SpecificationTagSummary
-	for _, tag := range state.Tags {
-		kind, _ := state.Type(tag.TypeID)
-		if (opts.TypeID == "" || tag.TypeID == opts.TypeID) && specificationStatusMatches(opts.Status, tag.Enabled) && strings.Contains(tag.NormalizedName+" "+kind.NormalizedName, query) {
-			items = append(items, SpecificationTagSummary{SpecificationTag: tag, TypeName: kind.Name, ReferenceCount: len(state.TagReferences(tag.ID))})
-		}
-	}
-	return SpecificationTagList{Tags: specificationPage(items, opts.Page, opts.PageSize), Total: len(items)}, nil
+	opts.Query = domain.NormalizeSpecificationName(opts.Query)
+	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
+	return s.store.ListSpecificationTags(ctx, actor.TenantID, opts)
 }
 
 func (s *SpecificationService) EffectiveForAsset(ctx context.Context, actor Principal, id string) (EffectiveAppearance, error) {
@@ -312,9 +299,6 @@ func (s *SpecificationService) Candidates(ctx context.Context, actor Principal, 
 
 func validSpecificationStatus(value string) bool {
 	return value == "" || value == "all" || value == "enabled" || value == "disabled"
-}
-func specificationStatusMatches(status string, enabled bool) bool {
-	return status == "" || status == "all" || (status == "enabled" && enabled) || (status == "disabled" && !enabled)
 }
 func specificationPage[T any](items []T, page, size int) []T {
 	page, size = normalizePage(page, size)

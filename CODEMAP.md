@@ -108,6 +108,11 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 
 ## Core execution flows
 
+Tag dictionary pagination: both Store `specification_lists.go` adapters use the
+generated count/page queries in `specification.sql`; the application normalizes
+search text and checks access. `storetest.RunSpecifications` covers normalized
+literal search, type/status filtering, paging and data-space isolation.
+
 ```text
 Screenshot import:
 User confirmation in AI Harness -> semantic MCP write -> lifecycle use case -> Store + BlobStore
