@@ -1,4 +1,4 @@
-import {createTagTransferState} from './tag-transfer-state.mjs';
+import {createTagTransferState, selectTransferRows} from './tag-transfer-state.mjs';
 
 const initialized = new WeakSet();
 const en = document.documentElement.lang === 'en';
@@ -26,101 +26,90 @@ function button(label, action) {
   b.type = 'button'; b.addEventListener('click', action); return b;
 }
 function transfer(title, titles, items, move, reset) {
-  const root = node('section','tag-transfer');
-  root.setAttribute('aria-label', title);
-  root.dataset.transferUi = '';
+  const root=node('section','tag-transfer'); root.setAttribute('aria-label',title); root.dataset.transferUi='';
   root.append(node('h4','',title));
-  const tabs = node('div','transfer-mobile-tabs');
-  const grid = node('div','transfer-grid');
-  const panels = [], selections = [new Set(),new Set()], lists = [], searches = [], allBoxes = [], counters = [], movers = [];
-  let mobileSide = 0;
-  const refreshSide = () => {
-    root.dataset.side = String(mobileSide);
-    [...tabs.children].forEach((b,i) => b.setAttribute('aria-pressed', String(i===mobileSide)));
+  const tabs=node('div','transfer-mobile-tabs'), grid=node('div','transfer-grid'), arrows=node('div','transfer-arrows');
+  const selections=[new Set(),new Set()], anchors=[null,null], lists=[], searches=[], counters=[], movers=[];
+  let mobileSide=0;
+  const refreshSide=()=>{
+    root.dataset.side=String(mobileSide);
+    [...tabs.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===mobileSide)));
   };
-  titles.forEach((label,i) => {
-    tabs.append(button(label, () => {mobileSide=i;refreshSide();}));
-    const panel = node('div','transfer-panel');
-    const header=node('div','transfer-header'), allLabel=node('label','checkbox');
-    const all=node('input'); all.type='checkbox'; all.setAttribute('aria-label', label+' · '+text.all);
-    const count=node('span','muted');
-    allLabel.append(all,node('span','',label)); header.append(allLabel,count);
-    const search=node('input','transfer-search'); search.type='search'; search.placeholder=text.search;
-    search.setAttribute('aria-label',label+' · '+text.search);
-    const list=node('div','transfer-list'); list.setAttribute('role','group'); list.setAttribute('aria-label',label);
-    const footer=node('div','transfer-footer'), selectedCount=node('span','muted');
-    const mover=button(i===0?text.add:text.remove,()=>{
-      move([...selections[i]],i===0);
-      selections[0].clear(); selections[1].clear();
-      render();
-      searches[i].focus({preventScroll:true});
-    });
-    footer.append(selectedCount,mover);panel.append(header,search,list,footer);
-    panel.dataset.column=String(i);grid.append(panel);
-    panels.push(panel);lists.push(list);searches.push(search);allBoxes.push(all);counters.push([count,selectedCount]);movers.push(mover);
-    search.addEventListener('input',event=>{event.stopPropagation();render();});
-    search.addEventListener('change',event=>event.stopPropagation());
-    search.addEventListener('keydown',event=>{if(event.key==='Enter') event.preventDefault();});
-    all.addEventListener('change',event=>{
-      event.stopPropagation();
-      for(const item of visible(i)) if(!item.disabled) {
-        if(all.checked) selections[i].add(item.id);else selections[i].delete(item.id);
-      }
-      render();
-    });
-  });
-  root.append(tabs,grid);refreshSide();
-  const visible = i => {
-    const q=searches[i].value.trim().toLocaleLowerCase();
-    return items().filter(item=>Number(item.right)===i && (item.name+' '+(item.group||'')).toLocaleLowerCase().includes(q));
-  };
-  const updateCounts = i => {
-    const eligible=visible(i).filter(item=>!item.disabled);
-    const checked=eligible.filter(item=>selections[i].has(item.id)).length;
-    allBoxes[i].checked=eligible.length>0 && checked===eligible.length;
-    allBoxes[i].indeterminate=checked>0 && checked<eligible.length;
-    allBoxes[i].disabled=!eligible.length;
-    counters[i][0].textContent=String(visible(i).length);
-    counters[i][1].textContent=text.count+' '+selections[i].size;
+  const visible=i=>items().filter(item=>Number(item.right)===i && (item.name+' '+(item.group||'')).toLocaleLowerCase().includes(searches[i].value.trim().toLocaleLowerCase()));
+  const update=i=>{
+    for(const row of lists[i].querySelectorAll('[data-choice]')) row.setAttribute('aria-pressed',String(selections[i].has(row.dataset.choice)));
+    counters[i].textContent=String(visible(i).length);
     movers[i].disabled=!selections[i].size;
   };
+  const choose=(i,id,event)=>{
+    anchors[i]=selectTransferRows(selections[i],visible(i).filter(x=>!x.disabled).map(x=>x.id),id,anchors[i],{
+      range:event.shiftKey, toggle:event.ctrlKey||event.metaKey||event.pointerType==='touch'||event.pointerType==='pen',
+    });
+    update(i);
+  };
+  const transferSelection=(i,ids=[...selections[i]])=>{
+    if(!ids.length)return;
+    selections[0].clear();selections[1].clear();anchors.fill(null);
+    move(ids,i===0); render(); searches[i].focus({preventScroll:true});
+  };
+  titles.forEach((label,i)=>{
+    tabs.append(button(label,()=>{mobileSide=i;refreshSide();}));
+    const panel=node('div','transfer-panel'), header=node('div','transfer-header'), count=node('span','muted');
+    header.append(node('span','',label),count);
+    const search=node('input','transfer-search');search.type='search';search.placeholder=text.search;search.setAttribute('aria-label',label+' · '+text.search);
+    const list=node('div','transfer-list');list.setAttribute('role','group');list.setAttribute('aria-label',label);
+    const mover=button('',()=>transferSelection(i));mover.className='icon-button';mover.title=i===0?text.add:text.remove;mover.setAttribute('aria-label',mover.title);
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');path.setAttribute('d',i===0?'M5 12h14m-6-6 6 6-6 6':'M19 12H5m6-6-6 6 6 6');svg.append(path);mover.append(svg);
+    arrows.append(mover); panel.append(header,search,list);panel.dataset.column=String(i);grid.append(panel);
+    lists.push(list);searches.push(search);counters.push(count);movers.push(mover);
+    search.addEventListener('input',event=>{event.stopPropagation();selections[i].clear();anchors[i]=null;render();});
+    search.addEventListener('change',event=>event.stopPropagation());
+    search.addEventListener('keydown',event=>{if(event.key==='Enter') event.preventDefault();});
+  });
+  grid.insertBefore(arrows,grid.children[1]);
+  const hint=node('p','muted transfer-hint');
+  hint.append(node('span','transfer-desktop-hint',en?'Double-click to move · Ctrl/Cmd to select multiple':'双击移动 · Ctrl 多选'),node('span','transfer-touch-hint',en?'Tap to select · Use arrows to move':'点击多选 · 箭头移动'));
+  hint.title=en?'Shift: range · Arrow keys: navigate · Space: select · Enter: move · Touch: tap to toggle':'Shift 连选 · 方向键导航 · 空格选择 · Enter 移动 · 触屏点击多选';
+  root.append(tabs,grid,hint);refreshSide();
   function render() {
     const current=items();
-    for(let i=0;i<2;i++) {
+    for(let i=0;i<2;i++){
       const valid=new Set(current.filter(v=>Number(v.right)===i&&!v.disabled).map(v=>v.id));
-      for(const id of selections[i]) if(!valid.has(id)) selections[i].delete(id);
+      for(const id of selections[i])if(!valid.has(id))selections[i].delete(id);
       const scroll=lists[i].scrollTop;lists[i].replaceChildren();
-      const rows=visible(i);
-      const groups=new Map();
-      for(const item of rows) {
+      const rows=visible(i),groups=new Map();
+      for(const item of rows){
         let parent=lists[i];
-        if(item.group) {
-          if(!groups.has(item.group)) {
-            const group=node('div','transfer-group');
-            group.append(node('p','transfer-group-title',item.group));
+        if(item.group){
+          if(!groups.has(item.group)){
+            const group=node('div','transfer-group');group.append(node('p','transfer-group-title',item.group));
             lists[i].append(group);groups.set(item.group,group);
           }
           parent=groups.get(item.group);
         }
-        const row=node('div','transfer-row'), label=node('label','checkbox'), check=node('input');
-        check.type='checkbox';check.checked=selections[i].has(item.id);check.disabled=!!item.disabled;
-        label.append(check,node('span','',item.name));
-        row.append(label);
-        if(item.note) row.append(node('small','muted',item.note));
-        if(item.custom && reset) row.append(button(text.reset,()=>{reset(item.id);searches[i].focus({preventScroll:true});}));
-        check.addEventListener('change',event=>{
-          event.stopPropagation();
-          if(check.checked) selections[i].add(item.id);else selections[i].delete(item.id);
-          updateCounts(i);
+        const row=node('div','transfer-row'),choice=button('',event=>choose(i,item.id,event));
+        choice.className='transfer-choice';choice.dataset.choice=item.id;choice.disabled=!!item.disabled;
+        choice.append(node('span','',item.name));if(item.note)choice.append(node('small','muted',item.note));
+        choice.addEventListener('dblclick',event=>{event.preventDefault();transferSelection(i,[item.id]);});
+        choice.addEventListener('keydown',event=>{
+          if(event.key==='Enter'){event.preventDefault();transferSelection(i,selections[i].has(item.id)?[...selections[i]]:[item.id]);return;}
+          if(event.key===' '){event.preventDefault();choose(i,item.id,{ctrlKey:true});return;}
+          const buttons=[...lists[i].querySelectorAll('[data-choice]:not(:disabled)')],index=buttons.indexOf(choice);
+          const next=event.key==='ArrowDown'?Math.min(index+1,buttons.length-1):event.key==='ArrowUp'?Math.max(0,index-1):event.key==='Home'?0:event.key==='End'?buttons.length-1:-1;
+          if(next<0)return;
+          event.preventDefault();buttons[next].focus();
+          if(event.shiftKey||!event.ctrlKey&&!event.metaKey)choose(i,buttons[next].dataset.choice,event);
         });
+        row.append(choice);
+        if(item.custom&&reset)row.append(button(text.reset,()=>{reset(item.id);searches[i].focus({preventScroll:true});}));
         parent.append(row);
       }
-      if(!rows.length) lists[i].append(node('p','transfer-empty muted',text.empty));
-      lists[i].scrollTop=scroll;updateCounts(i);
+      if(!rows.length)lists[i].append(node('p','transfer-empty muted',text.empty));
+      lists[i].scrollTop=scroll;update(i);
     }
   }
-  render();
-  return {root,render};
+  render();return {root,render};
 }
 function initialize() {
   for(const form of document.querySelectorAll('form.model-tag-editor')) {

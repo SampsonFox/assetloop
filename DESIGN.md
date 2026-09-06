@@ -134,8 +134,9 @@ own search state; dirty edits and ongoing submissions guard navigation.
 ### Model tag transfers
 
 Allowed tag values and appearance dimensions use separate linked transfer lists.
-Temporary checkmarks are distinct from committed right-column membership.
-Each column supports search, visible-result selection and bulk moves. Appearance
+Temporary row highlights are distinct from committed right-column membership.
+Each column supports search, Ctrl/Cmd toggles, Shift ranges and double-click moves.
+Central icon arrows move selected rows; touch taps toggle without modifiers. Appearance
 moves mark model-local overrides; restore-default follows the type again.
 Mobile shows one side with an explicit side toggle. Moves restore keyboard focus,
 and discarding the drawer resets both native fields and enhanced state.

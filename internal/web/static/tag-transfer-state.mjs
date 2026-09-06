@@ -1,4 +1,16 @@
 // The two transfers share persisted tag IDs, never display-name keys.
+export function selectTransferRows(selected, visible, id, anchor, {range=false,toggle=false}={}) {
+  if (!visible.includes(id)) return anchor;
+  if (range && visible.includes(anchor)) {
+    if (!toggle) selected.clear();
+    const a=visible.indexOf(anchor), b=visible.indexOf(id);
+    for (const key of visible.slice(Math.min(a,b),Math.max(a,b)+1)) selected.add(key);
+    return anchor;
+  }
+  if (!toggle) selected.clear();
+  if (toggle && selected.has(id)) selected.delete(id); else selected.add(id);
+  return id;
+}
 export function createTagTransferState(dimensions) {
   const selected = new Set(dimensions.flatMap(d => d.choices.filter(c => c.selected).map(c => c.id)));
   const overrides = new Map(dimensions.filter(d => d.override).map(d => [d.id, d.override]));

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {selectTransferRows} from './static/tag-transfer-state.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createTagTransferState} from './static/tag-transfer-state.mjs';
@@ -56,4 +57,28 @@ test('discarding the shared drawer resets every dirty form and rebuilds both tra
  assert.match(js,/state=createTagTransferState\(dimensions\);sync\(false\)/);
  assert.match(app,/for \(const form of dialog.querySelectorAll\("form\[data-guard-dirty\]"\)\)/);
  assert.match(app,/if \(form.dataset.dirty === "true"\) resetForm\(form\)/);
+});
+
+test('plain click replaces, Ctrl/Cmd toggles and Shift selects the visible range',()=>{
+ const selected=new Set();const rows=['a','b','c'];
+ let anchor=selectTransferRows(selected,rows,'a',null);assert.deepEqual([...selected],['a']);
+ anchor=selectTransferRows(selected,rows,'c',anchor,{toggle:true});assert.deepEqual([...selected],['a','c']);
+ anchor=selectTransferRows(selected,rows,'a',anchor,{toggle:true});assert.deepEqual([...selected],['c']);
+ anchor=selectTransferRows(selected,rows,'a',anchor);assert.deepEqual([...selected],['a']);
+ selectTransferRows(selected,rows,'c',anchor,{range:true});assert.deepEqual([...selected],rows);
+ selectTransferRows(selected,rows,'missing',anchor);assert.deepEqual([...selected],rows);
+});
+test('temporary row selections do not mutate persisted tag/default state',()=>{
+ const state=createTagTransferState(dimensions()), selected=new Set();
+ selectTransferRows(selected,['black','white'],'white',null);
+ assert.ok(!state.selected.has('white'));assert.equal(state.overrides.size,0);
+});
+test('row transfer uses central icon arrows, double click and keyboard without checkboxes',()=>{
+ const js=readFileSync(new URL('./static/tag-transfer.js',import.meta.url),'utf8');
+ const component=js.slice(js.indexOf('function transfer('),js.indexOf('function initialize('));
+ assert.doesNotMatch(component,/type='checkbox'|transfer-footer/);
+ assert.match(component,/transfer-arrows/);assert.match(component,/dblclick/);
+ for(const key of ['ArrowDown','ArrowUp','Enter','Home','End'])assert.ok(component.includes(key));
+ assert.match(component,/pointerType==='touch'/);assert.match(component,/aria-pressed/);
+ assert.match(component,/selections\[i\].clear\(\);anchors\[i\]=null;render/);
 });
