@@ -564,6 +564,10 @@ button[aria-busy="true"]::after { content:" …"; }
 .resource-status { font-size:.85rem; }
 .resource-actions { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .resource-actions form { margin:0; }
+.event-type-actions { display:flex; justify-content:flex-end; gap:8px; white-space:nowrap; }
+.event-type-actions form { margin:0; }
+.event-type-table th:last-child,.event-type-table td:last-child { width:120px; text-align:right; }
+@media (max-width:600px) { .event-type-table th:last-child,.event-type-table td:last-child { width:auto; } }
 @media (max-width:700px) {
  .resource-library-table,.resource-library-table tbody { display:block; width:100%; }
  .resource-library-table colgroup,.resource-library-table thead { display:none; }
