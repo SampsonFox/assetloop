@@ -36,5 +36,6 @@ export function createTagTransferState(dimensions) {
       for (const d of active()) if (moving.has(d.id)) overrides.set(d.id, right ? 'yes' : 'no');
     },
     resetAppearance(id) { overrides.delete(id); },
+    resetAllAppearance() { overrides.clear(); },
   };
 }

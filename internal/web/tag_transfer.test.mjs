@@ -82,3 +82,17 @@ test('row transfer uses central icon arrows, double click and keyboard without c
  assert.match(component,/pointerType==='touch'/);assert.match(component,/aria-pressed/);
  assert.match(component,/selections\[i\].clear\(\);anchors\[i\]=null;render/);
 });
+
+test('reset all appearance overrides preserves tag allowances and follows each type default',()=>{
+ const state=createTagTransferState(dimensions());const before=[...state.selected];
+ state.moveAppearance(['color'],false);state.overrides.set('storage','yes');
+ state.resetAllAppearance();assert.equal(state.overrides.size,0);assert.deepEqual([...state.selected],before);
+ for(const d of state.active())assert.equal(state.affects(d),d.appearance);
+});
+test('one reset action belongs to the dimension heading; only default-affecting types carry a marker',()=>{
+ const js=readFileSync(new URL('./static/tag-transfer.js',import.meta.url),'utf8');
+ assert.match(js,/if\(reset\)heading.append\(button\(text.reset/);
+ assert.doesNotMatch(js,/row.append\(button\(text.reset/);
+ assert.match(js,/note:d.appearance\?text.inherited:''/);
+ assert.match(js,/state.resetAllAppearance\(\)/);
+});

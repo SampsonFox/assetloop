@@ -178,6 +178,9 @@ and restoring defaults. No schema or application API change.
 Transfers use checkbox-free selectable rows, Ctrl/Cmd and Shift selection,
 double-click/Enter moves and central arrow actions; touch taps toggle selection.
 Temporary highlights never mutate the named form fields or dirty state.
+The appearance heading has one reset-all action that clears model overrides,
+without changing allowed tags. A row's Default marker identifies only tag types
+whose default is appearance-affecting, independently of the model override.
 
 Shared drawer dismissal in `static/app.js` compares named form values with the
 opening snapshot, routes Cancel/X/backdrop/Escape through one close guard, and

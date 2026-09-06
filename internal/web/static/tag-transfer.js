@@ -27,7 +27,9 @@ function button(label, action) {
 }
 function transfer(title, titles, items, move, reset) {
   const root=node('section','tag-transfer'); root.setAttribute('aria-label',title); root.dataset.transferUi='';
-  root.append(node('h4','',title));
+  const heading=node('div','field-heading');heading.append(node('h4','',title));
+  if(reset)heading.append(button(text.reset,()=>reset()));
+  root.append(heading);
   const tabs=node('div','transfer-mobile-tabs'), grid=node('div','transfer-grid'), arrows=node('div','transfer-arrows');
   const selections=[new Set(),new Set()], anchors=[null,null], lists=[], searches=[], counters=[], movers=[];
   let mobileSide=0;
@@ -102,7 +104,6 @@ function transfer(title, titles, items, move, reset) {
           if(event.shiftKey||!event.ctrlKey&&!event.metaKey)choose(i,buttons[next].dataset.choice,event);
         });
         row.append(choice);
-        if(item.custom&&reset)row.append(button(text.reset,()=>{reset(item.id);searches[i].focus({preventScroll:true});}));
         parent.append(row);
       }
       if(!rows.length)lists[i].append(node('p','transfer-empty muted',text.empty));
@@ -142,10 +143,10 @@ function initialize() {
         disabled:!state.selected.has(c.id)&&!c.enabled&&!c.selected,note:!c.enabled?text.disabled:''}))),
       (ids,right)=>{state.moveTags(ids,right);sync();});
     const appearance=transfer(text.appearance,[text.no,text.yes],
-      ()=>state.active().map(d=>({id:d.id,name:d.name,right:state.affects(d),custom:state.overrides.has(d.id),
-        note:state.overrides.has(d.id)?text.custom:text.inherited})),
+      ()=>state.active().map(d=>({id:d.id,name:d.name,right:state.affects(d),
+        note:d.appearance?text.inherited:''})),
       (ids,right)=>{state.moveAppearance(ids,right);sync();},
-      id=>{state.resetAppearance(id);sync();});
+      ()=>{if(state.overrides.size){state.resetAllAppearance();sync();}});
     const help=node('p','muted transfer-help',text.help);
     tags.root.querySelector('h4').hidden=true;
     form.addEventListener('reset',()=>queueMicrotask(()=>{
