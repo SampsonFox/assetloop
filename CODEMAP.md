@@ -166,3 +166,12 @@ list/binding context, handles history/retry and guards dirty/uploading forms.
 Preview detail routes use native navigation so viewer modules keep their own
 lifecycle. `static/app.js` idempotently initializes replaced drawers through
 `settings:loaded`. Tests: `settings_test.go`, `settings_navigation.test.mjs`.
+
+## Linked model tag transfers
+
+`static/tag-transfer.js` progressively enhances `catalog_drawers.html` into two
+linked transfers: allowed tag values and model-specific appearance dimensions.
+`tag-transfer-state.mjs` owns pure selection/default state; native named controls
+remain the submission source and no-JavaScript fallback. `tag_transfer.test.mjs`
+covers dynamic types, bulk changes, inactive/disabled values, override pruning
+and restoring defaults. No schema or application API change.

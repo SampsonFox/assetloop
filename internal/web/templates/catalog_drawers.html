@@ -34,8 +34,10 @@
 <form class="stack model-tag-editor" action="/admin/catalog/models/{{.ModelID}}/tags" method="post" data-model-tag-group="{{.ModelID}}" hidden data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
 {{if and $.Error $.CatalogEditingModel}}{{if eq $.CatalogEditingModel.ID .ModelID}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{$.Error}}</p>{{if $.TagReferences}}<section><h4>{{t $s "tags.references"}}</h4><ul>{{range $.TagReferences}}<li>{{if eq .Kind "asset"}}<a href="/assets/{{.TargetID}}/edit">{{t $s "resource.kind.asset"}} · {{.TargetID}}</a>{{else if eq .Kind "appearance"}}<a href="/admin/catalog/models/{{.ModelID}}/appearance?rule_id={{.TargetID}}">{{t $s "tags.ref.appearance"}} · {{.TargetID}}</a>{{end}}</li>{{end}}</ul></section>{{end}}{{end}}{{end}}
-{{range .Dimensions}}<fieldset><legend>{{.Name}}</legend><div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div>
+<div data-transfer-source>
+{{range .Dimensions}}<fieldset data-tag-dimension="{{.ID}}" data-appearance="{{.Appearance}}"><legend>{{.Name}}</legend><div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" data-label="{{.Name}}" data-enabled="{{.Enabled}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div>
 <label>{{t $s "tags.appearance_override"}}<select name="appearance_{{.ID}}"><option value="" {{if eq .Override ""}}selected{{end}}>{{t $s "tags.inherit_type"}} · {{if .Appearance}}{{t $s "tags.yes"}}{{else}}{{t $s "tags.no"}}{{end}}</option><option value="yes" {{if eq .Override "yes"}}selected{{end}}>{{t $s "tags.yes"}}</option><option value="no" {{if eq .Override "no"}}selected{{end}}>{{t $s "tags.no"}}</option></select></label></fieldset>{{else}}<p class="muted">{{t $s "tags.empty"}}</p>{{end}}
+</div>
 <div class="drawer-actions"><button class="auto" type="submit">{{t $s "tags.save_allowed"}}</button></div>
 </form>{{end}}</section>
 {{end}}

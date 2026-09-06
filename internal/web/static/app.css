@@ -506,3 +506,33 @@ button[aria-busy="true"]::after { content:" …"; }
  .settings-tabs { gap:20px; }
  .settings-shell { padding-top:16px; }
 }
+
+/* Linked tag-value and appearance-dimension transfer controls. */
+.model-drawer-panel:has(.tag-transfer) { width:min(820px,100%); }
+.tag-transfer { min-width:0; margin:12px 0; }
+.tag-transfer h4 { margin:0 0 12px; font-size:1rem; }
+.transfer-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
+.transfer-panel { min-width:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.transfer-header, .transfer-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px; }
+.transfer-header { background:var(--field); }
+.transfer-header .checkbox { margin:0; font-size:.9rem; }
+.transfer-search { width:calc(100% - 24px); margin:12px; }
+.transfer-list { height:220px; overflow:auto; overscroll-behavior:contain; padding:0 12px; }
+.transfer-row { padding:8px 0; display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; }
+.transfer-row .checkbox { margin:0; flex:1 1 auto; font-weight:400; overflow-wrap:anywhere; }
+.transfer-row small { font-size:.75rem; }
+.transfer-row button { padding:4px 8px; font-size:.75rem; }
+.transfer-group-title { margin:12px 0 4px; font-size:.8rem; color:var(--muted); }
+.transfer-footer { border-top:1px solid var(--line); font-size:.8rem; }
+.transfer-footer button { padding:8px 12px; font-size:.8rem; }
+.transfer-help, .transfer-status { font-size:.85rem; margin:8px 0; }
+.transfer-empty { padding:20px 0; text-align:center; }
+.transfer-mobile-tabs { display:none; }
+@media (max-width:600px) {
+ .transfer-grid { grid-template-columns:minmax(0,1fr); }
+ .transfer-mobile-tabs { display:flex; gap:8px; margin-bottom:12px; }
+ .transfer-mobile-tabs button { flex:1; font-size:.85rem; padding:8px; }
+ .transfer-mobile-tabs button[aria-pressed="true"] { color:var(--accent); border-color:var(--accent); }
+ .tag-transfer[data-side="0"] [data-column="1"], .tag-transfer[data-side="1"] [data-column="0"] { display:none; }
+ .transfer-list { height:180px; }
+}

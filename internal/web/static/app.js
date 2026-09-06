@@ -107,10 +107,15 @@
     if (eventHash) url.hash = "lifecycle-timeline";
     window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   };
+  const discardDialogForms = (dialog) => {
+    for (const form of dialog.querySelectorAll("form[data-guard-dirty]")) {
+      if (form.dataset.dirty === "true") resetForm(form);
+      form.dataset.dirty = "false";
+    }
+  };
   const closeDialog = (dialog) => {
     if (!dialog || !canDiscardDialog(dialog)) return false;
-    const form = dialog.querySelector("form[data-guard-dirty]");
-    if (form) form.dataset.dirty = "false";
+    discardDialogForms(dialog);
     dialog.close();
     return true;
   };
@@ -131,8 +136,7 @@
         event.preventDefault();
         return;
       }
-      const form = dialog.querySelector("form[data-guard-dirty]");
-      if (form) form.dataset.dirty = "false";
+      discardDialogForms(dialog);
     });
     dialog.addEventListener("close", () => {
       consumeDialogURL(dialog);
@@ -148,8 +152,7 @@
     }
     if (event.target.matches("dialog.drawer")) {
       if (canDiscardDialog(event.target)) {
-        const form = event.target.querySelector("form[data-guard-dirty]");
-        if (form) form.dataset.dirty = "false";
+        discardDialogForms(event.target);
         event.target.close();
       }
       return;
@@ -219,6 +222,7 @@
   });
 
   document.addEventListener("input", (event) => {
+    if (event.target.closest("[data-transfer-ui]")) return;
     const form = event.target.closest("form[data-guard-dirty]");
     if (form) form.dataset.dirty = "true";
     if (form && event.target.matches("[name='amount'], [name='fx_rate']")) syncFXPreview(form);
