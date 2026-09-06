@@ -107,6 +107,39 @@ Transport adapters contain authentication, parsing, and response formatting, not
 
 ## 5. Domain backbone
 
+### Approved specification-tag transition
+
+The approved target is `ItemCategory -> ProductModel -> Asset`. Product identities
+remain entities; only specification descriptions become reusable typed tags.
+Implementation is staged: pure policies exist, while persistence and Web below
+still use the legacy variant hierarchy until the migration and integration land.
+
+- Tag types own single/multiple selection and default appearance relevance; tag
+  values have stable tenant-scoped IDs and normalized names unique within a type.
+- Product models declare allowed values and optional per-type appearance overrides.
+  Assets choose actual values. Every dimension is optional; no manufacturer SKU
+  combination validation or fixed-value inheritance is introduced.
+- Model allowances, asset choices, resource descriptions and resource categories
+  use explicit associations with tenant-scoped foreign keys, not polymorphic IDs.
+- Disabled selections can be retained by their current asset but cannot be newly
+  selected. Referenced values cannot be removed or reinterpreted. Allowance changes
+  and asset writes share transaction-scoped reference and validity checks.
+- Resource tag search supplies candidates only. Confirmed model-owned appearance
+  rules bind a nonempty set of appearance tags to a resource, independently of later
+  resource-description changes. The most-specific matching rule wins; equally
+  specific rules for different resources produce a conflict and model fallback.
+  Asset overrides precede these rules; model defaults follow them. File failures
+  fall back to images, not to another GLB. No product-model resource whitelist is
+  required; resource categories reuse the category dictionary.
+- Old variant descriptions and color text must be preserved without guessed
+  parsing; old resource-binding conflicts remain traceable and existing asset
+  displays are preserved. The legacy hierarchy below documents the current store,
+  not a requirement to keep variants as the future asset parent or market identity.
+- Future market inputs use model identity plus configuration-tag snapshots,
+  condition, region and source. This transition adds no market polling or storage.
+
+### Current persisted hierarchy
+
 ```text
 Tenant
   |
