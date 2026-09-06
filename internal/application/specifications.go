@@ -33,8 +33,8 @@ type SaveModelSpecification struct {
 	AppearanceOverrides map[string]bool
 }
 type SaveSpecificationAsset struct {
-	ID, ModelID, VariantID, DisplayName, SerialNumber, PurchaseChannel, Notes string
-	TagIDs                                                                    []string
+	ID, ModelID, DisplayName, SerialNumber, PurchaseChannel, Notes string
+	TagIDs                                                         []string
 }
 type SaveAppearanceDefault struct {
 	ID, ModelID, ResourceID string
@@ -236,11 +236,6 @@ func (s *SpecificationService) SaveModel(ctx context.Context, actor Principal, c
 func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, cmd SaveSpecificationAsset) (domain.Asset, error) {
 	var result domain.Asset
 	err := s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
-		var err error
-		cmd, err = state.resolveAssetSelection(cmd)
-		if err != nil {
-			return err
-		}
 		if err := validID("model ID", cmd.ModelID); err != nil {
 			return err
 		}

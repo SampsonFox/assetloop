@@ -132,12 +132,17 @@ PostgreSQL live verification is still a required UAT gate.
   Asset overrides precede these rules; model defaults follow them. File failures
   fall back to images, not to another GLB. No product-model resource whitelist is
   required; resource categories reuse the category dictionary.
-- Old variant descriptions and color text are preserved without guessed parsing.
-  Legacy fields/tables remain compatibility evidence, not another editable catalog.
-  Old input IDs are translated into model/tag selections by the same resolver used
-  for draft forms and transactional writes; mixing old and new parameters is rejected.
-  Conflicting or conditionless old media bindings are retained as reviewable mappings
-  and pinned on affected existing items, without overwriting existing item overrides.
+- Old descriptions and color text migrate into typed tags without guessed parsing.
+  The approved contract phase removes the old specification hierarchy rather than
+  retaining a compatibility API. Asset commands accept only direct model/tag
+  selections; obsolete HTTP specification parameters are explicitly rejected.
+  Applied migration 00013 remains immutable. A subsequent paired forward migration
+  will remove variant tables, legacy mappings and asset variant/color columns after
+  verifying migrated selections and preserving effective item media bindings.
+  This explicitly authorized retirement must preserve assets, lifecycle history,
+  tag values, resource metadata and GLB bytes; it is not permission to erase them.
+  Until that migration and adapter cleanup land, the schema-13 legacy tables are
+  transitional implementation debt, not a supported second specification model.
 - Future market inputs use model identity plus configuration-tag snapshots,
   condition, region and source. This transition adds no market polling or storage.
 

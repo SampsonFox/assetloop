@@ -17,7 +17,11 @@ func (s *Server) getAsset(ctx context.Context, actor application.Principal, id s
 
 func (s *Server) saveTaggedAsset(w http.ResponseWriter, r *http.Request, actor application.Principal, id string) {
 	_ = r.ParseForm()
-	cmd := application.SaveSpecificationAsset{ID: id, ModelID: r.PostForm.Get("model_id"), VariantID: r.PostForm.Get("variant_id"), DisplayName: r.PostForm.Get("display_name"), SerialNumber: r.PostForm.Get("serial_number"), PurchaseChannel: r.PostForm.Get("purchase_channel"), Notes: r.PostForm.Get("notes")}
+	if r.PostForm.Has("variant_id") {
+		s.renderAssetMutationError(w, r, actor, assetFromForm(r, id), application.NewInputError("validation.specification_retired"))
+		return
+	}
+	cmd := application.SaveSpecificationAsset{ID: id, ModelID: r.PostForm.Get("model_id"), DisplayName: r.PostForm.Get("display_name"), SerialNumber: r.PostForm.Get("serial_number"), PurchaseChannel: r.PostForm.Get("purchase_channel"), Notes: r.PostForm.Get("notes")}
 	if values, present := r.PostForm["tag_ids"]; present {
 		cmd.TagIDs = []string{}
 		for _, value := range values {

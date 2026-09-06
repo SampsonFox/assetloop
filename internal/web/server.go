@@ -571,8 +571,12 @@ func (s *Server) newAssetForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	draft := domain.Asset{ModelID: strings.TrimSpace(r.URL.Query().Get("model_id")), VariantID: strings.TrimSpace(r.URL.Query().Get("variant_id"))}
-	if s.options.Specifications != nil && (draft.ModelID != "" || draft.VariantID != "" || r.URL.Query().Has("tag_ids")) {
-		cmd := application.SaveSpecificationAsset{ModelID: draft.ModelID, VariantID: draft.VariantID}
+	if s.options.Specifications != nil && r.URL.Query().Has("variant_id") {
+		s.renderAssetForm(w, r, http.StatusUnprocessableEntity, principal, draft, s.userError(principal.Locale, application.NewInputError("validation.specification_retired")))
+		return
+	}
+	if s.options.Specifications != nil && (draft.ModelID != "" || r.URL.Query().Has("tag_ids")) {
+		cmd := application.SaveSpecificationAsset{ModelID: draft.ModelID}
 		if r.URL.Query().Has("tag_ids") {
 			cmd.TagIDs = nonemptyTagIDs(r.URL.Query()["tag_ids"])
 		}

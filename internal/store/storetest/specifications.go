@@ -116,8 +116,8 @@ func RunSpecifications(t *testing.T, first, second Store) {
 	if _, err := svc.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ModelID: model.ID, DisplayName: "Invalid", TagIDs: []string{small.ID, large.ID}}); err == nil {
 		t.Fatal("two single-choice values accepted")
 	}
-	if _, err := svc.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ModelID: model.ID, VariantID: uuid.NewString(), DisplayName: "Ambiguous"}); err == nil {
-		t.Fatal("mixed legacy/new identity accepted")
+	if _, err := svc.SaveAsset(ctx, actor, application.SaveSpecificationAsset{DisplayName: "Missing direct model"}); err == nil {
+		t.Fatal("asset without a direct model accepted")
 	}
 	if _, err := svc.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ModelID: model.ID, DisplayName: "Unknown", TagIDs: []string{uuid.NewString()}}); err == nil {
 		t.Fatal("unknown tag accepted")

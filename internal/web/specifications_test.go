@@ -133,6 +133,24 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 		t.Fatalf("asset tag form: %d %s", page.Code, page.Body.String())
 	}
 	assetForm := url.Values{"csrf_token": {csrf.Value}, "model_id": {model.ID}, "tag_ids": {tag.ID, ""}, "display_name": {"My tagged phone"}, "notes": {"Preserve notes"}}
+	for _, oldValue := range []string{"", "00000000-0000-0000-0000-000000000001"} {
+		for _, includeModel := range []bool{false, true} {
+			obsolete := url.Values{"variant_id": {oldValue}, "display_name": {"Must not create"}, "csrf_token": {csrf.Value}}
+			if includeModel {
+				obsolete.Set("model_id", model.ID)
+			}
+			for _, method := range []string{"GET", "POST"} {
+				path := "/assets"
+				if method == "GET" {
+					path = "/assets/new?" + obsolete.Encode()
+				}
+				rejected := request(t, handler, method, path, obsolete, cookies)
+				if rejected.Code != 422 || !strings.Contains(rejected.Body.String(), "旧规格参数已移除") {
+					t.Fatalf("obsolete selection accepted (%s, model=%v): %d", method, includeModel, rejected.Code)
+				}
+			}
+		}
+	}
 	page = request(t, handler, "GET", "/assets/new?"+url.Values{"model_id": {model.ID}, "tag_ids": {tag.ID}}.Encode(), nil, cookies)
 	if page.Code != 200 || !strings.Contains(page.Body.String(), `data-tag-name="128GB" selected`) {
 		t.Fatalf("tagged draft selection: %d %s", page.Code, page.Body.String())
