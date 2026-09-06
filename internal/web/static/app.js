@@ -87,18 +87,118 @@
     if (currency) syncFXFields(currency);
   };
 
-  const dirtyForm = (dialog) => dialog?.querySelector("form[data-guard-dirty][data-dirty='true']");
-  const canDiscardDialog = (dialog) => {
-    const form = dirtyForm(dialog);
-    return !form || window.confirm(form.dataset.discardConfirm);
+  const formBaselines = new WeakMap();
+  const formValues = (form) => JSON.stringify([...form.elements]
+    .filter((field) => field.name && !['submit', 'button', 'reset'].includes(field.type))
+    .map((field) => [field.name, field.type === 'file'
+      ? [...field.files].map((file) => [file.name, file.size, file.lastModified])
+      : ['checkbox', 'radio'].includes(field.type) ? field.checked
+      : field.multiple ? [...field.selectedOptions].map((option) => option.value) : field.value]));
+  const rememberDialogForms = (dialog) => {
+    for (const form of dialog.querySelectorAll('form[data-guard-dirty]')) {
+      formBaselines.set(form, formValues(form));
+      form.dataset.dirty = 'false';
+    }
   };
-  const closeDialog = (dialog) => {
-    if (!dialog || !canDiscardDialog(dialog)) return false;
-    const form = dialog.querySelector("form[data-guard-dirty]");
-    if (form) form.dataset.dirty = "false";
-    dialog.close();
-    return true;
+  const updateDirty = (form) => {
+    if (form) form.dataset.dirty = String(formBaselines.has(form)
+      ? formValues(form) !== formBaselines.get(form) : true);
   };
+  const dirtyForm = (dialog) => {
+    const forms = [...dialog.querySelectorAll('form[data-guard-dirty]')];
+    for (const form of forms) {
+      if (formBaselines.has(form)) updateDirty(form);
+    }
+    return forms.find((form) => form.dataset.dirty === 'true');
+  };
+  // Use an in-page modal: embedded browsers may suppress native confirm UI.
+  const confirmDiscard = (message) => new Promise((resolve) => {
+    const english = document.documentElement.lang.startsWith('en');
+    const prompt = document.createElement('dialog');
+    prompt.className = 'discard-dialog';
+    prompt.setAttribute('aria-labelledby', 'discard-dialog-title');
+    prompt.setAttribute('aria-describedby', 'discard-dialog-message');
+    const title = document.createElement('h2');
+    title.id = 'discard-dialog-title';
+    title.textContent = english ? 'Discard changes?' : '放弃修改？';
+    const description = document.createElement('p');
+    description.id = 'discard-dialog-message';
+    description.textContent = message;
+    const actions = document.createElement('div');
+    actions.className = 'discard-actions';
+    const stay = document.createElement('button');
+    stay.type = 'button'; stay.className = 'secondary auto';
+    stay.textContent = english ? 'Keep editing' : '继续编辑';
+    const discard = document.createElement('button');
+    discard.type = 'button'; discard.className = 'auto';
+    discard.textContent = english ? 'Discard changes' : '放弃修改';
+    const finish = (accepted) => { prompt.close(); prompt.remove(); resolve(accepted); };
+    stay.addEventListener('click', () => finish(false));
+    discard.addEventListener('click', () => finish(true));
+    prompt.addEventListener('cancel', (event) => { event.preventDefault(); finish(false); });
+    prompt.addEventListener('click', (event) => { if (event.target === prompt) finish(false); });
+    actions.append(stay, discard); prompt.append(title, description, actions);
+    document.body.append(prompt); prompt.showModal(); stay.focus();
+  });
+  // Deep links open a drawer once; refreshing after dismissal must not reopen it.
+  const consumeDialogURL = (dialog) => {
+    if (!dialog) return;
+    const url = new URL(window.location.href);
+    const matched = url.searchParams.get("dialog") === dialog.id;
+    const eventHash = dialog.id === "event-drawer" && url.hash === "#add-event";
+    if (!matched && !eventHash) return;
+    if (matched) {
+      url.searchParams.delete("dialog");
+      if (dialog.id === "event-drawer") url.searchParams.delete("event_type");
+      if (dialog.id === "model-drawer") url.searchParams.delete("edit_model_id");
+    }
+    if (eventHash) url.hash = "lifecycle-timeline";
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  };
+  const discardDialogForms = (dialog) => {
+    for (const form of dialog.querySelectorAll("form[data-guard-dirty]")) {
+      if (form.dataset.dirty === "true") resetForm(form);
+      form.dataset.dirty = "false";
+    }
+  };
+  const closingDialogs = new WeakSet();
+  const closeDialog = async (dialog) => {
+    if (!dialog?.open || closingDialogs.has(dialog)) return false;
+    closingDialogs.add(dialog);
+    try {
+      const form = dirtyForm(dialog);
+      if (form && !await confirmDiscard(form.dataset.discardConfirm)) return false;
+      discardDialogForms(dialog);
+      dialog.close();
+      return true;
+    } finally { closingDialogs.delete(dialog); }
+  };
+  // Standalone editors navigate away rather than closing a drawer.
+  const pageForms = () => [...document.querySelectorAll('form[data-guard-dirty]')]
+    .filter((form) => !form.closest('dialog, #settings-content'));
+  let leavingPage = false, checkingPageLeave = false;
+  const leaveEditor = async (url) => {
+    if (checkingPageLeave || leavingPage) return;
+    checkingPageLeave = true;
+    try {
+      const forms = pageForms();
+      for (const form of forms) updateDirty(form);
+      const dirty = forms.find((form) => form.dataset.dirty === 'true');
+      if (dirty && !await confirmDiscard(dirty.dataset.discardConfirm)) return;
+      // Avoid a second, browser-native beforeunload prompt after confirmation.
+      leavingPage = true;
+      window.location.assign(url);
+    } finally { checkingPageLeave = false; }
+  };
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest('a[href]');
+    if (!link || link.target || link.hasAttribute('download') || link.closest('dialog') || !pageForms().length) return;
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin || (url.pathname === window.location.pathname && url.search === window.location.search && url.hash)) return;
+    event.preventDefault();
+    leaveEditor(url.href);
+  });
   const focusDialog = (dialog) => {
     const target = dialog.querySelector("[data-error-summary]")
       || dialog.querySelector("[data-dialog-initial-focus]")
@@ -106,28 +206,29 @@
     target?.focus();
   };
 
+  const initializedDialogs = new WeakSet();
+  const initDialogs = () => {
   for (const dialog of document.querySelectorAll("dialog.drawer")) {
+    if (initializedDialogs.has(dialog)) continue;
+    initializedDialogs.add(dialog);
     dialog.addEventListener("cancel", (event) => {
-      if (!canDiscardDialog(dialog)) {
-        event.preventDefault();
-        return;
-      }
-      const form = dialog.querySelector("form[data-guard-dirty]");
-      if (form) form.dataset.dirty = "false";
+      event.preventDefault();
+      closeDialog(dialog);
     });
-    dialog.addEventListener("close", () => dialogOpeners.get(dialog)?.focus());
+    dialog.addEventListener("close", () => {
+      consumeDialogURL(dialog);
+      dialogOpeners.get(dialog)?.focus();
+    });
   }
+
+  };
 
   document.addEventListener("click", (event) => {
     for (const menu of document.querySelectorAll(".account-menu[open]")) {
       if (!menu.contains(event.target)) menu.removeAttribute("open");
     }
     if (event.target.matches("dialog.drawer")) {
-      if (canDiscardDialog(event.target)) {
-        const form = event.target.querySelector("form[data-guard-dirty]");
-        if (form) form.dataset.dirty = "false";
-        event.target.close();
-      }
+      closeDialog(event.target);
       return;
     }
 
@@ -158,10 +259,10 @@
           library.hidden = !modelId;
           library.querySelector("[data-model-library-link]").href = `/admin/3d?${new URLSearchParams({kind: "model", target: modelId, name: opener.dataset.name || ""})}`;
         }
-        const manager = dialog.querySelector("[data-model-variants]");
-        if (manager) manager.hidden = !modelId;
-        for (const group of dialog.querySelectorAll("[data-variant-group]")) {
-          group.hidden = group.dataset.variantGroup !== modelId;
+        const tags = dialog.querySelector("[data-model-tags]");
+        if (tags) tags.hidden = !modelId;
+        for (const group of dialog.querySelectorAll("[data-model-tag-group]")) {
+          group.hidden = group.dataset.modelTagGroup !== modelId;
         }
         if (mediaForm) {
           mediaForm.hidden = !modelId;
@@ -180,13 +281,17 @@
       if (currency) syncFXFields(currency);
       const eventType = form.querySelector("[data-event-type-select]");
       if (eventType) syncEventTypeFields(eventType);
+      rememberDialogForms(dialog);
       dialog.showModal();
       queueMicrotask(() => focusDialog(dialog));
       return;
     }
 
     const closer = event.target.closest("[data-dialog-close]");
-    if (closer) closeDialog(closer.closest("dialog"));
+    if (closer) {
+      event.preventDefault();
+      closeDialog(closer.closest("dialog"));
+    }
   });
 
   document.addEventListener("keydown", (event) => {
@@ -195,18 +300,21 @@
   });
 
   document.addEventListener("input", (event) => {
+    if (event.target.closest("[data-transfer-ui]")) return;
     const form = event.target.closest("form[data-guard-dirty]");
-    if (form) form.dataset.dirty = "true";
+    updateDirty(form);
     if (form && event.target.matches("[name='amount'], [name='fx_rate']")) syncFXPreview(form);
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.closest("[data-transfer-ui]")) return;
     const dirty = event.target.closest("form[data-guard-dirty]");
-    if (dirty) dirty.dataset.dirty = "true";
+    updateDirty(dirty);
     const currency = event.target.closest("[data-currency-select]");
     if (currency) syncFXFields(currency);
     const eventType = event.target.closest("[data-event-type-select]");
     if (eventType) syncEventTypeFields(eventType);
+    updateDirty(dirty);
     const autoSubmit = event.target.closest("[data-auto-submit]");
     if (!autoSubmit) return;
     const form = autoSubmit.matches("form") ? autoSubmit : autoSubmit.form;
@@ -217,6 +325,7 @@
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.defaultPrevented) return;
     const form = event.target;
     const message = form.dataset.confirm;
     if (message && !window.confirm(message)) {
@@ -236,18 +345,27 @@
   });
 
   window.addEventListener("beforeunload", (event) => {
+    if (leavingPage) return;
     if (!document.querySelector("form[data-guard-dirty][data-dirty='true']")) return;
     event.preventDefault();
     event.returnValue = "";
   });
 
+  const initPage = () => {
+  initDialogs();
   for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
   for (const select of document.querySelectorAll("[data-event-type-select]")) syncEventTypeFields(select);
+  for (const form of pageForms()) {
+    if (!formBaselines.has(form)) {
+      formBaselines.set(form, formValues(form));
+      form.dataset.dirty = 'false';
+    }
+  }
 
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");
   const initialModelId = params.get("edit_model_id");
-  let opener = [...document.querySelectorAll("[data-dialog-open]")].find(
+    let opener = document.querySelector("[data-dialog-initial-open]") || [...document.querySelectorAll("[data-dialog-open]")].find(
     (candidate) => candidate.dataset.dialogOpen === initialDialog
       && (!initialModelId || candidate.dataset.editModelId === initialModelId),
   );
@@ -257,16 +375,22 @@
   if (opener) {
     for (const [dataKey, fieldName] of Object.entries(fields)) {
       const value = params.get(fieldName);
-      if (value) opener.dataset[dataKey] = value;
+      if (value) opener.dataset[dataKey] = fieldName === "event_type" && initialDialog === "event-drawer"
+        ? document.querySelector('#event-type-select')?.value || value : value;
     }
     opener.click();
+    consumeDialogURL(document.getElementById(opener.dataset.dialogOpen));
   } else {
     const erroredDialog = [...document.querySelectorAll("dialog.drawer")].find((dialog) => dialog.querySelector("[data-error-summary]"));
     if (erroredDialog) {
+      rememberDialogForms(erroredDialog);
       erroredDialog.showModal();
       queueMicrotask(() => focusDialog(erroredDialog));
     } else {
       document.querySelector("[data-error-summary]")?.focus();
     }
   }
+  };
+  document.addEventListener("settings:loaded", initPage);
+  initPage();
 })();

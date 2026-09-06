@@ -21,6 +21,7 @@ type RecordEvent struct {
 	RequestKey        string
 	AssetID           string
 	Type              domain.AssetEventType
+	TypeID            string `json:",omitempty"`
 	AmountMinor       int64
 	Currency          string
 	FXRateScaled      int64
@@ -78,11 +79,18 @@ func (s *LifecycleService) Record(ctx context.Context, actor Principal, cmd Reco
 }
 
 func (s *LifecycleService) record(ctx context.Context, actor Principal, cmd RecordEvent) (domain.AssetEvent, error) {
-	eventType, err := s.resolveEventType(ctx, actor.TenantID, cmd.Type)
+	value := cmd.Type
+	if cmd.TypeID != "" {
+		value = domain.AssetEventType(cmd.TypeID)
+	}
+	eventType, err := s.resolveEventType(ctx, actor.TenantID, value)
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
-	if err := s.validateLifecycle(ctx, actor, cmd.AssetID, domain.AssetEventType(eventType.Name)); err != nil {
+	if !eventType.Enabled {
+		return domain.AssetEvent{}, NewInputError("validation.event_type_disabled")
+	}
+	if err := s.validateLifecycle(ctx, actor, cmd.AssetID, eventType.SystemCode); err != nil {
 		return domain.AssetEvent{}, err
 	}
 	transaction, event, err := s.prepareEvent(ctx, actor, cmd, eventType, "")
@@ -126,12 +134,16 @@ func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID
 	if err != nil {
 		return domain.AssetEvent{}, fmt.Errorf("get original event: %w", err)
 	}
-	if original.IsVoided || original.Type == domain.AssetEventVoid {
+	if original.IsVoided || original.Kind() == domain.AssetEventVoid {
 		return domain.AssetEvent{}, ErrAlreadyVoided
 	}
 	cmd.AssetID = original.AssetID
 	cmd.Type = original.Type
-	eventType, err := s.resolveEventType(ctx, actor.TenantID, original.Type)
+	value := original.Type
+	if original.TypeID != "" {
+		value = domain.AssetEventType(original.TypeID)
+	}
+	eventType, err := s.resolveEventType(ctx, actor.TenantID, value)
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
@@ -146,6 +158,12 @@ func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID
 		VoidsEventID: original.ID, OccurredAt: transaction.OccurredAt,
 		CreatedByUserID: actor.UserID, CreatedAt: transaction.CreatedAt,
 	}
+	voidType, err := scopedEventType(ctx, s.store, actor.TenantID, "void")
+	if err != nil {
+		return domain.AssetEvent{}, err
+	}
+	voidEvent.TypeID = voidType.ID
+	voidEvent.SystemType = domain.AssetEventVoid
 	if err := s.store.CorrectAssetEvent(ctx, transaction, voidEvent, replacement); err != nil {
 		return domain.AssetEvent{}, fmt.Errorf("correct asset event: %w", err)
 	}
@@ -192,7 +210,7 @@ func (s *LifecycleService) TimelinePage(ctx context.Context, actor Principal, as
 		if err != nil {
 			return EventListResult{}, NewInputError("validation.filter_invalid")
 		}
-		opts.Type = eventType.Name
+		opts.Type = eventType.ID
 	}
 	var err error
 	opts.Sort, opts.Direction, err = normalizeSort(opts.Sort, opts.Direction, "occurred", "asc", map[string]struct{}{"occurred": {}, "amount": {}, "type": {}})
@@ -232,10 +250,29 @@ func (s *LifecycleService) EventTypes(ctx context.Context, actor Principal) ([]d
 	if err != nil {
 		return nil, fmt.Errorf("list asset event types: %w", err)
 	}
-	return append(builtInEventTypes(), custom...), nil
+	result := make([]domain.AssetEventTypeDefinition, 0, len(custom))
+	for _, item := range custom {
+		if item.SystemCode != domain.AssetEventVoid {
+			result = append(result, item)
+		}
+	}
+	return result, nil
 }
 
 func (s *LifecycleService) CreateEventType(ctx context.Context, actor Principal, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {
+	if err := actor.Require(CapabilityManageLifecycle); err != nil {
+		return domain.AssetEventTypeDefinition{}, err
+	}
+	var result domain.AssetEventTypeDefinition
+	_, err := s.store.WithLifecycleWrite(ctx, actor.TenantID, func(store LifecycleStore) (domain.AssetEvent, error) {
+		var err error
+		result, err = (&LifecycleService{store: store, now: s.now}).createEventType(ctx, actor, cmd)
+		return domain.AssetEvent{}, err
+	})
+	return result, err
+}
+
+func (s *LifecycleService) createEventType(ctx context.Context, actor Principal, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {
 	if err := actor.Require(CapabilityManageLifecycle); err != nil {
 		return domain.AssetEventTypeDefinition{}, err
 	}
@@ -267,6 +304,7 @@ func (s *LifecycleService) CreateEventType(ctx context.Context, actor Principal,
 	eventType := domain.AssetEventTypeDefinition{
 		ID: newID(), TenantID: actor.TenantID, Name: name, NormalizedName: normalized,
 		Cashflow: cmd.Cashflow, CreatedByUserID: actor.UserID, CreatedAt: s.now().UTC(),
+		Enabled: true, UpdatedAt: s.now().UTC(),
 	}
 	if err := s.store.CreateAssetEventType(ctx, eventType); err != nil {
 		return domain.AssetEventTypeDefinition{}, fmt.Errorf("create asset event type: %w", err)
@@ -336,7 +374,7 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	}
 	event := domain.AssetEvent{
 		ID: newID(), TenantID: actor.TenantID, AssetID: cmd.AssetID, TransactionID: transaction.ID,
-		Type: domain.AssetEventType(eventType.Name), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency, FX: fx,
+		Type: domain.AssetEventType(eventType.Name), TypeID: eventType.ID, SystemType: eventType.SystemCode, BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency, FX: fx,
 		Notes: strings.TrimSpace(cmd.Notes), ReplacesEventID: replacesID, OccurredAt: occurredAt,
 		CreatedByUserID: actor.UserID, CreatedAt: createdAt,
 	}
@@ -353,13 +391,13 @@ func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principa
 	}
 	hasPurchase, sold := false, false
 	for _, event := range events {
-		if event.IsVoided || event.Type == domain.AssetEventVoid {
+		if event.IsVoided || event.Kind() == domain.AssetEventVoid {
 			continue
 		}
-		if event.Type == domain.AssetEventPurchase {
+		if event.Kind() == domain.AssetEventPurchase {
 			hasPurchase = true
 		}
-		if event.Type == domain.AssetEventSale {
+		if event.Kind() == domain.AssetEventSale {
 			sold = true
 		}
 	}
@@ -391,22 +429,31 @@ func (s *LifecycleService) validOccurredAt(value time.Time) (time.Time, error) {
 }
 
 func (s *LifecycleService) resolveEventType(ctx context.Context, tenantID string, value domain.AssetEventType) (domain.AssetEventTypeDefinition, error) {
-	normalized := strings.ToLower(strings.TrimSpace(string(value)))
-	for _, eventType := range builtInEventTypes() {
-		if normalized == eventType.NormalizedName {
-			return eventType, nil
-		}
+	item, err := scopedEventType(ctx, s.store, tenantID, string(value))
+	if err != nil {
+		return item, err
 	}
-	if normalized == "" || normalized == string(domain.AssetEventVoid) {
+	if item.SystemCode == domain.AssetEventVoid {
 		return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_type")
 	}
-	eventTypes, err := s.store.ListAssetEventTypes(ctx, tenantID)
+	return item, nil
+}
+
+func scopedEventType(ctx context.Context, store LifecycleStore, tenantID, value string) (domain.AssetEventTypeDefinition, error) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	items, err := store.ListAssetEventTypes(ctx, tenantID)
 	if err != nil {
-		return domain.AssetEventTypeDefinition{}, fmt.Errorf("list asset event types: %w", err)
+		return domain.AssetEventTypeDefinition{}, err
 	}
-	for _, eventType := range eventTypes {
-		if normalized == eventType.NormalizedName {
-			return eventType, nil
+	// IDs take precedence over legacy name parameters.
+	for _, item := range items {
+		if item.ID == normalized {
+			return item, nil
+		}
+	}
+	for _, item := range items {
+		if item.NormalizedName == normalized {
+			return item, nil
 		}
 	}
 	return domain.AssetEventTypeDefinition{}, NewInputError("validation.event_type")
@@ -424,7 +471,7 @@ func summarizeEvents(baseCurrency string, events []domain.AssetEvent) domain.Ass
 	summary := domain.AssetSummary{BaseCurrency: baseCurrency, Status: "unacquired"}
 	activePurchase, sold := false, false
 	for _, event := range events {
-		if event.IsVoided || event.Type == domain.AssetEventVoid {
+		if event.IsVoided || event.Kind() == domain.AssetEventVoid {
 			continue
 		}
 		if event.BaseAmountMinor < 0 {
@@ -433,10 +480,10 @@ func summarizeEvents(baseCurrency string, events []domain.AssetEvent) domain.Ass
 			summary.IncomeMinor += event.BaseAmountMinor
 		}
 		summary.NetCashflowMinor += event.BaseAmountMinor
-		if event.Type == domain.AssetEventPurchase {
+		if event.Kind() == domain.AssetEventPurchase {
 			activePurchase = true
 		}
-		if event.Type == domain.AssetEventSale {
+		if event.Kind() == domain.AssetEventSale {
 			sold = true
 		}
 	}

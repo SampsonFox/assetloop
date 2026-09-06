@@ -1,5 +1,5 @@
 {{define "content"}}{{$s := .Strings}}
-<section class="page-heading"><h1>{{.Resource.Name}}</h1><a href="/admin/3d">{{t $s "resource.back"}}</a></section>
+<section class="page-heading"><h2>{{.Resource.Name}}</h2><a class="icon-button" href="/admin/3d" aria-label="{{t $s "resource.back"}}" title="{{t $s "resource.back"}}">{{template "ui-icon" "back"}}</a></section>
 {{if .Error}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
 {{if eq .Resource.Status "ready"}}
 <section class="card asset-profile resource-profile">
@@ -11,9 +11,23 @@
 <label>{{t $s "resource.name"}}<input name="name" value="{{.Resource.Name}}" required maxlength="160"></label>
 <label>{{t $s "catalog.model_3d_source"}}<input type="url" name="model_3d_source_url" maxlength="2000" value="{{.Resource.SourceURL}}"></label>
 <label>{{t $s "catalog.model_3d_author"}}<input name="model_3d_author" maxlength="200" value="{{.Resource.Author}}"></label>
-<label>{{t $s "catalog.model_3d_license"}}<input name="model_3d_license" maxlength="200" value="{{.Resource.License}}"></label><p class="muted">{{t $s "resource.edit_help"}}</p><button class="auto" type="submit">{{t $s "common.save"}}</button>
+<label>{{t $s "catalog.model_3d_license"}}<input name="model_3d_license" maxlength="200" value="{{.Resource.License}}"></label><p class="muted">{{t $s "resource.edit_help"}}</p><button class="icon-button management-primary" type="submit" aria-label="{{t $s "common.save"}}" title="{{t $s "common.save"}}">{{template "ui-icon" "save"}}</button>
 </form>{{else}}<dl class="asset-profile-content"><dt>{{t $s "catalog.model_3d_author"}}</dt><dd>{{.Resource.Author}}</dd><dt>{{t $s "catalog.model_3d_license"}}</dt><dd>{{.Resource.License}}</dd><dt>{{t $s "catalog.model_3d_source"}}</dt><dd>{{if .Resource.SourceURL}}<a href="{{.Resource.SourceURL}}" rel="noreferrer">{{.Resource.SourceURL}}</a>{{else}}{{t $s "common.none"}}{{end}}</dd></dl>{{end}}</section><script type="module" src="/static/asset-model-viewer.js"></script>
 {{else}}<p role="status">{{t $s "resource.pending_help"}}</p>{{end}}
-<section class="resource-references" id="references"><h2>{{t $s "resource.references"}}</h2>{{if .References}}<ul>{{range .References}}<li><a href="{{if eq .Kind "asset"}}/assets/{{.ID}}{{else}}/admin/3d?kind={{.Kind}}&amp;target={{.ID}}&amp;name={{.Name}}{{end}}">{{.Name}}</a> · {{if eq .Kind "model"}}{{t $s "catalog.model_name"}}{{else if eq .Kind "variant"}}{{t $s "catalog.variant"}}{{else}}{{t $s "assets.item"}}{{end}}</li>{{end}}</ul><p class="muted">{{t $s "resource.referenced_help"}}</p>{{else}}<p class="muted">{{t $s "resource.no_references"}}</p>{{end}}
-{{if .CanManageCatalog}}<form method="post" action="/admin/3d/{{.Resource.ID}}/delete" data-confirm="{{t $s "resource.delete_confirm"}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="secondary auto" type="submit" {{if .References}}disabled{{end}}>{{if eq .Resource.Status "ready"}}{{t $s "common.delete"}}{{else}}{{t $s "resource.retry_delete"}}{{end}}</button></form>{{end}}</section>
+
+<section id="resource-tags" class="resource-references"><h2>{{t $s "tags.resource_description"}}</h2><p class="muted">{{t $s "tags.resource_help"}}</p>
+{{if and .CanManageCatalog (eq .Resource.Status "ready")}}
+<form class="stack" method="post" action="/admin/3d/{{.Resource.ID}}/tags" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
+<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+<fieldset><legend>{{t $s "tags.resource_categories"}}</legend><div class="tag-choices">{{range .ResourceCategories}}<label class="checkbox"><input type="checkbox" name="category_ids" value="{{.ID}}" {{if .Selected}}checked{{end}}>{{.Name}}</label>{{else}}<p class="muted">{{t $s "common.none"}}</p>{{end}}</div></fieldset>
+<div class="resource-tag-fields">{{range .ResourceTags.Dimensions}}
+{{if .Multiple}}<fieldset><legend>{{.Name}}</legend><div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div></fieldset>
+{{else}}<label>{{.Name}}<select name="tag_ids"><option value="">{{t $s "tags.not_selected"}}</option>{{range .Choices}}<option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if not .Enabled}} · {{t $s "types.disabled"}}{{end}}</option>{{end}}</select></label>{{end}}
+{{else}}<p class="muted">{{t $s "tags.empty"}}</p>{{end}}</div>
+<div class="drawer-actions"><a class="icon-button" href="/admin/tags" aria-label="{{t $s "tags.title"}}" title="{{t $s "tags.title"}}">{{template "ui-icon" "edit"}}</a><button class="icon-button management-primary" type="submit" aria-label="{{t $s "tags.save_resource"}}" title="{{t $s "tags.save_resource"}}">{{template "ui-icon" "save"}}</button></div>
+</form>
+{{else}}<dl><dt>{{t $s "tags.resource_categories"}}</dt><dd>{{range .ResourceCategories}}{{if .Selected}}<span class="variant-tag">{{.Name}}</span> {{end}}{{end}}</dd><dt>{{t $s "tags.values"}}</dt><dd>{{range .ResourceTags.Summary}}<span class="variant-tag">{{.}}</span> {{else}}{{t $s "common.none"}}{{end}}</dd></dl>{{end}}
+</section>
+<section class="resource-references" id="references"><h2>{{t $s "resource.references"}}</h2>{{if .References}}<ul>{{range .References}}<li><a href="{{index $.ReferenceURLs .ID}}">{{.Name}}</a> · {{if eq .Kind "model"}}{{t $s "catalog.model_name"}}{{else if eq .Kind "appearance"}}{{t $s "tags.ref.appearance"}}{{else}}{{t $s "assets.item"}}{{end}}</li>{{end}}</ul><p class="muted">{{t $s "resource.referenced_help"}}</p>{{else}}<p class="muted">{{t $s "resource.no_references"}}</p>{{end}}
+{{if .CanManageCatalog}}<form method="post" action="/admin/3d/{{.Resource.ID}}/delete" data-confirm="{{t $s "resource.delete_confirm"}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="icon-button" type="submit" {{if .References}}disabled{{end}} aria-label="{{if eq .Resource.Status "ready"}}{{t $s "common.delete"}}{{else}}{{t $s "resource.retry_delete"}}{{end}}" title="{{if eq .Resource.Status "ready"}}{{t $s "common.delete"}}{{else}}{{t $s "resource.retry_delete"}}{{end}}">{{template "ui-icon" "trash"}}</button></form>{{end}}</section>
 {{end}}

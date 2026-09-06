@@ -63,17 +63,6 @@ func (s *Store) GetModel3DResource(ctx context.Context, tenantID, resourceID str
 	}
 	return resourceValue(r)
 }
-func (s *Store) ResolveAssetModel3D(ctx context.Context, tenantID, resourceID string) (domain.Model3DResource, error) {
-	id, tenant := resourceID, tenantID
-	r, err := s.queries().ResolveAssetModel3D(ctx, sqlitedb.ResolveAssetModel3DParams{ID: id, TenantID: tenant})
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Model3DResource{}, application.ErrModel3DNotFound
-	}
-	if err != nil {
-		return domain.Model3DResource{}, err
-	}
-	return resourceValue(r)
-}
 func (s *Store) ListModel3DResources(ctx context.Context, tenantID string, o application.Model3DResourceListOptions) (application.Model3DResourceListResult, error) {
 	tenant := tenantID
 	total, err := s.queries().CountModel3DResources(ctx, sqlitedb.CountModel3DResourcesParams{TenantID: tenant, SearchQuery: o.Query})
@@ -136,8 +125,6 @@ func (s *Store) BindModel3DResource(ctx context.Context, tenantID string, c appl
 	switch c.Kind {
 	case "model":
 		n, err = s.queries().BindModel3D(ctx, sqlitedb.BindModel3DParams{ID: id, TenantID: tenant, ResourceID: resource})
-	case "variant":
-		n, err = s.queries().BindVariant3D(ctx, sqlitedb.BindVariant3DParams{ID: id, TenantID: tenant, ResourceID: resource})
 	case "asset":
 		n, err = s.queries().BindAsset3D(ctx, sqlitedb.BindAsset3DParams{ID: id, TenantID: tenant, ResourceID: resource})
 	default:

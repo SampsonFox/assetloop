@@ -67,7 +67,7 @@ principal may perform the requested capability for the resolved tenant.
 Owns entities, value objects, invariants, and pure calculations:
 
 - tenant identity;
-- item category, product model, product variant, and asset;
+- item category, product model, typed specification tags, and asset;
 - asset lifecycle events and correction relationships;
 - money, currencies, FX evidence, and base-currency calculations;
 - market observations, price points, and valuation inputs.
@@ -79,7 +79,7 @@ It performs no I/O.
 Owns use cases and ports:
 
 - persist user-confirmed semantic commands received from Web or MCP;
-- create or resolve category/model/variant;
+- create or resolve categories/models, maintain allowed tags, and validate actual item selections;
 - record purchase, repair, sale, void, and replacement;
 - attach evidence;
 - refresh and normalize market observations;
@@ -107,6 +107,47 @@ Transport adapters contain authentication, parsing, and response formatting, not
 
 ## 5. Domain backbone
 
+### Product identity and specification tags
+
+The active hierarchy is `ItemCategory -> ProductModel -> Asset`. Product identities
+remain entities; only specification descriptions become reusable typed tags.
+Migrations 00013–00014 are deployed to the existing SQLite development preview with a
+verified pre-upgrade backup. Development evidence is recorded in docs/specification-acceptance.md;
+PostgreSQL live verification is still a required UAT gate.
+
+- Tag types own single/multiple selection and default appearance relevance; tag
+  values have stable tenant-scoped IDs and normalized names unique within a type.
+- Product models declare allowed values and optional per-type appearance overrides.
+  Assets choose actual values. Every dimension is optional; no manufacturer SKU
+  combination validation or fixed-value inheritance is introduced.
+- Model allowances, asset choices, resource descriptions and resource categories
+  use explicit associations with tenant-scoped foreign keys, not polymorphic IDs.
+- Disabled selections can be retained by their current asset but cannot be newly
+  selected. Referenced values cannot be removed or reinterpreted. Allowance changes
+  and asset writes share transaction-scoped reference and validity checks.
+- Resource tag search supplies candidates only. Confirmed model-owned appearance
+  rules bind a nonempty set of appearance tags to a resource, independently of later
+  resource-description changes. The most-specific matching rule wins; equally
+  specific rules for different resources produce a conflict and model fallback.
+  Asset overrides precede these rules; model defaults follow them. File failures
+  fall back to images, not to another GLB. No product-model resource whitelist is
+  required; resource categories reuse the category dictionary.
+- Old descriptions and color text migrate into typed tags without guessed parsing.
+  The approved contract phase removes the old specification hierarchy rather than
+  retaining a compatibility API. Asset commands accept only direct model/tag
+  selections; obsolete HTTP specification parameters are explicitly rejected.
+  Applied migration 00013 remains immutable. Paired forward migration 00014 drops
+  product_variants, legacy mappings and asset variant/color columns. SQLite rebuilds
+  the asset table transactionally and checks all foreign keys before committing;
+  an unknown dependent table aborts the retirement and permits a safe retry.
+  Migrated selections, assets, lifecycle history, resource metadata, effective item
+  overrides and GLB bytes are preserved. Runtime adapters and HTTP maintenance no
+  longer support the retired hierarchy.
+- Future market inputs use model identity plus configuration-tag snapshots,
+  condition, region and source. This transition adds no market polling or storage.
+
+### Current persisted hierarchy
+
 ```text
 Tenant
   |
@@ -116,14 +157,20 @@ Tenant
         |
         +-- ProductModel
               |
-              +-- ProductVariant  <-- market price identity
-                    |
-                    +-- Asset     <-- physical owned item
-                          |
-                          +-- AssetEvent[]
+              +-- allowed specification tags / appearance relevance
+              +-- confirmed appearance defaults
+              +-- Asset           <-- physical owned item, direct model_id
+                    +-- selected specification tags
+                    +-- AssetEvent[]
 ```
 
-`ProductVariant` contains product specifications, including storage capacity and color. Its identity is unique within a tenant and product model by specification name and color. `Asset` contains instance attributes such as serial number and personal notes, and derives its displayed color from its variant. Historical asset color text is retained for compatibility, not used as the active color source. Category-specific condition schemes map assets and market listings to comparable condition codes.
+`SpecificationTagType` defines a dimension and single/multiple selection; `SpecificationTag`
+is a reusable value unique within that type after Unicode lowercase and edge trimming.
+The initial color type affects appearance; other new types default to single selection
+and no appearance effect. Each dimension is optional. Colors, memory and storage live
+in tags, never as duplicated resource columns or free-form item color fields.
+`Asset` retains instance information such as alias, serial number and notes.
+Category-specific condition schemes remain separate from configuration descriptions.
 
 Transactions group related cash and lifecycle effects, while asset events remain the append-only lifecycle record.
 Confirmed events cannot be updated or deleted at either Store or database level. A correction
@@ -133,12 +180,19 @@ User-facing lifecycle collections never render the technical void row as a separ
 default effective view excludes voided originals; an explicit history option adds those originals
 back with a voided marker while preserving the same server-side filtering, sorting, and pagination.
 
-Each tenant may register additional event types without changing the fixed meanings of purchase,
-repair, sale, and void. A custom type records a stable display name and exactly one cash-flow effect:
-expense, income, or neutral. The event row keeps that name and the resulting signed base amount, so
-later configuration cannot rewrite history. Neutral events persist a zero amount and do not lock the
-tenant base currency. Custom types do not implicitly change the built-in acquired, repairing, or sold
-status transitions.
+Each tenant owns its event-type definitions, including seeded purchase, repair, sale and technical
+void types identified by immutable system codes. Events reference a tenant-scoped type ID; display
+names are read from the definition, never copied into new event rows. Renaming a custom type changes
+its current label everywhere without rewriting historical economic events. Legacy event_type text
+is retained for compatibility; new writes use only fixed technical markers. System types are read-only.
+Custom directions (expense, income, neutral) lock after any reference, including voided history.
+Types may be disabled/restored but never physically deleted. Disabled types remain readable/filterable
+and may be used only to correct their existing original events, not to create unrelated new records.
+Management and event writes share the tenant lifecycle transaction lock. Historical signed amounts
+and FX evidence remain immutable. Neutral records remain zero and do not lock the base currency;
+custom types never implicitly change built-in acquired, repairing or sold transitions. Cost categories
+are grouped by stable type ID. Migration 12 preserves old event identities and links and rejects
+unresolvable legacy names before upgrading.
 
 Lifecycle commands treat a supplied monetary amount as an unsigned magnitude. Before idempotency
 fingerprinting, conversion, or persistence, the application service takes its absolute value and then
@@ -308,7 +362,24 @@ The metadata row selects the store for reads. A configuration value selects the 
 
 A store migration copies the object under the same key, verifies size and SHA-256, changes `store_id`, then optionally removes the old object.
 
-A tenant-owned `Model3DResource` holds an immutable self-contained GLB and editable name and attribution. Product models, variants, and assets reference resources independently; multiple records can share a resource. Effective media is resolved in the application layer in asset override, variant default, then product-model default order. Only absent bindings inherit; a selected file that fails to load falls back to the static image or category icon. The resource table contains no color or capacity fields.
+A tenant-owned `Model3DResource` holds an immutable self-contained GLB and editable
+name and attribution. Model defaults, confirmed appearance rules and item overrides
+may share a resource. Resource tags describe visible features; multiple searchable
+categories reuse the existing category dictionary. No applicable-model whitelist or
+automatic binding is inferred from resource tags.
+
+Live application media reads resolve asset override, confirmed appearance default,
+then product-model default. Resource reference lists, counts and deletion guards
+include only model defaults, asset overrides and appearance rules. Migration 00014
+retires the temporary legacy mappings; existing item overrides produced by migration
+00013 remain explicit bindings. Resource tag and category edits are descriptive and
+never rewrite confirmed bindings.
+
+`ModelMediaService.UploadAppearance` reuses GLB validation and BlobStore verification,
+then creates the resource and confirmed appearance rule under the specification
+write transaction. The ordinary rule editor and upload path call the same in-transaction
+rule validation. An ambiguous commit preserves bytes unless a separate read proves
+the resource did not persist. There is no legacy acknowledgement endpoint.
 
 Uploads write and verify new resource-specific blobs before transactionally creating metadata and binding the target. Replacing a binding never deletes the previous resource. A referenced resource cannot be deleted: binding and deletion share a transaction isolation protocol, and pending-deletion resources reject new bindings. Unreferenced deletion first persists pending state, then removes the blob and finally the row; failures remain visible and retryable. No distributed transaction or background cleanup service is introduced. Authenticated reads are proxied by Web; source URL, author, and license remain descriptive metadata.
 
@@ -322,14 +393,18 @@ MarketDataProvider
         v
 raw normalized listings
         |
-match variant -> reject accessories/services -> deduplicate
+match model + configuration-tag snapshot -> reject accessories/services -> deduplicate
         |
 condition mapping -> outlier filter -> aggregate
         |
 dated FX conversion -> persisted price point
 ```
 
-Providers own transport mechanics only. The shared pipeline owns market meaning. Price series are keyed by variant, condition, region, and provider so sources cannot be mixed invisibly.
+Providers own transport mechanics only. The shared pipeline owns market meaning.
+Future price series use model identity, an immutable configuration-tag snapshot,
+condition, region and provider so sources and configurations cannot mix invisibly.
+Changing a shared display label must not reinterpret historical observations.
+This boundary does not add market tables, polling jobs or new MCP transports now.
 
 The initial provider is OneBound. Manual import is the second implementation used for testing and fallback. A versioned remote HTTP provider protocol is deferred until an external provider must run without recompiling the application.
 

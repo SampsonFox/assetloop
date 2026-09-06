@@ -8,6 +8,8 @@
   <title>{{.Title}} · {{t $s "app.name"}}</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
+  <script type="module" src="/static/tag-transfer.js"></script>
+  {{if .SettingsSection}}<script src="/static/settings.js" defer></script>{{end}}
 </head>
 <body>
   <a class="skip-link" href="#main-content">{{t $s "common.skip_main"}}</a>
@@ -20,7 +22,7 @@
       <div class="account-menu-panel">
         <div class="account-identity"><span class="account-avatar">{{userInitial .Principal.Username}}</span><span><strong>{{.Principal.Username}}</strong><small>{{roleLabel $s .Principal.Role}}</small></span></div>
         <nav aria-label="{{t $s "menu.label"}}">
-          {{if ne .Principal.Role "viewer"}}<a class="menu-item" href="/admin/catalog" {{if .NavCatalog}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "menu.catalog"}}</span></a>{{end}}<a class="menu-item" href="/admin/3d">{{template "icon-grid"}}<span>{{t $s "resource.title"}}</span></a>
+          <a class="menu-item" href="/settings" {{if .SettingsSection}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "settings.title"}}</span></a>
           {{if eq .Principal.Role "owner"}}<a class="menu-item" href="/admin/members" {{if .NavMembers}}aria-current="page"{{end}}>{{template "icon-users"}}<span>{{t $s "menu.members"}}</span></a>{{end}}
         </nav>
         <form action="/preferences" method="post" class="preference-form" data-auto-submit>
@@ -34,7 +36,19 @@
     </details>
     {{end}}
   </header>
-  <main class="shell" id="main-content" tabindex="-1">{{template "content" .}}</main>
+  <main class="shell{{if .SettingsSection}} settings-shell{{end}}" id="main-content" tabindex="-1">
+{{if .SettingsSection}}
+<header class="settings-heading"><h1>{{t $s "settings.title"}}</h1></header>
+<nav class="settings-tabs" aria-label="{{t $s "settings.title"}}">
+{{if ne .Principal.Role "viewer"}}<a data-settings-tab="catalog" href="/admin/catalog" {{if eq .SettingsSection "catalog"}}aria-current="page"{{end}}>{{t $s "settings.catalog"}}</a>{{end}}
+<a data-settings-tab="tags" href="/admin/tags" {{if eq .SettingsSection "tags"}}aria-current="page"{{end}}>{{t $s "settings.tags"}}</a>
+<a data-settings-tab="3d" href="/admin/3d" {{if eq .SettingsSection "3d"}}aria-current="page"{{end}}>{{t $s "settings.resources"}}</a>
+<a data-settings-tab="event-types" href="/admin/event-types" {{if eq .SettingsSection "event-types"}}aria-current="page"{{end}}>{{t $s "settings.events"}}</a>
+</nav>
+<div class="settings-feedback" hidden role="status" data-settings-feedback data-loading="{{t $s "settings.loading"}}" data-failure="{{t $s "settings.failure"}}" data-login="{{t $s "settings.login"}}" data-discard="{{t $s "common.discard_changes"}}"><span></span> <button type="button" class="link-button" data-settings-retry>{{t $s "settings.retry"}}</button><a href="/login" data-settings-login hidden>{{t $s "settings.login_link"}}</a></div>
+<section id="settings-content" data-section="{{.SettingsSection}}" tabindex="-1">{{template "content" .}}</section>
+{{else}}{{template "content" .}}{{end}}
+</main>
 </body>
 </html>{{end}}
 

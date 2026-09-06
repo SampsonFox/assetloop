@@ -11,13 +11,12 @@ import (
 type Asset struct {
 	ID                string
 	TenantID          string
-	VariantID         string
+	ModelID           string
 	DisplayName       string
-	CreatedAt         string
 	SerialNumber      string
-	Color             string
 	PurchaseChannel   string
 	Notes             string
+	CreatedAt         string
 	Model3dResourceID sql.NullString
 }
 
@@ -40,6 +39,7 @@ type AssetEvent struct {
 	OccurredAt          string
 	CreatedByUserID     string
 	CreatedAt           string
+	EventTypeID         string
 }
 
 type AssetEventType struct {
@@ -50,6 +50,16 @@ type AssetEventType struct {
 	CashflowDirection string
 	CreatedByUserID   string
 	CreatedAt         string
+	SystemCode        string
+	Enabled           int64
+	UpdatedAt         string
+}
+
+type AssetSpecificationTag struct {
+	TenantID string
+	AssetID  string
+	ModelID  string
+	TagID    string
 }
 
 type AssetTransaction struct {
@@ -113,6 +123,35 @@ type Model3dResource struct {
 	UpdatedAt string
 }
 
+type ModelAllowedTag struct {
+	TenantID string
+	ModelID  string
+	TagID    string
+}
+
+type ModelAppearanceCondition struct {
+	TenantID string
+	RuleID   string
+	ModelID  string
+	TagID    string
+}
+
+type ModelAppearanceDefault struct {
+	ID         string
+	TenantID   string
+	ModelID    string
+	ResourceID string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+type ModelAppearanceDimension struct {
+	TenantID          string
+	ModelID           string
+	TypeID            string
+	AffectsAppearance int64
+}
+
 type ProductModel struct {
 	ID                string
 	TenantID          string
@@ -130,14 +169,16 @@ type ProductModel struct {
 	Model3dResourceID sql.NullString
 }
 
-type ProductVariant struct {
-	ID                string
-	TenantID          string
-	ModelID           string
-	Name              string
-	CreatedAt         string
-	Color             string
-	Model3dResourceID sql.NullString
+type ResourceCategory struct {
+	TenantID   string
+	ResourceID string
+	CategoryID string
+}
+
+type ResourceSpecificationTag struct {
+	TenantID   string
+	ResourceID string
+	TagID      string
 }
 
 type SecurityAuditEvent struct {
@@ -156,6 +197,30 @@ type Session struct {
 	UserID    string
 	ExpiresAt string
 	CreatedAt string
+}
+
+type SpecificationTag struct {
+	ID             string
+	TenantID       string
+	TypeID         string
+	Name           string
+	NormalizedName string
+	Enabled        int64
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+type SpecificationTagType struct {
+	ID                string
+	TenantID          string
+	Name              string
+	NormalizedName    string
+	Multiple          int64
+	AffectsAppearance int64
+	Enabled           int64
+	SystemCode        string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 type Tenant struct {

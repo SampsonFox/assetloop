@@ -33,7 +33,7 @@ func RunLifecycleRetries(t *testing.T, first, second Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	asset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: snapshot.Variants[0].ID, DisplayName: "Idempotency regression"})
+	asset, err := application.NewSpecificationService(first).SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: snapshot.Models[0].ID, DisplayName: "Idempotency regression"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func runConcurrentLifecycle(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	asset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: snapshot.Variants[0].ID, DisplayName: "Concurrency regression"})
+	asset, err := application.NewSpecificationService(store).SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: snapshot.Models[0].ID, DisplayName: "Concurrency regression"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -51,6 +51,7 @@ type BindModel3DResource struct{ Kind, TargetID, ResourceID string }
 type Model3DReference struct{ Kind, ID, Name string }
 type Model3DBinding struct {
 	Name, ResourceID, EffectiveResourceID, Source string
+	Conflict                                      bool
 	Effective                                     *domain.ProductModel3D
 }
 type Model3DResourceListOptions struct {
@@ -110,6 +111,35 @@ func (s *ModelMediaService) UploadAndBind(ctx context.Context, actor Principal, 
 	return s.upload(ctx, actor, cmd, binding)
 }
 func (s *ModelMediaService) upload(ctx context.Context, actor Principal, cmd UploadModel3DResource, binding BindModel3DResource) (domain.Model3DResource, error) {
+	return s.uploadWithCommit(ctx, actor, cmd, func(media domain.Model3DResource) error {
+		if binding.Kind == "" {
+			return s.store.CreateModel3DResource(ctx, media)
+		}
+		binding.ResourceID = media.ID
+		return s.store.CreateAndBindModel3DResource(ctx, media, binding)
+	})
+}
+
+// UploadAppearance commits the verified immutable resource and its confirmed
+// rule together. Validation failure rolls both back before cleaning only the new blob.
+func (s *ModelMediaService) UploadAppearance(ctx context.Context, actor Principal, cmd UploadModel3DResource, binding SaveAppearanceDefault) (domain.Model3DResource, error) {
+	return s.uploadWithCommit(ctx, actor, cmd, func(media domain.Model3DResource) error {
+		return s.store.WithSpecificationWrite(ctx, actor.TenantID, func(store SpecificationStore) error {
+			state, err := store.SpecificationSnapshot(ctx, actor.TenantID)
+			if err != nil {
+				return err
+			}
+			if err := store.CreateModel3DResource(ctx, media); err != nil {
+				return err
+			}
+			binding.ResourceID = media.ID
+			_, err = saveAppearanceInTransaction(ctx, store, state, actor, binding)
+			return err
+		})
+	})
+}
+
+func (s *ModelMediaService) uploadWithCommit(ctx context.Context, actor Principal, cmd UploadModel3DResource, commit func(domain.Model3DResource) error) (domain.Model3DResource, error) {
 	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return domain.Model3DResource{}, err
 	}
@@ -164,12 +194,7 @@ func (s *ModelMediaService) upload(ctx context.Context, actor Principal, cmd Upl
 		return domain.Model3DResource{}, errors.New("stored GLB checksum mismatch")
 	}
 
-	if binding.Kind == "" {
-		err = s.store.CreateModel3DResource(ctx, media)
-	} else {
-		binding.ResourceID = media.ID
-		err = s.store.CreateAndBindModel3DResource(ctx, media, binding)
-	}
+	err = commit(media)
 	if err != nil {
 		// Commit errors may be ambiguous. Delete bytes only after positively confirming rollback.
 		probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -191,11 +216,27 @@ func (s *ModelMediaService) Binding(ctx context.Context, actor Principal, kind, 
 	if err := actor.Require(CapabilityView); err != nil {
 		return Model3DBinding{}, err
 	}
-	if kind != "model" && kind != "variant" && kind != "asset" {
+	if kind != "model" && kind != "asset" {
 		return Model3DBinding{}, NewInputError("validation.filter_invalid")
 	}
 	if err := validID("target ID", targetID); err != nil {
 		return Model3DBinding{}, err
+	}
+	if kind == "asset" {
+		asset, err := s.store.GetAsset(ctx, actor.TenantID, targetID)
+		if err != nil {
+			return Model3DBinding{}, err
+		}
+		resolved, err := effectiveAppearance(ctx, s.store, actor, targetID)
+		if err != nil {
+			return Model3DBinding{}, err
+		}
+		binding := Model3DBinding{Name: asset.DisplayName, ResourceID: asset.Model3DResourceID, Source: resolved.Source, Conflict: resolved.Conflict}
+		if resolved.Resource != nil {
+			binding.EffectiveResourceID = resolved.Resource.ID
+			binding.Effective = &resolved.Resource.ProductModel3D
+		}
+		return binding, nil
 	}
 	binding, err := s.store.GetModel3DBinding(ctx, actor.TenantID, kind, targetID)
 	if err != nil {
@@ -272,7 +313,7 @@ func (s *ModelMediaService) Bind(ctx context.Context, actor Principal, cmd BindM
 	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return err
 	}
-	if cmd.Kind != "model" && cmd.Kind != "variant" && cmd.Kind != "asset" {
+	if cmd.Kind != "model" && cmd.Kind != "asset" {
 		return NewInputError("validation.filter_invalid")
 	}
 	if err := validID("target ID", cmd.TargetID); err != nil {
@@ -339,8 +380,14 @@ func (s *ModelMediaService) ResolveForAsset(ctx context.Context, actor Principal
 	if err := validID("asset ID", assetID); err != nil {
 		return domain.ProductModel3D{}, err
 	}
-	r, err := s.store.ResolveAssetModel3D(ctx, actor.TenantID, assetID)
-	return r.ProductModel3D, err
+	r, err := effectiveAppearance(ctx, s.store, actor, assetID)
+	if err != nil {
+		return domain.ProductModel3D{}, err
+	}
+	if r.Resource == nil {
+		return domain.ProductModel3D{}, ErrModel3DNotFound
+	}
+	return r.Resource.ProductModel3D, nil
 }
 func (s *ModelMediaService) OpenForAsset(ctx context.Context, actor Principal, assetID string) (OpenProductModel3D, error) {
 	media, err := s.ResolveForAsset(ctx, actor, assetID)

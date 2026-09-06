@@ -305,15 +305,15 @@ func runUpgradeTest(t *testing.T, cfg config.Database) {
 	if err := basestore.Migrate(ctx, db, cfg); err != nil {
 		t.Fatalf("upgrade from schema v1: %v", err)
 	}
-	var displayName, serialNumber, color, purchaseChannel, notes string
-	if err := db.QueryRow("SELECT display_name, serial_number, color, purchase_channel, notes FROM assets WHERE id = "+upgradePlaceholder(cfg.Driver), "11111111-1111-4111-8111-111111111111").Scan(&displayName, &serialNumber, &color, &purchaseChannel, &notes); err != nil {
+	var displayName, serialNumber, purchaseChannel, notes string
+	if err := db.QueryRow("SELECT display_name, serial_number, purchase_channel, notes FROM assets WHERE id = "+upgradePlaceholder(cfg.Driver), "11111111-1111-4111-8111-111111111111").Scan(&displayName, &serialNumber, &purchaseChannel, &notes); err != nil {
 		t.Fatalf("read preserved asset: %v", err)
 	}
 	if displayName != "Preserved Asset" {
 		t.Fatalf("asset changed during upgrade: %q", displayName)
 	}
-	if serialNumber != "" || color != "" || purchaseChannel != "" || notes != "" {
-		t.Fatalf("new catalog details should have safe empty defaults: serial=%q color=%q channel=%q notes=%q", serialNumber, color, purchaseChannel, notes)
+	if serialNumber != "" || purchaseChannel != "" || notes != "" {
+		t.Fatalf("new catalog details should have safe empty defaults: serial=%q channel=%q notes=%q", serialNumber, purchaseChannel, notes)
 	}
 	var iconKey string
 	if err := db.QueryRow("SELECT icon_key FROM item_categories WHERE id = "+upgradePlaceholder(cfg.Driver), "33333333-3333-4333-8333-333333333333").Scan(&iconKey); err != nil {

@@ -24,38 +24,6 @@ func (s *Store) queries() *sqlitedb.Queries {
 
 func New(db *sql.DB) *Store { return &Store{db: db} }
 
-func (s *Store) CreateAsset(ctx context.Context, asset domain.Asset) (domain.Asset, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return domain.Asset{}, err
-	}
-	defer tx.Rollback()
-	q := sqlitedb.New(tx)
-	createdAt := asset.CreatedAt.UTC().Format(time.RFC3339Nano)
-	if err := q.EnsureTenant(ctx, sqlitedb.EnsureTenantParams{ID: asset.TenantID, Name: "Default", BaseCurrency: "CNY", CreatedAt: createdAt}); err != nil {
-		return domain.Asset{}, err
-	}
-	asset.CategoryID, err = q.EnsureCategory(ctx, sqlitedb.EnsureCategoryParams{ID: asset.CategoryID, TenantID: asset.TenantID, Name: asset.Category, CreatedAt: createdAt})
-	if err != nil {
-		return domain.Asset{}, err
-	}
-	asset.ModelID, err = q.EnsureModel(ctx, sqlitedb.EnsureModelParams{ID: asset.ModelID, TenantID: asset.TenantID, CategoryID: asset.CategoryID, Name: asset.Model, CreatedAt: createdAt})
-	if err != nil {
-		return domain.Asset{}, err
-	}
-	asset.VariantID, err = q.EnsureVariant(ctx, sqlitedb.EnsureVariantParams{ID: asset.VariantID, TenantID: asset.TenantID, ModelID: asset.ModelID, Name: asset.Variant, Color: asset.Color, CreatedAt: createdAt})
-	if err != nil {
-		return domain.Asset{}, err
-	}
-	if err := q.CreateAsset(ctx, sqlitedb.CreateAssetParams{ID: asset.ID, TenantID: asset.TenantID, VariantID: asset.VariantID, DisplayName: asset.DisplayName, CreatedAt: createdAt}); err != nil {
-		return domain.Asset{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return domain.Asset{}, err
-	}
-	return asset, nil
-}
-
 func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.Asset, error) {
 	row, err := s.queries().GetAsset(ctx, sqlitedb.GetAssetParams{TenantID: tenantID, ID: assetID})
 	if err != nil {
@@ -69,9 +37,8 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 		ID: row.ID, TenantID: row.TenantID,
 		CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 		ModelID: row.ModelID, Model: row.ModelName,
-		VariantID: row.VariantID, Variant: row.VariantName,
 		Model3DResourceID: row.Model3dResourceID.String,
-		DisplayName:       row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+		DisplayName:       row.DisplayName, SerialNumber: row.SerialNumber,
 		PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
 	}, nil
 }

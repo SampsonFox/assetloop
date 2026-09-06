@@ -8,11 +8,6 @@ import (
 	"github.com/SampsonFox/assetloop/internal/domain"
 )
 
-type Store interface {
-	CreateAsset(context.Context, domain.Asset) (domain.Asset, error)
-	GetAsset(context.Context, string, string) (domain.Asset, error)
-}
-
 type AuthStore interface {
 	AuthNeedsSetup(context.Context) (bool, error)
 	BootstrapAuth(context.Context, Tenant, User, Membership, SecurityEvent) error
@@ -32,17 +27,11 @@ type CatalogStore interface {
 	UpdateCategory(context.Context, domain.ItemCategory) error
 	CreateModel(context.Context, domain.ProductModel) error
 	UpdateModel(context.Context, domain.ProductModel) error
-	CreateVariant(context.Context, domain.ProductVariant) error
-	UpdateVariant(context.Context, domain.ProductVariant) error
-	DeleteVariant(context.Context, string, string) (bool, error)
-	CreateCatalogAsset(context.Context, domain.Asset) error
-	UpdateCatalogAsset(context.Context, domain.Asset) error
 	ListCategories(context.Context, string) ([]domain.ItemCategory, error)
 	ListModels(context.Context, string) ([]domain.ProductModel, error)
-	ListVariants(context.Context, string) ([]domain.ProductVariant, error)
 	ListAssets(context.Context, string) ([]domain.Asset, error)
 	ListAssetsWithSummary(context.Context, string, AssetListOptions) (AssetListResult, error)
-	ListModelsWithVariants(context.Context, string, ModelListOptions) (ModelListResult, error)
+	ListModelsPage(context.Context, string, ModelListOptions) (ModelListResult, error)
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 }
 
@@ -75,9 +64,8 @@ type ModelListOptions struct {
 }
 
 type ModelListResult struct {
-	Models   []domain.ProductModel
-	Variants []domain.ProductVariant
-	Total    int
+	Models []domain.ProductModel
+	Total  int
 }
 
 type MemberListOptions struct {
@@ -119,6 +107,8 @@ type EventListResult struct {
 }
 
 type ModelMediaStore interface {
+	WithSpecificationWrite(context.Context, string, func(SpecificationStore) error) error
+	AppearanceStore
 	CreateAndBindModel3DResource(context.Context, domain.Model3DResource, BindModel3DResource) error
 	GetModel3DBinding(context.Context, string, string, string) (Model3DBinding, error)
 	CreateModel3DResource(context.Context, domain.Model3DResource) error
@@ -129,7 +119,6 @@ type ModelMediaStore interface {
 	MarkModel3DResourcePendingDelete(context.Context, string, string) error
 	FinishModel3DResourceDelete(context.Context, string, string) error
 	BindModel3DResource(context.Context, string, BindModel3DResource) error
-	ResolveAssetModel3D(context.Context, string, string) (domain.Model3DResource, error)
 
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 	GetProductModel(context.Context, string, string) (domain.ProductModel, error)
@@ -163,6 +152,8 @@ type LifecycleStore interface {
 	TenantBaseCurrency(context.Context, string) (string, bool, error)
 	CreateAssetEventType(context.Context, domain.AssetEventTypeDefinition) error
 	ListAssetEventTypes(context.Context, string) ([]domain.AssetEventTypeDefinition, error)
+	UpdateAssetEventType(context.Context, domain.AssetEventTypeDefinition) error
+	ListAssetEventTypesPage(context.Context, string, EventTypeListOptions) ([]domain.AssetEventTypeDefinition, int, error)
 	AppendAssetEvent(context.Context, domain.AssetTransaction, domain.AssetEvent) error
 	GetAssetEvent(context.Context, string, string) (domain.AssetEvent, error)
 	ListAssetEvents(context.Context, string, string) ([]domain.AssetEvent, error)

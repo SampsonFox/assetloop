@@ -83,11 +83,11 @@ func run(args []string) error {
 			return err
 		}
 		var appStore interface {
-			application.Store
 			application.AuthStore
 			application.CatalogStore
 			application.LifecycleStore
 			application.ModelMediaStore
+			application.SpecificationStore
 		}
 		if cfg.Database.Driver == "sqlite" {
 			appStore = sqlitestore.New(db)
@@ -110,7 +110,7 @@ func run(args []string) error {
 			blobStores["aliyun"] = ossStore
 		}
 		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
-		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia}
+		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore)}
 		if cfg.AuthMode == "disabled" {
 			_, err := auth.EnsureDisabledPrincipal(context.Background())
 			if err != nil {

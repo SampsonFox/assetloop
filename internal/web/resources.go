@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,6 +12,31 @@ import (
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 )
+
+func resourceSize(size int64) string {
+	if size >= 1<<20 {
+		return fmt.Sprintf("%.1f MiB", float64(size)/(1<<20))
+	}
+	if size >= 1<<10 {
+		return fmt.Sprintf("%.1f KiB", float64(size)/(1<<10))
+	}
+	return fmt.Sprintf("%d B", size)
+}
+
+func resourceLicenseSummary(license string) string {
+	label := license
+	if i := strings.Index(label, "http"); i >= 0 {
+		label = strings.Trim(label[:i], " —-·\n\t")
+	}
+	if label == "" {
+		label = license
+	}
+	runes := []rune(label)
+	if len(runes) > 36 {
+		return string(runes[:36]) + "…"
+	}
+	return label
+}
 
 func (s *Server) resourcePrincipal(w http.ResponseWriter, r *http.Request) (application.Principal, bool) {
 	p, ok := s.requirePrincipal(w, r)
@@ -48,7 +74,7 @@ func resourceLibraryURL(query, kind, id, name string, page int) string {
 }
 
 func validBindingKind(kind string) bool {
-	return kind == "model" || kind == "variant" || kind == "asset"
+	return kind == "model" || kind == "asset"
 }
 
 func (s *Server) resourcesPage(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +153,12 @@ func (s *Server) renderResource(w http.ResponseWriter, r *http.Request, p applic
 	if draft != nil {
 		resource.Name, resource.SourceURL, resource.Author, resource.License = draft.Name, draft.SourceURL, draft.Author, draft.License
 	}
-	s.render(w, status, "resource", pageData{Title: resource.Name, Principal: &p, CSRFToken: s.ensureCSRF(w, r), Error: message, Resource: &resource, References: references, CanManageCatalog: p.Can(application.CapabilityManageCatalog), ReturnTo: "/admin/3d/" + resource.ID})
+	data := pageData{Title: resource.Name, Principal: &p, CSRFToken: s.ensureCSRF(w, r), Error: message, Resource: &resource, References: references, CanManageCatalog: p.Can(application.CapabilityManageCatalog), ReturnTo: "/admin/3d/" + resource.ID}
+	if err := s.resourceTagData(r, p, &data); err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, status, "resource", data)
 }
 
 func resourceDraft(r *http.Request) domain.Model3DResource {

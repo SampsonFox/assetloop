@@ -47,7 +47,7 @@ func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.Asset
 	}
 	return s.queries().CreateAssetEventType(ctx, postgresdb.CreateAssetEventTypeParams{
 		ID: id, TenantID: tenantID, Name: eventType.Name, NormalizedName: eventType.NormalizedName,
-		CashflowDirection: string(eventType.Cashflow), CreatedByUserID: userID, CreatedAt: eventType.CreatedAt,
+		CashflowDirection: string(eventType.Cashflow), CreatedByUserID: userID, CreatedAt: eventType.CreatedAt, UpdatedAt: eventType.CreatedAt,
 	})
 }
 
@@ -117,9 +117,10 @@ func (s *Store) CorrectAssetEvent(ctx context.Context, transaction domain.AssetT
 	})
 }
 
-func postgresEventType(row postgresdb.AssetEventType) domain.AssetEventTypeDefinition {
+func postgresEventType(row postgresdb.ListAssetEventTypesRow) domain.AssetEventTypeDefinition {
 	return domain.AssetEventTypeDefinition{
-		ID: row.ID.String(), TenantID: row.TenantID.String(), Name: row.Name, NormalizedName: row.NormalizedName,
+		ID: row.ID.String(), TenantID: row.TenantID.String(), Name: row.Name, NormalizedName: row.NormalizedName, UpdatedAt: row.UpdatedAt,
+		SystemCode: domain.AssetEventType(row.SystemCode), BuiltIn: row.SystemCode != "", Enabled: row.Enabled, ReferenceCount: row.ReferenceCount,
 		Cashflow: domain.AssetEventCashflow(row.CashflowDirection), CreatedByUserID: row.CreatedByUserID.String(), CreatedAt: row.CreatedAt,
 	}
 }
@@ -133,7 +134,7 @@ func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (do
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
-	return postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+	return postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID.String(), row.SystemCode,
 		row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 		row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
 		row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided), nil
@@ -150,7 +151,7 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 	}
 	result := make([]domain.AssetEvent, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID.String(), row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
 			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided))
@@ -175,7 +176,7 @@ func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID strin
 	total := 0
 	for _, row := range rows {
 		total = int(row.TotalCount)
-		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID.String(), row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
 			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided))
@@ -254,9 +255,13 @@ func postgresEventParams(event domain.AssetEvent) (postgresdb.CreateAssetEventPa
 	if err != nil {
 		return postgresdb.CreateAssetEventParams{}, err
 	}
+	typeID, err := uuid.Parse(event.TypeID)
+	if err != nil {
+		return postgresdb.CreateAssetEventParams{}, err
+	}
 	params := postgresdb.CreateAssetEventParams{
 		ID: id, TenantID: tenantID, AssetID: assetID, TransactionID: transactionID,
-		EventType: string(event.Type), BaseAmountMinor: event.BaseAmountMinor, BaseCurrency: event.BaseCurrency,
+		EventType: event.StorageType(), EventTypeID: typeID, BaseAmountMinor: event.BaseAmountMinor, BaseCurrency: event.BaseCurrency,
 		Notes: event.Notes, VoidsEventID: voidsID, ReplacesEventID: replacesID,
 		OccurredAt: event.OccurredAt, CreatedByUserID: userID, CreatedAt: event.CreatedAt,
 	}
@@ -270,13 +275,13 @@ func postgresEventParams(event domain.AssetEvent) (postgresdb.CreateAssetEventPa
 	return params, nil
 }
 
-func postgresEvent(id, tenantID, assetID, transactionID uuid.UUID, eventType string, baseAmount int64,
+func postgresEvent(id, tenantID, assetID, transactionID uuid.UUID, eventType, typeID, systemType string, baseAmount int64,
 	baseCurrency string, originalAmount sql.NullInt64, originalCurrency sql.NullString, rate sql.NullInt64,
 	rateDate sql.NullTime, rateSource sql.NullString, notes string, voidsID, replacesID uuid.NullUUID,
 	occurredAt time.Time, userID uuid.UUID, createdAt time.Time, isVoided bool) domain.AssetEvent {
 	event := domain.AssetEvent{
 		ID: id.String(), TenantID: tenantID.String(), AssetID: assetID.String(), TransactionID: transactionID.String(),
-		Type: domain.AssetEventType(eventType), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency,
+		TypeID: typeID, SystemType: domain.AssetEventType(systemType), Type: domain.AssetEventType(eventType), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency,
 		Notes: notes, OccurredAt: occurredAt, CreatedByUserID: userID.String(), CreatedAt: createdAt, IsVoided: isVoided,
 	}
 	if voidsID.Valid {

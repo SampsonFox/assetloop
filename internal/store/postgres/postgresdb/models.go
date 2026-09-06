@@ -14,15 +14,14 @@ import (
 type Asset struct {
 	ID                    uuid.UUID
 	TenantID              uuid.UUID
-	VariantID             uuid.UUID
 	DisplayName           string
 	CreatedAt             time.Time
 	SerialNumber          string
-	Color                 string
 	PurchaseChannel       string
 	Notes                 string
 	Model3dResourceID     uuid.NullUUID
 	Model3dResourceStatus string
+	ModelID               uuid.UUID
 }
 
 type AssetEvent struct {
@@ -44,6 +43,7 @@ type AssetEvent struct {
 	OccurredAt          time.Time
 	CreatedByUserID     uuid.UUID
 	CreatedAt           time.Time
+	EventTypeID         uuid.UUID
 }
 
 type AssetEventType struct {
@@ -54,6 +54,16 @@ type AssetEventType struct {
 	CashflowDirection string
 	CreatedByUserID   uuid.UUID
 	CreatedAt         time.Time
+	SystemCode        string
+	Enabled           bool
+	UpdatedAt         time.Time
+}
+
+type AssetSpecificationTag struct {
+	TenantID uuid.UUID
+	AssetID  uuid.UUID
+	ModelID  uuid.UUID
+	TagID    uuid.UUID
 }
 
 type AssetTransaction struct {
@@ -117,6 +127,36 @@ type Model3dResource struct {
 	UpdatedAt time.Time
 }
 
+type ModelAllowedTag struct {
+	TenantID uuid.UUID
+	ModelID  uuid.UUID
+	TagID    uuid.UUID
+}
+
+type ModelAppearanceCondition struct {
+	TenantID uuid.UUID
+	RuleID   uuid.UUID
+	ModelID  uuid.UUID
+	TagID    uuid.UUID
+}
+
+type ModelAppearanceDefault struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	ModelID        uuid.UUID
+	ResourceID     uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	ResourceStatus string
+}
+
+type ModelAppearanceDimension struct {
+	TenantID          uuid.UUID
+	ModelID           uuid.UUID
+	TypeID            uuid.UUID
+	AffectsAppearance bool
+}
+
 type ProductModel struct {
 	ID                    uuid.UUID
 	TenantID              uuid.UUID
@@ -135,15 +175,16 @@ type ProductModel struct {
 	Model3dResourceStatus string
 }
 
-type ProductVariant struct {
-	ID                    uuid.UUID
-	TenantID              uuid.UUID
-	ModelID               uuid.UUID
-	Name                  string
-	CreatedAt             time.Time
-	Color                 string
-	Model3dResourceID     uuid.NullUUID
-	Model3dResourceStatus string
+type ResourceCategory struct {
+	TenantID   uuid.UUID
+	ResourceID uuid.UUID
+	CategoryID uuid.UUID
+}
+
+type ResourceSpecificationTag struct {
+	TenantID   uuid.UUID
+	ResourceID uuid.UUID
+	TagID      uuid.UUID
 }
 
 type SecurityAuditEvent struct {
@@ -162,6 +203,30 @@ type Session struct {
 	UserID    uuid.UUID
 	ExpiresAt time.Time
 	CreatedAt time.Time
+}
+
+type SpecificationTag struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	TypeID         uuid.UUID
+	Name           string
+	NormalizedName string
+	Enabled        bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type SpecificationTagType struct {
+	ID                uuid.UUID
+	TenantID          uuid.UUID
+	Name              string
+	NormalizedName    string
+	Multiple          bool
+	AffectsAppearance bool
+	Enabled           bool
+	SystemCode        string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type Tenant struct {

@@ -1,6 +1,6 @@
 {{define "content"}}{{$s := .Strings}}
-<div class="page-heading">
-  <div><p class="eyebrow">{{t $s "assets.concrete"}}</p><h1>{{.Asset.DisplayName}}</h1></div>
+<div class="page-heading asset-detail-heading">
+  <h1>{{.Asset.DisplayName}}</h1>
 	<div class="heading-actions asset-detail-actions">
 		<a class="icon-button" href="/" aria-label="{{t $s "common.back_assets"}}" title="{{t $s "common.back_assets"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
@@ -25,22 +25,23 @@
   <div class="asset-profile-content">
     <p class="eyebrow">{{.Asset.Category}}</p>
     <h2>{{.Asset.Model}}</h2>
-    <p class="asset-variant-summary">{{.Asset.Variant}}{{if .Asset.Color}} · {{.Asset.Color}}{{end}}</p>
+    <p class="asset-variant-summary">{{.Asset.TagSummary}}</p>
     <dl class="asset-details-grid">
       <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
-      <div class="asset-detail"><dt>{{t $s "asset.variant"}}</dt><dd>{{.Asset.Variant}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "tags.values"}}</dt><dd>{{if .Asset.TagSummary}}{{.Asset.TagSummary}}{{else}}—{{end}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
-      <div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>
+
       <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
     </dl>
-    {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "variant"}}{{t $s "resource.source_variant"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}
+    {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "appearance"}}{{t $s "appearance.title"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}
+    {{if and .CanManageCatalog .Binding .Binding.Conflict}}<p class="muted" role="status">{{t $s "appearance.conflict"}} <a href="/admin/catalog/models/{{.Asset.ModelID}}/appearance">{{t $s "appearance.title"}}</a></p>{{end}}
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>
 </section>
 <div class="asset-cost-layout section-gap">
 {{template "cost_dashboard" .}}
-<section class="compact-timeline" id="lifecycle-timeline">
+<section class="compact-timeline" id="lifecycle-timeline" data-loading="{{t $s "timeline.loading"}}" data-updated="{{t $s "timeline.updated"}}" data-failed="{{t $s "timeline.failed"}}" data-session="{{t $s "timeline.session"}}">
   <header class="timeline-heading"><h2>{{t $s "asset.timeline"}}</h2>{{if .CanManageLifecycle}}<button class="icon-button" id="add-event" type="button" data-dialog-open="event-drawer" data-title="{{t $s "asset.add_event"}}" data-action="/assets/{{.Asset.ID}}/events" aria-controls="event-drawer" aria-label="{{t $s "asset.add_event"}}" title="{{t $s "asset.add_event"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>{{end}}</header>
   <form class="timeline-filters asset-search-shell" method="get" action="/assets/{{.Asset.ID}}#lifecycle-timeline">
     <div class="asset-search"><input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "asset.search_events_placeholder"}}" aria-label="{{t $s "asset.search_events"}}"></div>
@@ -49,22 +50,26 @@
       <details class="asset-filter-disclosure {{if .TableAdvanced}}has-active{{end}}">
         <summary class="icon-button" aria-label="{{t $s "assets.more_filters"}}{{if .TableAdvanced}} · {{t $s "assets.filters_active"}}{{end}}" title="{{t $s "assets.more_filters"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg></summary>
         <div class="asset-filter-panel timeline-filter-panel">
-          <label><span>{{t $s "asset.event_type"}}</span><select name="event_type"><option value="">{{t $s "asset.all_event_types"}}</option>{{range .EventTypes}}<option value="{{.Name}}" {{if eq $.TableFilter .Name}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}</select></label>
+          <label><span>{{t $s "asset.event_type"}}</span><select name="event_type"><option value="">{{t $s "asset.all_event_types"}}</option>{{range .EventTypes}}<option value="{{.ID}}" {{if eq $.TableFilter .ID}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}</select></label>
           <label><span>{{t $s "table.sort"}}</span><select name="sort"><option value="occurred" {{if eq .TableSort "occurred"}}selected{{end}}>{{t $s "asset.time"}}</option><option value="amount" {{if eq .TableSort "amount"}}selected{{end}}>{{t $s "asset.base_amount"}}</option><option value="type" {{if eq .TableSort "type"}}selected{{end}}>{{t $s "asset.event_type"}}</option></select></label>
           <label><span>{{t $s "table.direction"}}</span><select name="direction"><option value="asc" {{if eq .TableDirection "asc"}}selected{{end}}>{{t $s "table.ascending"}}</option><option value="desc" {{if eq .TableDirection "desc"}}selected{{end}}>{{t $s "table.descending"}}</option></select></label>
-          <label class="switch-control"><input type="checkbox" name="show_voided" value="1" data-auto-submit {{if .TableShowVoided}}checked{{end}}><span class="switch-track" aria-hidden="true"></span><span>{{t $s "asset.show_voided"}}</span></label>
-          <div class="asset-filter-panel-actions"><button class="auto" type="submit">{{t $s "assets.filter"}}</button></div>
+          <label class="switch-control"><input type="checkbox" name="show_voided" value="1" {{if .TableShowVoided}}checked{{end}}><span class="switch-track" aria-hidden="true"></span><span>{{t $s "asset.show_voided"}}</span></label>
+          <div class="asset-filter-panel-actions"><button class="auto" type="submit" data-timeline-apply>{{t $s "assets.filter"}}</button></div>
         </div>
       </details>
-      {{if .TableHasFilters}}<a class="button secondary" href="{{.TableClearURL}}">{{t $s "assets.clear_filters"}}</a>{{end}}
+      <a class="button secondary" data-timeline-clear href="{{.TableClearURL}}" {{if not .TableHasFilters}}hidden{{end}}>{{t $s "assets.clear_filters"}}</a>
     </div>
   </form>
-  {{if .Events}}<ol class="timeline-list">{{range .Events}}<li class="timeline-item event-{{eventClass .}} {{if .IsVoided}}is-voided{{end}}" data-timeline-item><span class="timeline-dot" aria-hidden="true"></span><article class="timeline-entry"><button class="timeline-trigger" type="button" aria-expanded="false" aria-controls="event-detail-{{.ID}}"><span><time>{{localDate .OccurredAt}}</time><span class="timeline-kind"><svg viewBox="0 0 24 24" aria-hidden="true">{{if lt .BaseAmountMinor 0}}<path d="m7 17 10-10M7 7h10v10"/>{{else if gt .BaseAmountMinor 0}}<path d="M17 7 7 17M7 7v10h10"/>{{else}}<circle cx="12" cy="12" r="7"/>{{end}}</svg>{{eventLabel $s .Type}}</span></span><strong class="timeline-amount">{{money .BaseAmountMinor .BaseCurrency}}</strong></button><div class="timeline-popover" id="event-detail-{{.ID}}" hidden><h3>{{eventLabel $s .Type}}</h3><time>{{dateTime .OccurredAt}}</time>{{if .IsVoided}}<span class="muted">{{t $s "asset.voided"}}</span>{{end}}{{if .FX}}<p class="timeline-evidence">{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span></p>{{end}}{{if .Notes}}<p class="timeline-note">{{.Notes}}</p>{{end}}{{if $.CanManageLifecycle}}{{if canCorrect .}}<footer class="timeline-entry-footer"><a href="/events/{{.ID}}/correct">{{t $s "asset.correct"}}</a></footer>{{end}}{{end}}</div></article></li>{{end}}</ol>{{else}}<p class="muted">{{t $s "asset.no_events"}}</p>{{end}}
+  <div data-timeline-results tabindex="-1">
+{{if .Events}}<ol class="timeline-list">{{range .Events}}<li class="timeline-item event-{{eventClass .}} {{if .IsVoided}}is-voided{{end}}" data-timeline-item><span class="timeline-dot" aria-hidden="true"></span><article class="timeline-entry"><button class="timeline-trigger" type="button" aria-expanded="false" aria-controls="event-detail-{{.ID}}"><span><time>{{localDate .OccurredAt}}<span class="timeline-clock"> {{slice (dateTime .OccurredAt) 11}}</span></time><span class="timeline-kind"><svg viewBox="0 0 24 24" aria-hidden="true">{{if lt .BaseAmountMinor 0}}<path d="m7 17 10-10M7 7h10v10"/>{{else if gt .BaseAmountMinor 0}}<path d="M17 7 7 17M7 7v10h10"/>{{else}}<circle cx="12" cy="12" r="7"/>{{end}}</svg>{{eventLabel $s .Type}}</span></span><strong class="timeline-amount">{{money .BaseAmountMinor .BaseCurrency}}</strong></button><div class="timeline-details" id="event-detail-{{.ID}}" hidden inert><div class="timeline-details-inner"><div class="timeline-details-body">{{if .IsVoided}}<span class="muted">{{t $s "asset.voided"}}</span>{{end}}{{if .FX}}<p class="timeline-evidence">{{money .FX.OriginalAmountMinor .FX.OriginalCurrency}} × {{rate .FX.RateScaled}}<span class="muted">{{date .FX.RateDate}} · {{.FX.RateSource}}</span></p>{{end}}{{if .Notes}}<p class="timeline-note">{{.Notes}}</p>{{end}}{{if $.CanManageLifecycle}}{{if canCorrect .}}<footer class="timeline-entry-footer"><a href="/events/{{.ID}}/correct">{{t $s "asset.correct"}}</a></footer>{{end}}{{end}}</div></div></div></article></li>{{end}}</ol>{{else}}<p class="muted">{{if .TableHasFilters}}{{t $s "timeline.no_matches"}}{{else}}{{t $s "asset.no_events"}}{{end}}</p>{{end}}
   {{if gt .TableTotalPages 1}}<nav class="pagination" aria-label="{{t $s "asset.pagination"}}"><span>{{t $s "assets.page"}} {{.TablePage}} / {{.TableTotalPages}}</span><div>{{if .TablePreviousURL}}<a class="button secondary" href="{{.TablePreviousURL}}">{{t $s "assets.previous"}}</a>{{end}}{{if .TableNextURL}}<a class="button secondary" href="{{.TableNextURL}}">{{t $s "assets.next"}}</a>{{end}}</div></nav>{{end}}
+  </div>
+  <div class="timeline-feedback muted" data-timeline-feedback hidden><span role="status" aria-live="polite"></span> <button type="button" class="link-button" hidden>{{t $s "timeline.retry"}}</button> <a href="/login" hidden>{{t $s "timeline.login"}}</a></div>
 </section>
 
 </div>
 <script defer src="/static/cost-timeline.js"></script>
+<script defer src="/static/timeline-query.js"></script>
 {{if .CanManageLifecycle}}
 <dialog class="drawer" id="event-drawer" aria-labelledby="event-drawer-title">
   <form class="drawer-panel event-drawer-panel" id="event-form" action="/assets/{{.Asset.ID}}/events" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
@@ -73,7 +78,7 @@
     {{if .Error}}<p class="error wide" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="request_key" value="{{.EventForm.RequestKey}}">
-    <div class="form-field"><div class="field-heading"><label for="event-type-select">{{t $s "asset.event_type"}}</label><button class="link-button" type="button" data-dialog-open="event-type-drawer" data-title="{{t $s "asset.event_type_create"}}" data-action="/admin/event-types" aria-controls="event-type-drawer">{{t $s "asset.event_type_add"}}</button></div><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}<option value="{{.Name}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .Name}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}</select></div>
+    <div class="form-field"><div class="field-heading"><a href="/admin/event-types">{{t $s "types.manage"}}</a><label for="event-type-select">{{t $s "asset.event_type"}}</label><button class="link-button" type="button" data-dialog-open="event-type-drawer" data-title="{{t $s "asset.event_type_create"}}" data-action="/admin/event-types" aria-controls="event-type-drawer">{{t $s "asset.event_type_add"}}</button></div><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}{{if .Enabled}}<option value="{{.ID}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .ID}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}{{end}}</select></div>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
     <div class="form-field" data-money-field>
       <label for="event-amount">{{t $s "asset.amount"}}</label>

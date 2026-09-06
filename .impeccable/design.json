@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-06T09:54:34Z",
+  "title": "Design System: AssetLoop 物迹",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "popup",
+        "value": "0 6px 16px var(--popup-shadow)",
+        "purpose": "Existing menu elevation"
+      }
+    ],
+    "motion": [
+      {
+        "name": "control",
+        "value": ".2s",
+        "purpose": "Existing control state transitions"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stacked",
+        "value": "760px"
+      },
+      {
+        "name": "record-table",
+        "value": "520px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "description": "Explicit management action",
+      "html": "<button class=\"ds-primary\">保存</button>",
+      "css": ".ds-primary{border:1px solid var(--accent,#166b4f);border-radius:10px;padding:11px 13px;background:var(--accent,#166b4f);color:var(--accent-contrast,#fff);font:inherit;font-weight:800;cursor:pointer}.ds-primary:focus-visible{outline:2px solid var(--accent,#166b4f);outline-offset:3px}.ds-primary:disabled{opacity:.45;cursor:not-allowed}"
+    },
+    {
+      "name": "Text field",
+      "kind": "input",
+      "description": "Labeled native field",
+      "html": "<label class=\"ds-label\">名称<input class=\"ds-input\"></label>",
+      "css": ".ds-label{display:grid;gap:7px;font-weight:700}.ds-input{border:1px solid var(--line-strong,#bdc9c1);border-radius:10px;padding:11px 13px;background:var(--field,#fff);color:var(--ink,#17211d);font:inherit}.ds-input:focus{outline:3px solid var(--accent-soft,#dff2e9);border-color:var(--accent,#166b4f)}"
+    },
+    {
+      "name": "Dictionary navigation",
+      "kind": "nav",
+      "description": "Current section with non-color marker",
+      "html": "<nav class=\"ds-nav\"><a href=\"#values\" aria-current=\"page\">标签值</a><a href=\"#types\">标签类型</a></nav>",
+      "css": ".ds-nav{display:flex;flex-wrap:wrap;gap:20px}.ds-nav a{color:var(--accent,#166b4f);text-decoration:none}.ds-nav a[aria-current]{color:var(--ink,#17211d);text-decoration:underline 2px;text-underline-offset:6px}.ds-nav a:hover{text-decoration:underline}.ds-nav a:focus-visible{outline:2px solid var(--accent,#166b4f);outline-offset:2px}"
+    },
+    {
+      "name": "Descriptive tag",
+      "kind": "chip",
+      "description": "Non-interactive shared description",
+      "html": "<span class=\"ds-tag\">256GB</span>",
+      "css": ".ds-tag{display:inline-flex;align-items:center;min-height:26px;padding:2px 9px;border:1px solid var(--line,#dce4df);border-radius:6px;background:var(--paper,#f7f8f5);color:var(--ink,#17211d);font-size:13px;white-space:nowrap}"
+    },
+    {
+      "name": "Content surface",
+      "kind": "card",
+      "description": "Existing record or management surface",
+      "html": "<section class=\"ds-card\">物品记录</section>",
+      "css": ".ds-card{padding:24px;background:var(--card,#fff);color:var(--ink,#17211d);border:1px solid var(--line,#dce4df);border-radius:16px}"
+    }
+  ],
+  "narrative": {
+    "overview": "Record of the existing implementation, not a new brand proposal.",
+    "keyCharacteristics": [
+      "Semantic colors adapt to theme and the user's accent.",
+      "Native controls, restrained tables and direct labels carry the task.",
+      "Secondary editing lives in accessible drawers or dedicated management screens."
+    ],
+    "rules": [
+      {
+        "name": "The Semantic Theme Rule",
+        "body": "Application surfaces use --paper, --card, --field, --ink, --muted, --line, --accent, --accent-soft and --accent-contrast. Never hard-code a user's current palette into a feature.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do reuse semantic colors and the current server-rendered controls.",
+      "Do preserve keyboard access, localized error recovery and responsive labels."
+    ],
+    "donts": [
+      "Don't add a second specification picker beside the typed tags.",
+      "Don't treat descriptive resource tags as automatic model-binding instructions."
+    ]
+  }
+}

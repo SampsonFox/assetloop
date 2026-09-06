@@ -27,6 +27,11 @@ func resourceSession(t *testing.T, handler http.Handler) ([]*http.Cookie, string
 
 func uploadWebResource(t *testing.T, h http.Handler, fields url.Values, data []byte, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
+	return uploadWebResourceAt(t, h, "/admin/3d", fields, data, cookies)
+}
+
+func uploadWebResourceAt(t *testing.T, h http.Handler, path string, fields url.Values, data []byte, cookies []*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	for key, values := range fields {
@@ -46,7 +51,7 @@ func uploadWebResource(t *testing.T, h http.Handler, fields url.Values, data []b
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest(http.MethodPost, "/admin/3d", &body)
+	r := httptest.NewRequest(http.MethodPost, path, &body)
 	r.Header.Set("Content-Type", w.FormDataContentType())
 	for _, cookie := range cookies {
 		r.AddCookie(cookie)
@@ -57,7 +62,7 @@ func uploadWebResource(t *testing.T, h http.Handler, fields url.Values, data []b
 }
 
 func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
-	h := newTestHandler(t)
+	h := newTestHandlerWithBlob(t, nil)
 	cookies, csrf := resourceSession(t, h)
 	post := func(path string, form url.Values) *httptest.ResponseRecorder {
 		t.Helper()
@@ -74,15 +79,18 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	assertStatus(post("/admin/catalog/categories", url.Values{"name": {"Devices"}, "icon_key": {"smartphone"}}), 303)
 	category := optionID(t, get("/admin/catalog").Body.String(), "Devices")
 	assertStatus(post("/admin/catalog/models", url.Values{"category_id": {category}, "name": {"Phone"}}), 303)
-	model := optionID(t, get("/admin/catalog").Body.String(), "Devices / Phone")
-	assertStatus(post("/admin/catalog/variants", url.Values{"model_id": {model}, "name": {"256GB"}, "color": {"Blue"}}), 303)
-	newPage := get("/assets/new").Body.String()
-	variant := optionID(t, newPage, "Devices / Phone / 256GB · Blue")
+	model := regexp.MustCompile(`data-edit-model-id="([a-f0-9-]+)"`).FindStringSubmatch(get("/admin/catalog").Body.String())[1]
+	assertStatus(post("/admin/tags/types", url.Values{"name": {"Color"}, "enabled": {"1"}, "appearance": {"1"}, "entity": {"type"}}), 303)
+	typeID := regexp.MustCompile(`value="([a-f0-9-]+)"[^>]*>Color</option>`).FindStringSubmatch(get("/admin/tags").Body.String())[1]
+	assertStatus(post("/admin/tags/values", url.Values{"type_id": {typeID}, "name": {"Blue"}, "enabled": {"1"}, "entity": {"value"}}), 303)
+	blue := regexp.MustCompile(`/admin/tags\?edit=([a-f0-9-]+)`).FindStringSubmatch(get("/admin/tags").Body.String())[1]
+	assertStatus(post("/admin/catalog/models/"+model+"/tags", url.Values{"tag_ids": {blue}}), 303)
+	newPage := get("/assets/new?model_id=" + model).Body.String()
 	assetForm := regexp.MustCompile(`(?s)<form id="asset-form".*?</form>`).FindString(newPage)
 	if strings.Contains(assetForm, `name="color"`) || strings.Contains(newPage, "data-model-viewer") || strings.Contains(newPage, "kind=asset") {
 		t.Fatal("unsaved asset must choose a color specification and keep static preview")
 	}
-	created := post("/assets", url.Values{"variant_id": {variant}, "display_name": {"My phone"}, "color": {"Injected independent color"}})
+	created := post("/assets", url.Values{"model_id": {model}, "tag_ids": {blue}, "display_name": {"My phone"}, "color": {"Injected independent color"}})
 	assertStatus(created, 303)
 	assetPath := created.Header().Get("Location")
 	asset := strings.TrimPrefix(assetPath, "/assets/")
@@ -97,7 +105,8 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	}
 	ids := []string{}
 	digests := []string{}
-	for i, kind := range []string{"model", "variant", "asset"} {
+	appearanceRule := ""
+	for i, kind := range []string{"model", "appearance", "asset"} {
 		data := append([]byte(nil), webTestGLB()...)
 		// Distinct valid documents make the resolved URL observable.
 		data = bytes.Replace(data, []byte("2.0"), []byte(fmt.Sprintf("2.%d", i)), 1)
@@ -107,8 +116,21 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 		ids = append(ids, id)
 		digest := sha256.Sum256(data)
 		digests = append(digests, hex.EncodeToString(digest[:]))
-		target := []string{model, variant, asset}[i]
-		assertStatus(post("/admin/3d/bind/"+kind+"/"+target, url.Values{"resource_id": {id}}), 303)
+		if kind == "appearance" {
+			bound := post("/admin/catalog/models/"+model+"/appearance", url.Values{"resource_id": {id}, "tag_ids": {blue}})
+			assertStatus(bound, 303)
+			location, err := url.Parse(bound.Header().Get("Location"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			appearanceRule = location.Query().Get("appearance_rule_id")
+		} else {
+			target := model
+			if kind == "asset" {
+				target = asset
+			}
+			assertStatus(post("/admin/3d/bind/"+kind+"/"+target, url.Values{"resource_id": {id}}), 303)
+		}
 		body := get(assetPath).Body.String()
 		if !strings.Contains(body, "model.glb?v="+digests[i]) {
 			t.Fatalf("%s override not resolved in asset detail", kind)
@@ -125,15 +147,66 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 		}
 		assertStatus(post("/admin/3d/"+id+"/delete", url.Values{}), http.StatusConflict)
 	}
+	descriptionPath := "/admin/3d/" + ids[1] + "/tags"
+	assertStatus(post(descriptionPath, url.Values{"tag_ids": {"", blue}, "category_ids": {category}}), 303)
+	description := get("/admin/3d/" + ids[1]).Body.String()
+	for _, want := range []string{`value="` + blue + `" selected`, `value="` + category + `" checked`, "模型标签与分类", "外观默认", "edit_model_id=" + model} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("resource description missing %s", want)
+		}
+	}
+	if strings.Contains(description, "kind=appearance") {
+		t.Fatal("appearance reference must link to the model editor, not a nonexistent binding picker")
+	}
+	appearancePath := "/admin/catalog/models/" + model + "/appearance"
+	candidates := get(appearancePath + "?search=1&tag_ids=" + blue)
+	assertStatus(candidates, 200)
+	for _, want := range []string{"外观描述齐全", "appearance resource", `value="` + blue + `" checked`, `name="return_appearance"`, "已确认绑定"} {
+		if !strings.Contains(candidates.Body.String(), want) {
+			t.Fatalf("appearance candidate UI missing %s", want)
+		}
+	}
+	if strings.Contains(candidates.Body.String(), ">asset resource</td>") {
+		t.Fatal("uncategorized resource recommended")
+	}
+	manual := get(appearancePath + "?search=1&manual=1&tag_ids=" + blue)
+	assertStatus(manual, 200)
+	if !strings.Contains(manual.Body.String(), ">asset resource</td>") || !strings.Contains(manual.Body.String(), "未按标签匹配") {
+		t.Fatal("manual resource selection unavailable")
+	}
+	updatedRule := post(appearancePath, url.Values{"return_appearance": {"1"}, "rule_id": {appearanceRule}, "resource_id": {ids[1]}, "tag_ids": {blue}})
+	assertStatus(updatedRule, 303)
+	if updatedRule.Header().Get("Location") != appearancePath+"?rule_id="+appearanceRule {
+		t.Fatal("appearance save lost editor context")
+	}
+	assertStatus(get(appearancePath+"?rule_id=00000000-0000-0000-0000-000000000001"), 404)
+	assertStatus(request(t, h, "POST", descriptionPath, url.Values{"tag_ids": {blue}}, cookies), 403)
+	invalid := post(descriptionPath, url.Values{"tag_ids": {blue}, "category_ids": {"00000000-0000-0000-0000-000000000001"}})
+	assertStatus(invalid, 422)
+	if !strings.Contains(invalid.Body.String(), `value="`+blue+`" selected`) {
+		t.Fatal("resource tag validation lost submitted choices")
+	}
+	// Clearing descriptive tags must not change an explicitly confirmed rule.
+	assertStatus(post(descriptionPath, url.Values{}), 303)
+	if !strings.Contains(get(assetPath).Body.String(), "model.glb?v="+digests[2]) {
+		t.Fatal("resource descriptions changed an item override")
+	}
 	assertStatus(post("/admin/3d/"+ids[0], url.Values{"name": {"Renamed resource"}, "model_3d_author": {"Shared author"}, "model_3d_license": {"CC0"}, "model_3d_source_url": {"https://example.com/model"}}), 303)
 	filtered := get("/admin/3d?q=Shared+author")
 	assertStatus(filtered, 200)
 	if !strings.Contains(filtered.Body.String(), "Renamed resource") || strings.Contains(filtered.Body.String(), ">asset resource</a>") {
 		t.Fatal("resource search must be server filtered")
 	}
-	for i, kind := range []string{"asset", "variant", "model"} {
-		target := []string{asset, variant, model}[i]
-		assertStatus(post("/admin/3d/bind/"+kind+"/"+target, url.Values{}), 303)
+	for i, kind := range []string{"asset", "appearance", "model"} {
+		if kind == "appearance" {
+			assertStatus(post("/admin/catalog/appearance/"+appearanceRule+"/delete", url.Values{}), 303)
+		} else {
+			target := asset
+			if kind == "model" {
+				target = model
+			}
+			assertStatus(post("/admin/3d/bind/"+kind+"/"+target, url.Values{}), 303)
+		}
 		body := get(assetPath).Body.String()
 		if i < 2 && !strings.Contains(body, "model.glb?v="+digests[1-i]) {
 			t.Fatalf("%s unbinding failed to restore inheritance", kind)
@@ -167,6 +240,26 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	}
 	if strings.Contains(get("/admin/3d").Body.String(), "Must not persist") {
 		t.Fatal("failed atomic upload binding must not create a library resource")
+	}
+	// Appearance upload is the same verified-blob/atomic-metadata workflow.
+	badAppearance := uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"csrf_token": {csrf}, "name": {"Rejected appearance"}}, webTestGLB(), cookies)
+	assertStatus(badAppearance, 422)
+	if strings.Contains(get("/admin/3d").Body.String(), "Rejected appearance") {
+		t.Fatal("invalid appearance upload left a resource row")
+	}
+	assertStatus(uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"name": {"Missing CSRF"}, "tag_ids": {blue}}, webTestGLB(), cookies), 403)
+	boundAppearance := uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"csrf_token": {csrf}, "name": {"Uploaded appearance"}, "tag_ids": {blue}}, webTestGLB(), cookies)
+	assertStatus(boundAppearance, 303)
+	if !bytes.Equal(get(assetPath+"/model.glb").Body.Bytes(), webTestGLB()) {
+		t.Fatal("uploaded appearance not inherited")
+	}
+	duplicate := uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"csrf_token": {csrf}, "name": {"Duplicate appearance"}, "tag_ids": {blue}}, webTestGLB(), cookies)
+	assertStatus(duplicate, 422)
+	if strings.Contains(get("/admin/3d").Body.String(), "Duplicate appearance") {
+		t.Fatal("duplicate conditions retained new resource")
+	}
+	if !strings.Contains(duplicate.Body.String(), `value="`+blue+`" checked`) || !strings.Contains(duplicate.Body.String(), `value="Duplicate appearance"`) {
+		t.Fatal("failed upload lost draft")
 	}
 }
 
@@ -241,8 +334,16 @@ func TestResourceDeleteFailureCanRetry(t *testing.T) {
 }
 
 func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
-	h := newTestHandler(t)
+	h := newTestHandlerWithBlob(t, nil)
 	owner, csrf := resourceSession(t, h)
+	request(t, h, "POST", "/admin/catalog/categories", url.Values{"csrf_token": {csrf}, "name": {"Viewer catalog"}, "icon_key": {"smartphone"}}, owner)
+	catalogPage := request(t, h, "GET", "/admin/catalog", nil, owner)
+	categoryID := optionID(t, catalogPage.Body.String(), "Viewer catalog")
+	createdModel := request(t, h, "POST", "/admin/catalog/models", url.Values{"csrf_token": {csrf}, "category_id": {categoryID}, "name": {"Viewer phone"}, "flow": {"asset"}}, owner)
+	if createdModel.Code != 303 || !strings.HasPrefix(createdModel.Header().Get("Location"), "/assets/new?model_id=") {
+		t.Fatal("inline model creation still requires a legacy specification")
+	}
+	modelID := strings.TrimPrefix(createdModel.Header().Get("Location"), "/assets/new?model_id=")
 	upload := uploadWebResource(t, h, url.Values{"csrf_token": {csrf}, "name": {"Viewer resource"}, "model_3d_author": {"Visible author"}}, webTestGLB(), owner)
 	if upload.Code != 303 {
 		t.Fatal(upload.Body.String())
@@ -258,6 +359,16 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 	if preferences.Code != 303 {
 		t.Fatal(preferences.Body.String())
 	}
+	appearancePath := "/admin/catalog/models/" + modelID + "/appearance"
+	appearancePage := request(t, h, "GET", appearancePath, nil, viewer)
+	if appearancePage.Code != 200 || !strings.Contains(appearancePage.Body.String(), "Appearance defaults") || strings.Contains(appearancePage.Body.String(), `method="post" action="`+appearancePath) {
+		t.Fatal("viewer appearance page is not localized and read-only")
+	}
+	for _, target := range []string{appearancePath, appearancePath + "/upload"} {
+		if response := request(t, h, "POST", target, url.Values{"csrf_token": {csrf}}, viewer); response.Code != 403 {
+			t.Fatalf("viewer appearance mutation %s: %d", target, response.Code)
+		}
+	}
 	for _, target := range []string{"/admin/3d", path, path + "/model.glb"} {
 		page := request(t, h, http.MethodGet, target, nil, viewer)
 		if page.Code != 200 {
@@ -266,16 +377,16 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 		if strings.HasSuffix(target, ".glb") {
 			continue
 		}
-		for _, forbidden := range []string{`data-dialog-open="resource-upload"`, `action="` + path + `/delete"`, `name="model_3d_author"`, `name="resource_id"`} {
+		for _, forbidden := range []string{`data-dialog-open="resource-upload"`, `action="` + path + `/delete"`, `name="model_3d_author"`, `name="resource_id"`, `name="tag_ids"`, `name="category_ids"`} {
 			if strings.Contains(page.Body.String(), forbidden) {
 				t.Fatalf("viewer exposed mutation %s", forbidden)
 			}
 		}
-		if !strings.Contains(page.Body.String(), `lang="en"`) || !strings.Contains(page.Body.String(), "3D resource library") {
+		if !strings.Contains(page.Body.String(), `lang="en"`) || !strings.Contains(page.Body.String(), "3D resources") {
 			t.Fatal("resource English localization missing")
 		}
 	}
-	for _, target := range []string{path, path + "/delete", "/admin/3d/bind/model/00000000-0000-0000-0000-000000000001"} {
+	for _, target := range []string{path, path + "/delete", path + "/tags", "/admin/3d/bind/model/00000000-0000-0000-0000-000000000001"} {
 		r := request(t, h, http.MethodPost, target, url.Values{"csrf_token": {csrf}}, viewer)
 		if r.Code != 403 {
 			t.Fatalf("viewer mutation %s=%d", target, r.Code)

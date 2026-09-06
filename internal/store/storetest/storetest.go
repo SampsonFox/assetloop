@@ -12,16 +12,15 @@ import (
 )
 
 type Store interface {
-	application.Store
 	application.AuthStore
 	application.CatalogStore
 	application.LifecycleStore
 	application.ModelMediaStore
+	application.SpecificationStore
 }
 
 func Run(t *testing.T, store Store) {
 	t.Helper()
-	t.Run("asset", func(t *testing.T) { runAsset(t, store) })
 	t.Run("auth", func(t *testing.T) { runAuth(t, store) })
 	t.Run("catalog", func(t *testing.T) { runCatalog(t, store) })
 	t.Run("lifecycle", func(t *testing.T) { runLifecycle(t, store) })
@@ -172,7 +171,7 @@ func runLifecycle(t *testing.T, store Store) {
 	if _, err := service.Record(ctx, viewer, application.RecordEvent{}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer lifecycle write should be forbidden, got %v", err)
 	}
-	secondAsset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: snapshot.Variants[0].ID, DisplayName: "Pagination Phone", SerialNumber: "SERIAL-002"})
+	secondAsset, err := application.NewSpecificationService(store).SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: snapshot.Models[0].ID, DisplayName: "Pagination Phone", SerialNumber: "SERIAL-002"})
 	if err != nil {
 		t.Fatalf("create pagination asset: %v", err)
 	}
@@ -254,22 +253,30 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil || gotModel.Model3D == nil || gotModel.Model3D.ObjectKey != media.ObjectKey {
 		t.Fatalf("get model media: model=%+v err=%v", gotModel, err)
 	}
-	variant256, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB"})
+	tags := application.NewSpecificationService(store)
+	storage, err := tags.SaveType(ctx, owner, application.SaveSpecificationType{Name: "Storage", Enabled: true})
 	if err != nil {
-		t.Fatalf("create 256GB variant: %v", err)
+		t.Fatal(err)
 	}
-	variant512, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"})
+	small, err := tags.SaveTag(ctx, owner, application.SaveSpecificationTag{TypeID: storage.ID, Name: "256GB", Enabled: true})
 	if err != nil {
-		t.Fatalf("create 512GB variant: %v", err)
+		t.Fatal(err)
 	}
-	asset, err := service.CreateAsset(ctx, owner, application.CreateCatalogAsset{
-		VariantID: variant256.ID, DisplayName: "Daily Phone", SerialNumber: "SERIAL-001",
-		Color: "Black", PurchaseChannel: "Official Store", Notes: "Complete catalog record",
+	large, err := tags.SaveTag(ctx, owner, application.SaveSpecificationTag{TypeID: storage.ID, Name: "512GB", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tags.SaveModel(ctx, owner, application.SaveModelSpecification{ModelID: model.ID, TagIDs: []string{small.ID, large.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	asset, err := tags.SaveAsset(ctx, owner, application.SaveSpecificationAsset{
+		ModelID: model.ID, TagIDs: []string{small.ID}, DisplayName: "Daily Phone", SerialNumber: "SERIAL-001",
+		PurchaseChannel: "Official Store", Notes: "Complete catalog record",
 	})
 	if err != nil {
 		t.Fatalf("create catalog asset: %v", err)
 	}
-	if asset.Category != "Phone" || asset.Model != "Example Pro" || asset.Variant != "256GB" || asset.SerialNumber != "SERIAL-001" {
+	if asset.Category != "Phone" || asset.Model != "Example Pro" || asset.TagSummary != "256GB" || asset.SerialNumber != "SERIAL-001" {
 		t.Fatalf("catalog asset was not hydrated: %+v", asset)
 	}
 	if _, err := service.UpdateCategory(ctx, owner, application.UpdateCategory{ID: category.ID, Name: "Phones", IconKey: "tablet"}); err != nil {
@@ -278,25 +285,25 @@ func runCatalog(t *testing.T, store Store) {
 	if _, err := service.UpdateModel(ctx, owner, application.UpdateModel{ID: model.ID, CategoryID: category.ID, Name: "Example Ultra"}); err != nil {
 		t.Fatalf("update model: %v", err)
 	}
-	if _, err := service.UpdateVariant(ctx, owner, application.UpdateVariant{ID: variant256.ID, ModelID: model.ID, Name: "256 GB"}); err != nil {
-		t.Fatalf("update variant: %v", err)
+	if _, err := tags.SaveTag(ctx, owner, application.SaveSpecificationTag{ID: small.ID, TypeID: storage.ID, Name: "256 GB", Enabled: true, ConfirmSharedRename: true}); err != nil {
+		t.Fatalf("rename tag: %v", err)
 	}
-	updatedAsset, err := service.UpdateAsset(ctx, owner, application.UpdateCatalogAsset{ID: asset.ID, VariantID: variant256.ID, DisplayName: "Updated Phone", SerialNumber: "SERIAL-001", Color: "Blue", PurchaseChannel: "Retail", Notes: "Updated"})
-	if err != nil || updatedAsset.DisplayName != "Updated Phone" || updatedAsset.CategoryIcon != "tablet" || updatedAsset.Category != "Phones" || updatedAsset.Model != "Example Ultra" || updatedAsset.Variant != "256 GB" {
+	updatedAsset, err := tags.SaveAsset(ctx, owner, application.SaveSpecificationAsset{ID: asset.ID, ModelID: model.ID, TagIDs: []string{small.ID}, DisplayName: "Updated Phone", SerialNumber: "SERIAL-001", PurchaseChannel: "Retail", Notes: "Updated"})
+	if err != nil || updatedAsset.DisplayName != "Updated Phone" || updatedAsset.CategoryIcon != "tablet" || updatedAsset.Category != "Phones" || updatedAsset.Model != "Example Ultra" || updatedAsset.TagSummary != "256 GB" {
 		t.Fatalf("updated catalog hierarchy mismatch: asset=%+v err=%v", updatedAsset, err)
 	}
-	if err := service.DeleteVariant(ctx, owner, variant512.ID); err != nil {
-		t.Fatalf("delete unused variant: %v", err)
+	if err := tags.SaveModel(ctx, owner, application.SaveModelSpecification{ModelID: model.ID, TagIDs: []string{small.ID}}); err != nil {
+		t.Fatalf("remove unused allowance: %v", err)
 	}
-	if err := service.DeleteVariant(ctx, owner, variant256.ID); err == nil {
-		t.Fatal("variant used by an asset must not be deleted")
+	if err := tags.SaveModel(ctx, owner, application.SaveModelSpecification{ModelID: model.ID}); err == nil {
+		t.Fatal("allowance used by an asset must not be removed")
 	}
 	snapshot, err := service.Snapshot(ctx, owner)
 	if err != nil {
 		t.Fatalf("catalog snapshot: %v", err)
 	}
-	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 1 || len(snapshot.Assets) != 1 {
-		t.Fatalf("unexpected catalog counts: categories=%d models=%d variants=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Variants), len(snapshot.Assets))
+	if len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Assets) != 1 {
+		t.Fatalf("unexpected catalog counts: categories=%d models=%d assets=%d", len(snapshot.Categories), len(snapshot.Models), len(snapshot.Assets))
 	}
 	if snapshot.Models[0].Model3D == nil || snapshot.Models[0].Model3D.SHA256 != "hash" {
 		t.Fatalf("snapshot omitted model media: %+v", snapshot.Models[0])
@@ -309,15 +316,12 @@ func runCatalog(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatalf("create second model: %v", err)
 	}
-	if _, err := service.CreateVariant(ctx, owner, application.CreateVariant{ModelID: accessoryModel.ID, Name: "Black"}); err != nil {
-		t.Fatalf("create second model variant: %v", err)
-	}
-	modelPage, err := service.ListModelsWithVariants(ctx, owner, application.ModelListOptions{Sort: "name", Direction: "asc", Page: 1, PageSize: 1})
-	if err != nil || modelPage.Total != 2 || len(modelPage.Models) != 1 || modelPage.Models[0].ID != accessoryModel.ID || len(modelPage.Variants) != 1 || modelPage.Variants[0].ModelID != accessoryModel.ID {
+	modelPage, err := service.ListModelsPage(ctx, owner, application.ModelListOptions{Sort: "name", Direction: "asc", Page: 1, PageSize: 1})
+	if err != nil || modelPage.Total != 2 || len(modelPage.Models) != 1 || modelPage.Models[0].ID != accessoryModel.ID {
 		t.Fatalf("bulk model page mismatch: result=%+v err=%v", modelPage, err)
 	}
-	filteredModels, err := service.ListModelsWithVariants(ctx, owner, application.ModelListOptions{Query: "Ultra", CategoryID: category.ID, Page: 1, PageSize: 25})
-	if err != nil || filteredModels.Total != 1 || len(filteredModels.Models) != 1 || filteredModels.Models[0].ID != model.ID || filteredModels.Models[0].Model3D == nil || filteredModels.Models[0].Model3D.SHA256 != "hash" || len(filteredModels.Variants) != 1 {
+	filteredModels, err := service.ListModelsPage(ctx, owner, application.ModelListOptions{Query: "Ultra", CategoryID: category.ID, Page: 1, PageSize: 25})
+	if err != nil || filteredModels.Total != 1 || len(filteredModels.Models) != 1 || filteredModels.Models[0].ID != model.ID || filteredModels.Models[0].Model3D == nil || filteredModels.Models[0].Model3D.SHA256 != "hash" {
 		t.Fatalf("filtered model page mismatch: result=%+v err=%v", filteredModels, err)
 	}
 	viewer := owner
@@ -325,13 +329,13 @@ func runCatalog(t *testing.T, store Store) {
 	if _, err := service.CreateCategory(ctx, viewer, application.CreateCategory{Name: "Forbidden"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer catalog write should be forbidden, got %v", err)
 	}
-	if err := service.DeleteVariant(ctx, viewer, variant256.ID); !errors.Is(err, application.ErrForbidden) {
-		t.Fatalf("viewer variant delete should be forbidden, got %v", err)
+	if err := tags.SaveModel(ctx, viewer, application.SaveModelSpecification{ModelID: model.ID}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer allowance edit should be forbidden, got %v", err)
 	}
 	if _, err := service.CreateModel(ctx, owner, application.CreateModel{CategoryID: "99999999-9999-4999-8999-999999999999", Name: "Cross tenant"}); err == nil {
 		t.Fatal("model with unavailable category should fail")
 	}
-	if _, err := service.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: variant256.ID, DisplayName: "Duplicate serial", SerialNumber: "SERIAL-001"}); err == nil {
+	if _, err := tags.SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: model.ID, TagIDs: []string{small.ID}, DisplayName: "Duplicate serial", SerialNumber: "SERIAL-001"}); err == nil {
 		t.Fatal("duplicate non-empty serial should fail")
 	}
 	foreign := owner
@@ -341,51 +345,6 @@ func runCatalog(t *testing.T, store Store) {
 	}
 	if _, err := service.GetAsset(ctx, foreign, asset.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("cross-tenant catalog read should be hidden, got %v", err)
-	}
-}
-
-func runAsset(t *testing.T, store application.Store) {
-	t.Helper()
-	ctx := context.Background()
-	asset := domain.Asset{
-		ID: "11111111-1111-4111-8111-111111111111", TenantID: "22222222-2222-4222-8222-222222222222",
-		CategoryID: "33333333-3333-4333-8333-333333333333", Category: "Phone",
-		CategoryIcon: "package",
-		ModelID:      "44444444-4444-4444-8444-444444444444", Model: "Example Phone",
-		VariantID: "55555555-5555-4555-8555-555555555555", Variant: "256GB",
-		DisplayName: "My Example Phone", CreatedAt: time.Date(2026, 9, 1, 1, 2, 3, 0, time.UTC),
-	}
-	created, err := store.CreateAsset(ctx, asset)
-	if err != nil {
-		t.Fatalf("create asset: %v", err)
-	}
-	asset = created
-	got, err := store.GetAsset(ctx, asset.TenantID, asset.ID)
-	if err != nil {
-		t.Fatalf("get asset: %v", err)
-	}
-	gotCreatedAt, wantCreatedAt := got.CreatedAt, asset.CreatedAt
-	got.CreatedAt, asset.CreatedAt = time.Time{}, time.Time{}
-	if got != asset || !gotCreatedAt.Equal(wantCreatedAt) {
-		t.Fatalf("asset mismatch:\n got: %+v\nwant: %+v", got, asset)
-	}
-	got.CreatedAt, asset.CreatedAt = gotCreatedAt, wantCreatedAt
-	second := asset
-	second.ID = "66666666-6666-4666-8666-666666666666"
-	second.CategoryID = "77777777-7777-4777-8777-777777777777"
-	second.ModelID = "88888888-8888-4888-8888-888888888888"
-	second.VariantID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-	second.DisplayName = "Second Example Phone"
-	second, err = store.CreateAsset(ctx, second)
-	if err != nil {
-		t.Fatalf("create second asset: %v", err)
-	}
-	if second.CategoryID != asset.CategoryID || second.ModelID != asset.ModelID || second.VariantID != asset.VariantID {
-		t.Fatalf("existing category/model/variant were not reused: %+v", second)
-	}
-	_, err = store.GetAsset(ctx, "99999999-9999-4999-8999-999999999999", asset.ID)
-	if !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("cross-tenant read should return sql.ErrNoRows, got %v", err)
 	}
 }
 

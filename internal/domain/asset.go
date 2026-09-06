@@ -34,21 +34,8 @@ type ProductModel3D struct {
 	UpdatedAt  time.Time
 }
 
-type ProductVariant struct {
-	Color             string
-	Model3DResourceID string
-	ID                string
-	TenantID          string
-	CategoryID        string
-	CategoryName      string
-	CategoryIcon      string
-	ModelID           string
-	ModelName         string
-	Name              string
-	CreatedAt         time.Time
-}
-
 type Asset struct {
+	Tags              []SpecificationTag
 	Model3DResourceID string
 	ID                string
 	TenantID          string
@@ -57,11 +44,9 @@ type Asset struct {
 	CategoryIcon      string
 	ModelID           string
 	Model             string
-	VariantID         string
-	Variant           string
+	TagSummary        string
 	DisplayName       string
 	SerialNumber      string
-	Color             string
 	PurchaseChannel   string
 	Notes             string
 	CreatedAt         time.Time

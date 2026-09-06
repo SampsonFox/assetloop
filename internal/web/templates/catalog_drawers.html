@@ -1,4 +1,5 @@
 {{define "catalog-drawers"}}{{$s := .Strings}}
+{{with .CatalogEditingModel}}<button hidden type="button" data-dialog-initial-open data-dialog-open="model-drawer" data-title="{{t $s "catalog.edit_model"}}" data-action="/admin/catalog/models/{{.ID}}" data-edit-model-id="{{.ID}}" data-category-id="{{.CategoryID}}" data-name="{{.Name}}">{{t $s "catalog.edit_model"}}</button>{{end}}
 <dialog class="drawer" id="category-drawer" aria-labelledby="category-drawer-title">
   <form id="category-form" class="drawer-panel stack" action="/admin/catalog/categories" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <header class="drawer-heading"><div><p class="eyebrow">{{t $s "title.catalog"}}</p><h2 id="category-drawer-title" data-dialog-title>{{t $s "catalog.category_add"}}</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.close"}}">×</button></header>
@@ -18,22 +19,25 @@
       <label>{{t $s "catalog.model_name"}}<input name="name" required maxlength="160" placeholder="{{t $s "catalog.model_placeholder"}}"></label>
       <div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button><button class="auto" type="submit" {{if not .Categories}}disabled{{end}}>{{t $s "common.save"}}</button></div>
     </form>
-    <section class="model-media-form" data-model-library hidden><h3>{{t $s "catalog.model_3d"}}</h3><p class="muted">{{t $s "resource.precedence"}}</p><a class="button secondary" data-model-library-link href="/admin/3d">{{t $s "resource.manage_binding"}}</a></section>
-    <section class="variant-manager" data-model-variants hidden>
-      <header class="variant-manager-heading"><div><h3>{{t $s "catalog.variant"}}</h3><p class="muted">{{t $s "catalog.variant_help"}}</p></div></header>
-      {{range $model := .Models}}<div class="variant-manager-group" data-variant-group="{{$model.ID}}" hidden><div class="variant-manager-toolbar"><strong>{{t $s "catalog.variant_list"}}</strong><button class="secondary auto" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "catalog.add_variant"}}" data-action="/admin/catalog/variants" data-model-id="{{$model.ID}}" data-return-model-id="{{$model.ID}}">{{t $s "catalog.add_variant"}}</button></div><div class="variant-manager-list">{{$hasVariants := false}}{{range $variant := $.Variants}}{{if eq $variant.ModelID $model.ID}}{{$hasVariants = true}}<div class="variant-manager-row"><span class="variant-tag">{{$variant.Name}}{{if $variant.Color}} · {{$variant.Color}}{{end}}</span><div class="variant-actions"><a class="link-button" href="/admin/3d?kind=variant&amp;target={{$variant.ID}}&amp;name={{$variant.ModelName}} / {{$variant.Name}} {{ $variant.Color}}">{{t $s "resource.manage_binding"}}</a><button class="link-button" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "catalog.edit_variant"}}" data-action="/admin/catalog/variants/{{$variant.ID}}" data-model-id="{{$variant.ModelID}}" data-return-model-id="{{$model.ID}}" data-name="{{$variant.Name}}" data-color="{{$variant.Color}}">{{t $s "common.edit"}}</button><form action="/admin/catalog/variants/{{$variant.ID}}/delete" method="post" data-confirm="{{t $s "catalog.delete_variant_confirm"}}"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><input type="hidden" name="return_model_id" value="{{$model.ID}}"><button class="link-button danger-link" type="submit">{{t $s "common.delete"}}</button></form></div></div>{{end}}{{end}}{{if not $hasVariants}}<p class="empty-inline">{{t $s "catalog.variant_empty_help"}}</p>{{end}}</div></div>{{end}}
-    </section>
+    <section class="model-media-form" data-model-library hidden><h3>{{t $s "catalog.model_3d"}}</h3><p class="muted">{{t $s "tags.precedence"}}</p><a class="button secondary" data-model-library-link href="/admin/3d">{{t $s "resource.manage_binding"}}</a></section>
+    {{template "model-tags" .}}
   </div>
 </dialog>
 
-<dialog class="drawer" id="variant-drawer" aria-labelledby="variant-drawer-title">
-  <form id="variant-form" class="drawer-panel stack" action="/admin/catalog/variants" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
-    <header class="drawer-heading"><div><p class="eyebrow">{{t $s "title.catalog"}}</p><h2 id="variant-drawer-title" data-dialog-title>{{t $s "catalog.add_variant"}}</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.close"}}">×</button></header>
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><input type="hidden" name="return_model_id" value="">{{if eq .CatalogFlow "asset"}}<input type="hidden" name="flow" value="asset">{{end}}
-    <div class="form-field"><label for="variant-model">{{t $s "catalog.variant_model"}}</label><select id="variant-model" name="model_id" required data-dialog-initial-focus><option value="">{{t $s "common.select"}}</option>{{range .Models}}<option value="{{.ID}}">{{.CategoryName}} / {{.Name}}</option>{{end}}</select></div>
-    <label>{{t $s "catalog.variant_name"}}<input name="name" required maxlength="160" placeholder="256GB"></label>
-    <label>{{t $s "assets.color"}}<input name="color" maxlength="120"></label>
-    <div class="drawer-actions"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button><button class="auto" type="submit" {{if not .Models}}disabled{{end}}>{{t $s "common.save"}}</button></div>
-  </form>
-</dialog>
+
+{{end}}
+
+{{define "model-tags"}}{{$s := .Strings}}
+<section data-model-tags hidden><h3>{{t $s "tags.allowed"}}</h3><p class="muted">{{t $s "tags.allowed_help"}}</p><a href="/admin/tags">{{t $s "tags.title"}}</a>
+{{range .ModelTagEditors}}{{$model := .}}
+<p data-model-tag-group="{{.ModelID}}" hidden><a href="/admin/catalog/models/{{.ModelID}}/appearance">{{t $s "appearance.title"}}</a></p>
+<form class="stack model-tag-editor" action="/admin/catalog/models/{{.ModelID}}/tags" method="post" data-model-tag-group="{{.ModelID}}" hidden data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
+<input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+{{if and $.Error $.CatalogEditingModel}}{{if eq $.CatalogEditingModel.ID .ModelID}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{$.Error}}</p>{{if $.TagReferences}}<section><h4>{{t $s "tags.references"}}</h4><ul>{{range $.TagReferences}}<li>{{if eq .Kind "asset"}}<a href="/assets/{{.TargetID}}/edit">{{t $s "resource.kind.asset"}} · {{.TargetID}}</a>{{else if eq .Kind "appearance"}}<a href="/admin/catalog/models/{{.ModelID}}/appearance?rule_id={{.TargetID}}">{{t $s "tags.ref.appearance"}} · {{.TargetID}}</a>{{end}}</li>{{end}}</ul></section>{{end}}{{end}}{{end}}
+<div data-transfer-source>
+{{range .Dimensions}}<fieldset data-tag-dimension="{{.ID}}" data-appearance="{{.Appearance}}"><legend>{{.Name}}</legend><div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" data-label="{{.Name}}" data-enabled="{{.Enabled}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div>
+<label>{{t $s "tags.appearance_override"}}<select name="appearance_{{.ID}}"><option value="" {{if eq .Override ""}}selected{{end}}>{{t $s "tags.inherit_type"}} · {{if .Appearance}}{{t $s "tags.yes"}}{{else}}{{t $s "tags.no"}}{{end}}</option><option value="yes" {{if eq .Override "yes"}}selected{{end}}>{{t $s "tags.yes"}}</option><option value="no" {{if eq .Override "no"}}selected{{end}}>{{t $s "tags.no"}}</option></select></label></fieldset>{{else}}<p class="muted">{{t $s "tags.empty"}}</p>{{end}}
+</div>
+<div class="drawer-actions"><button class="auto" type="submit">{{t $s "tags.save_allowed"}}</button></div>
+</form>{{end}}</section>
 {{end}}

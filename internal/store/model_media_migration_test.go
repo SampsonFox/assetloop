@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,34 +122,28 @@ func assertResourceUpgrade(t *testing.T, db *sql.DB, driver string) {
 			t.Fatalf("foreign keys not restored after successful upgrade: %d %v", count, err)
 		}
 	}
-	if err := db.QueryRow("SELECT COUNT(*) FROM product_variants").Scan(&count); err != nil || count != 3 {
-		t.Fatalf("want blank, Black, White variants: count=%d err=%v", count, err)
-	}
-	var originalColor string
-	if err := db.QueryRow("SELECT color FROM product_variants WHERE id='" + resourceUpgradeVariant + "'").Scan(&originalColor); err != nil || originalColor != "" {
-		t.Fatalf("original variant must remain the blank choice: %q %v", originalColor, err)
-	}
+	assertSpecificationCount(t, db, "SELECT COUNT(*) FROM specification_tags t JOIN specification_tag_types k ON k.tenant_id=t.tenant_id AND k.id=t.type_id WHERE k.system_code='color'", 2)
 	blackID := ""
 	for i, raw := range resourceUpgradeColors {
 		id := resourceUpgradeAsset
 		if i > 0 {
 			id = fmt.Sprintf("11000000-0000-4000-8000-%012d", i+1)
 		}
-		var variantID, rawColor, color, modelID string
-		if err := db.QueryRow("SELECT a.variant_id,a.color,v.color,v.model_id FROM assets a JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id WHERE a.id="+upgradePlaceholder(driver), id).Scan(&variantID, &rawColor, &color, &modelID); err != nil {
-			t.Fatalf("preserved asset %s: %v", id, err)
+		var tagID, color, modelID string
+		query := "SELECT a.model_id,COALESCE(c.name,''),COALESCE(CAST(c.id AS TEXT),'') FROM assets a LEFT JOIN (SELECT l.asset_id,l.tenant_id,t.id,t.name FROM asset_specification_tags l JOIN specification_tags t ON t.tenant_id=l.tenant_id AND t.id=l.tag_id JOIN specification_tag_types k ON k.tenant_id=t.tenant_id AND k.id=t.type_id WHERE k.system_code='color') c ON c.tenant_id=a.tenant_id AND c.asset_id=a.id WHERE a.id=" + upgradePlaceholder(driver)
+		if err := db.QueryRow(query, id).Scan(&modelID, &color, &tagID); err != nil {
+			t.Fatalf("preserved tagged asset %s: %v", id, err)
 		}
-		wantColor := []string{"Black", "Black", "White", "", ""}[i]
-		if rawColor != raw || color != wantColor || modelID != resourceUpgradeModel {
-			t.Fatalf("asset %s changed: raw=%q color=%q model=%s", id, rawColor, color, modelID)
+		if color != strings.TrimSpace(raw) || modelID != resourceUpgradeModel {
+			t.Fatalf("asset %s changed: color=%q model=%s", id, color, modelID)
 		}
-		if color == "" && variantID != resourceUpgradeVariant {
-			t.Fatal("blank asset no longer uses the original variant ID")
+		if color == "" && tagID != "" {
+			t.Fatal("blank color invented a tag")
 		}
 		if i == 0 {
-			blackID = variantID
-		} else if i == 1 && variantID != blackID {
-			t.Fatal("trim-equivalent colors must share one variant")
+			blackID = tagID
+		} else if i == 1 && tagID != blackID {
+			t.Fatal("trim-equivalent colors must share one tag")
 		}
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM assets").Scan(&count); err != nil || count != len(resourceUpgradeColors) {
