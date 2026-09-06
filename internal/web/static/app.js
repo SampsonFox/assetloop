@@ -92,6 +92,21 @@
     const form = dirtyForm(dialog);
     return !form || window.confirm(form.dataset.discardConfirm);
   };
+  // Deep links open a drawer once; refreshing after dismissal must not reopen it.
+  const consumeDialogURL = (dialog) => {
+    if (!dialog) return;
+    const url = new URL(window.location.href);
+    const matched = url.searchParams.get("dialog") === dialog.id;
+    const eventHash = dialog.id === "event-drawer" && url.hash === "#add-event";
+    if (!matched && !eventHash) return;
+    if (matched) {
+      url.searchParams.delete("dialog");
+      if (dialog.id === "event-drawer") url.searchParams.delete("event_type");
+      if (dialog.id === "model-drawer") url.searchParams.delete("edit_model_id");
+    }
+    if (eventHash) url.hash = "lifecycle-timeline";
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  };
   const closeDialog = (dialog) => {
     if (!dialog || !canDiscardDialog(dialog)) return false;
     const form = dialog.querySelector("form[data-guard-dirty]");
@@ -115,7 +130,10 @@
       const form = dialog.querySelector("form[data-guard-dirty]");
       if (form) form.dataset.dirty = "false";
     });
-    dialog.addEventListener("close", () => dialogOpeners.get(dialog)?.focus());
+    dialog.addEventListener("close", () => {
+      consumeDialogURL(dialog);
+      dialogOpeners.get(dialog)?.focus();
+    });
   }
 
   document.addEventListener("click", (event) => {
@@ -260,6 +278,7 @@
       if (value) opener.dataset[dataKey] = value;
     }
     opener.click();
+    consumeDialogURL(document.getElementById(opener.dataset.dialogOpen));
   } else {
     const erroredDialog = [...document.querySelectorAll("dialog.drawer")].find((dialog) => dialog.querySelector("[data-error-summary]"));
     if (erroredDialog) {
