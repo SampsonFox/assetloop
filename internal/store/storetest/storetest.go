@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ type Store interface {
 	application.CatalogStore
 	application.LifecycleStore
 	application.ModelMediaStore
+	application.SpecificationStore
 }
 
 func Run(t *testing.T, store Store) {
@@ -366,7 +368,7 @@ func runAsset(t *testing.T, store application.Store) {
 	}
 	gotCreatedAt, wantCreatedAt := got.CreatedAt, asset.CreatedAt
 	got.CreatedAt, asset.CreatedAt = time.Time{}, time.Time{}
-	if got != asset || !gotCreatedAt.Equal(wantCreatedAt) {
+	if !reflect.DeepEqual(got, asset) || !gotCreatedAt.Equal(wantCreatedAt) {
 		t.Fatalf("asset mismatch:\n got: %+v\nwant: %+v", got, asset)
 	}
 	got.CreatedAt, asset.CreatedAt = gotCreatedAt, wantCreatedAt

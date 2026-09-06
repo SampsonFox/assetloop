@@ -10,6 +10,7 @@ import (
 
 // Specification labels describe products; they never replace product or asset IDs.
 type SpecificationTagType struct {
+	SystemCode                           string
 	ID, TenantID, Name, NormalizedName   string
 	Multiple, AffectsAppearance, Enabled bool
 	CreatedAt, UpdatedAt                 time.Time

@@ -33,6 +33,7 @@ func TestStoreConformanceAndSafeRemigration(t *testing.T) {
 	storetest.AssertBaseCurrencyLocked(t, db, "sqlite")
 	storetest.RunModelResources(t, sqlite.New(db), sqlite.New(other), db, "sqlite")
 	storetest.RunEventTypeManagement(t, sqlite.New(db), sqlite.New(other), db, "sqlite")
+	t.Run("specifications", func(t *testing.T) { storetest.RunSpecifications(t, sqlite.New(db), sqlite.New(other)) })
 	if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
 		t.Fatalf("repeat migration: %v", err)
 	}

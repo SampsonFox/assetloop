@@ -49,6 +49,7 @@ type ProductVariant struct {
 }
 
 type Asset struct {
+	Tags              []SpecificationTag
 	Model3DResourceID string
 	ID                string
 	TenantID          string

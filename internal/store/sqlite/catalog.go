@@ -108,7 +108,7 @@ func (s *Store) ListModels(ctx context.Context, tenantID string) ([]domain.Produ
 }
 
 func (s *Store) GetProductModel(ctx context.Context, tenantID, modelID string) (domain.ProductModel, error) {
-	row, err := sqlitedb.New(s.db).GetProductModel(ctx, sqlitedb.GetProductModelParams{TenantID: tenantID, ID: modelID})
+	row, err := s.queries().GetProductModel(ctx, sqlitedb.GetProductModelParams{TenantID: tenantID, ID: modelID})
 	if err != nil {
 		return domain.ProductModel{}, err
 	}

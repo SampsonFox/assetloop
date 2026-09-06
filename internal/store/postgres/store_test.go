@@ -57,4 +57,5 @@ func TestStoreConformance(t *testing.T) {
 	storetest.AssertBaseCurrencyLocked(t, db, "postgres")
 	storetest.RunModelResources(t, postgres.New(db), postgres.New(other), db, "postgres")
 	storetest.RunEventTypeManagement(t, postgres.New(db), postgres.New(other), db, "postgres")
+	t.Run("specifications", func(t *testing.T) { storetest.RunSpecifications(t, postgres.New(db), postgres.New(other)) })
 }

@@ -98,8 +98,8 @@ SELECT a.id,
        COALESCE(er.has_sale, FALSE) AS has_sale,
        COALESCE(re.event_type, '') AS latest_event_type
 FROM assets a
-JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
-JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 LEFT JOIN event_rollup er ON er.asset_id = a.id
 LEFT JOIN ranked_events re ON re.asset_id = a.id AND re.event_rank = 1
@@ -840,12 +840,12 @@ func (q *Queries) FirstPrincipal(ctx context.Context) (FirstPrincipalRow, error)
 const getAsset = `-- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
-       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
+       m.id AS model_id, m.name AS model_name, CAST(COALESCE(CAST(v.id AS TEXT),'') AS TEXT) AS variant_id,
+       COALESCE(v.name,'') AS variant_name, a.display_name, a.serial_number, COALESCE(v.color,'') AS color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
-JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
-JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = $1 AND a.id = $2
 `
@@ -863,7 +863,7 @@ type GetAssetRow struct {
 	CategoryIcon      string
 	ModelID           uuid.UUID
 	ModelName         string
-	VariantID         uuid.UUID
+	VariantID         string
 	VariantName       string
 	DisplayName       string
 	SerialNumber      string
@@ -1629,12 +1629,12 @@ func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPa
 const listAssets = `-- name: ListAssets :many
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
-       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
+       m.id AS model_id, m.name AS model_name, CAST(COALESCE(CAST(v.id AS TEXT),'') AS TEXT) AS variant_id,
+       COALESCE(v.name,'') AS variant_name, a.display_name, a.serial_number, COALESCE(v.color,'') AS color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
-JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
-JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = $1
 ORDER BY a.created_at DESC, a.id
@@ -1648,7 +1648,7 @@ type ListAssetsRow struct {
 	CategoryIcon      string
 	ModelID           uuid.UUID
 	ModelName         string
-	VariantID         uuid.UUID
+	VariantID         string
 	VariantName       string
 	DisplayName       string
 	SerialNumber      string
@@ -1730,8 +1730,8 @@ WHERE event_type IN ('purchase', 'repair', 'sale')
 asset_rows AS (
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
-       m.id AS model_id, m.name AS model_name, v.id AS variant_id,
-       v.name AS variant_name, a.display_name, a.serial_number, v.color, a.model_3d_resource_id,
+       m.id AS model_id, m.name AS model_name, CAST(COALESCE(CAST(v.id AS TEXT),'') AS TEXT) AS variant_id,
+       COALESCE(v.name,'') AS variant_name, a.display_name, a.serial_number, COALESCE(v.color,'') AS color, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at,
        COALESCE(er.expense_minor, 0)::bigint AS expense_minor,
        COALESCE(er.income_minor, 0)::bigint AS income_minor,
@@ -1747,8 +1747,8 @@ SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        END::text AS status,
        t.base_currency::text AS base_currency
 FROM assets a
-JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
-JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
+LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
+JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 JOIN tenants t ON t.id = a.tenant_id
 LEFT JOIN event_rollup er ON er.asset_id = a.id
@@ -1811,7 +1811,7 @@ type ListAssetsWithSummaryRow struct {
 	CategoryIcon      string
 	ModelID           uuid.UUID
 	ModelName         string
-	VariantID         uuid.UUID
+	VariantID         string
 	VariantName       string
 	DisplayName       string
 	SerialNumber      string

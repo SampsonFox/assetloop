@@ -168,7 +168,7 @@ func (s *Store) GetProductModel(ctx context.Context, tenantID, modelID string) (
 	if err != nil {
 		return domain.ProductModel{}, err
 	}
-	row, err := postgresdb.New(s.db).GetProductModel(ctx, postgresdb.GetProductModelParams{TenantID: tenant, ID: id})
+	row, err := s.queries().GetProductModel(ctx, postgresdb.GetProductModelParams{TenantID: tenant, ID: id})
 	if err != nil {
 		return domain.ProductModel{}, err
 	}
@@ -230,7 +230,7 @@ func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset
 	for _, row := range rows {
 		result = append(result, domain.Asset{Model3DResourceID: optionalUUID(row.Model3dResourceID),
 			ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(), Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
-			ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID.String(), Variant: row.VariantName,
+			ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID, Variant: row.VariantName,
 			DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
 			PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: row.CreatedAt,
 		})
@@ -262,7 +262,7 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 		result.Assets = append(result.Assets, application.AssetWithSummary{
 			Asset: domain.Asset{Model3DResourceID: optionalUUID(row.Model3dResourceID),
 				ID: row.ID.String(), TenantID: row.TenantID.String(), CategoryID: row.CategoryID.String(), Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
-				ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID.String(), Variant: row.VariantName,
+				ModelID: row.ModelID.String(), Model: row.ModelName, VariantID: row.VariantID, Variant: row.VariantName,
 				DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
 				PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: row.CreatedAt,
 			},
