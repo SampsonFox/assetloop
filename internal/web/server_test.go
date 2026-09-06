@@ -358,19 +358,19 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 
 	grid := request(t, handler, http.MethodGet, "/?view=grid", nil, []*http.Cookie{session, csrf})
 	viewCookie := responseCookie(t, grid, assetViewCookie)
-	if viewCookie.Value != "grid" || !strings.Contains(grid.Body.String(), `class="is-active" aria-current="page">卡片`) {
+	if viewCookie.Value != "grid" || !strings.Contains(grid.Body.String(), `class="is-active" aria-current="page" aria-label="卡片"`) {
 		t.Fatalf("grid preference was not selected: cookie=%q body=%s", viewCookie.Value, grid.Body.String())
 	}
 	if !strings.Contains(grid.Body.String(), `href="/?view=list"`) {
 		t.Fatalf("grid view must expose an explicit list switch: %s", grid.Body.String())
 	}
 	persisted := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, viewCookie})
-	if !strings.Contains(persisted.Body.String(), `class="is-active" aria-current="page">卡片`) {
+	if !strings.Contains(persisted.Body.String(), `class="is-active" aria-current="page" aria-label="卡片"`) {
 		t.Fatalf("grid preference was not persisted: %s", persisted.Body.String())
 	}
 	list := request(t, handler, http.MethodGet, "/?view=list", nil, []*http.Cookie{session, csrf, viewCookie})
 	listCookie := responseCookie(t, list, assetViewCookie)
-	if listCookie.Value != "list" || !strings.Contains(list.Body.String(), `class="is-active" aria-current="page">列表`) {
+	if listCookie.Value != "list" || !strings.Contains(list.Body.String(), `class="is-active" aria-current="page" aria-label="列表"`) {
 		t.Fatalf("list switch must override the persisted grid preference: cookie=%q body=%s", listCookie.Value, list.Body.String())
 	}
 	legacy := request(t, handler, http.MethodGet, "/catalog", nil, []*http.Cookie{session, csrf})
