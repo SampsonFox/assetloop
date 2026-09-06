@@ -12,13 +12,13 @@
     {{if .Models}}
     <form id="asset-form" class="asset-editor-form" action="{{.AssetFormAction}}" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      
+
       <div class="form-field"><div class="field-heading"><label for="asset-model">{{t $s "catalog.model_name"}}</label><button class="link-button" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_model"}}</button></div><select id="asset-model" name="model_id" required data-asset-model data-remove-tags-confirm="{{t $s "tags.remove_on_switch"}}"><option value="">{{t $s "common.select"}}</option>{{range .Models}}<option value="{{.ID}}"{{if eq .ID $.Asset.ModelID}} selected{{end}}>{{.CategoryName}} / {{.Name}}</option>{{end}}</select></div>
       <p class="muted">{{t $s "tags.item_optional"}}</p>
       <div data-asset-tag-fields>{{range .AssetTagEditors}}{{if eq .ModelID $.Asset.ModelID}}{{template "asset-tag-dimensions" (tagEditor . $s)}}{{end}}{{end}}</div>
       <p class="muted" role="status" data-tag-change-status></p>
       {{range .AssetTagEditors}}<template data-asset-tag-template="{{.ModelID}}">{{template "asset-tag-dimensions" (tagEditor . $s)}}</template>{{end}}
-      
+
       <div class="asset-editor-fields">
         <label>{{t $s "assets.display_name"}}<input name="display_name" value="{{.Asset.DisplayName}}" required maxlength="200" placeholder="{{t $s "assets.display_placeholder"}}"></label>
         <label>{{t $s "assets.serial_number"}}<input name="serial_number" value="{{.Asset.SerialNumber}}" maxlength="200"></label>

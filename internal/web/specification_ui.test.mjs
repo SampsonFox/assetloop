@@ -13,6 +13,13 @@ test('tag management has compact actions and uses its own table styling', () => 
 test('item tag dimensions use the themed fieldset styling', () => {
   assert.match(read('./static/app.css'), /\.asset-tag-dimension[^}]*border:1px solid var\(--line\)/);
 });
+test('dictionary active navigation and heading use valid restrained theme styles', () => {
+  const css = read('./static/app.css');
+  assert.match(css, /\.specification-navigation a\[aria-current="page"\][^}]*color:var\(--ink\)/);
+  assert.match(css, /\.specification-navigation a\[aria-current="page"\][^}]*text-decoration-line:underline/);
+  assert.match(css, /\.specification-heading h1[^}]*letter-spacing:-\.03em/);
+  assert.match(read('./templates/specifications.html'), /class="page-heading specification-heading"/);
+});
 test('appearance candidate and manual rows retain mobile field labels', () => {
   const html = read('./templates/appearance.html');
   assert.equal((html.match(/<td data-label="{{t \$s "resource.name"}}"/g) || []).length, 2);

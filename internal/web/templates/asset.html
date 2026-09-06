@@ -31,7 +31,7 @@
       <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "tags.values"}}</dt><dd>{{if .Asset.TagSummary}}{{.Asset.TagSummary}}{{else}}—{{end}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
-      
+
       <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
     </dl>
     {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "appearance"}}{{t $s "appearance.title"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}

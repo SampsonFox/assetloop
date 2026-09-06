@@ -112,7 +112,7 @@ Transport adapters contain authentication, parsing, and response formatting, not
 The active hierarchy is `ItemCategory -> ProductModel -> Asset`. Product identities
 remain entities; only specification descriptions become reusable typed tags.
 Migrations 00013–00014 are deployed to the existing SQLite development preview with a
-verified pre-upgrade backup. Final development acceptance remains in progress;
+verified pre-upgrade backup. Development evidence is recorded in docs/specification-acceptance.md;
 PostgreSQL live verification is still a required UAT gate.
 
 - Tag types own single/multiple selection and default appearance relevance; tag
