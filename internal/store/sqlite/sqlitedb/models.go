@@ -40,6 +40,7 @@ type AssetEvent struct {
 	OccurredAt          string
 	CreatedByUserID     string
 	CreatedAt           string
+	EventTypeID         string
 }
 
 type AssetEventType struct {
@@ -50,6 +51,9 @@ type AssetEventType struct {
 	CashflowDirection string
 	CreatedByUserID   string
 	CreatedAt         string
+	SystemCode        string
+	Enabled           int64
+	UpdatedAt         string
 }
 
 type AssetTransaction struct {

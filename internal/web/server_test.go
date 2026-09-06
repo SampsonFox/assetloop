@@ -679,7 +679,9 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	createEventType := request(t, handler, http.MethodPost, "/admin/event-types", url.Values{
 		"csrf_token": {csrf.Value}, "asset_id": {match[1]}, "name": {"保养"}, "cashflow": {"neutral"},
 	}, []*http.Cookie{ownerSession, csrf})
-	if createEventType.Code != http.StatusSeeOther || createEventType.Header().Get("Location") != "/assets/"+match[1]+"?dialog=event-drawer&event_type=%E4%BF%9D%E5%85%BB#add-event" {
+	typeLocation, _ := url.Parse(createEventType.Header().Get("Location"))
+	customTypeID := typeLocation.Query().Get("event_type")
+	if createEventType.Code != http.StatusSeeOther || typeLocation.Path != "/assets/"+match[1] || typeLocation.Query().Get("dialog") != "event-drawer" || len(customTypeID) != 36 {
 		t.Fatalf("create custom event type: status=%d location=%q body=%s", createEventType.Code, createEventType.Header().Get("Location"), createEventType.Body.String())
 	}
 	duplicateEventType := request(t, handler, http.MethodPost, "/admin/event-types", url.Values{
@@ -689,7 +691,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("duplicate custom event type must reopen its form: status=%d body=%s", duplicateEventType.Code, duplicateEventType.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1]+"?dialog=event-drawer&event_type=%E4%BF%9D%E5%85%BB", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`value="保养" data-cashflow="neutral"`, `name="event_type"`, `新增类型`} {
+	for _, want := range []string{`value="`+customTypeID+`" data-cashflow="neutral" selected`, `name="event_type"`, `新增类型`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("custom event type must be selectable %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}

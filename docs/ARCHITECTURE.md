@@ -133,12 +133,19 @@ User-facing lifecycle collections never render the technical void row as a separ
 default effective view excludes voided originals; an explicit history option adds those originals
 back with a voided marker while preserving the same server-side filtering, sorting, and pagination.
 
-Each tenant may register additional event types without changing the fixed meanings of purchase,
-repair, sale, and void. A custom type records a stable display name and exactly one cash-flow effect:
-expense, income, or neutral. The event row keeps that name and the resulting signed base amount, so
-later configuration cannot rewrite history. Neutral events persist a zero amount and do not lock the
-tenant base currency. Custom types do not implicitly change the built-in acquired, repairing, or sold
-status transitions.
+Each tenant owns its event-type definitions, including seeded purchase, repair, sale and technical
+void types identified by immutable system codes. Events reference a tenant-scoped type ID; display
+names are read from the definition, never copied into new event rows. Renaming a custom type changes
+its current label everywhere without rewriting historical economic events. Legacy event_type text
+is retained for compatibility; new writes use only fixed technical markers. System types are read-only.
+Custom directions (expense, income, neutral) lock after any reference, including voided history.
+Types may be disabled/restored but never physically deleted. Disabled types remain readable/filterable
+and may be used only to correct their existing original events, not to create unrelated new records.
+Management and event writes share the tenant lifecycle transaction lock. Historical signed amounts
+and FX evidence remain immutable. Neutral records remain zero and do not lock the base currency;
+custom types never implicitly change built-in acquired, repairing or sold transitions. Cost categories
+are grouped by stable type ID. Migration 12 preserves old event identities and links and rejects
+unresolvable legacy names before upgrading.
 
 Lifecycle commands treat a supplied monetary amount as an unsigned magnitude. Before idempotency
 fingerprinting, conversion, or persistence, the application service takes its absolute value and then

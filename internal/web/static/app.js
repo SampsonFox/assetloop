@@ -276,7 +276,8 @@
   if (opener) {
     for (const [dataKey, fieldName] of Object.entries(fields)) {
       const value = params.get(fieldName);
-      if (value) opener.dataset[dataKey] = value;
+      if (value) opener.dataset[dataKey] = fieldName === "event_type" && initialDialog === "event-drawer"
+        ? document.querySelector('#event-type-select')?.value || value : value;
     }
     opener.click();
     consumeDialogURL(document.getElementById(opener.dataset.dialogOpen));

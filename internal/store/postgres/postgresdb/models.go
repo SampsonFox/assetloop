@@ -44,6 +44,7 @@ type AssetEvent struct {
 	OccurredAt          time.Time
 	CreatedByUserID     uuid.UUID
 	CreatedAt           time.Time
+	EventTypeID         uuid.UUID
 }
 
 type AssetEventType struct {
@@ -54,6 +55,9 @@ type AssetEventType struct {
 	CashflowDirection string
 	CreatedByUserID   uuid.UUID
 	CreatedAt         time.Time
+	SystemCode        string
+	Enabled           bool
+	UpdatedAt         time.Time
 }
 
 type AssetTransaction struct {

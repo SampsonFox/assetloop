@@ -66,10 +66,11 @@ func (q *Queries) BindVariant3D(ctx context.Context, arg BindVariant3DParams) (i
 
 const countAssetsWithSummary = `-- name: CountAssetsWithSummary :one
 WITH effective_events AS (
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
 FROM asset_events e
+JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
 WHERE e.tenant_id = ?2
-  AND e.event_type != 'void'
+  AND et.system_code != 'void'
   AND NOT EXISTS (
       SELECT 1 FROM asset_events void_event
       WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
@@ -188,8 +189,8 @@ INSERT INTO asset_events
     (id, tenant_id, asset_id, transaction_id, event_type, base_amount_minor,
      base_currency, original_amount_minor, original_currency, fx_rate_scaled,
      fx_rate_date, fx_rate_source, notes, voids_event_id, replaces_event_id,
-     occurred_at, created_by_user_id, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     occurred_at, created_by_user_id, created_at, event_type_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateAssetEventParams struct {
@@ -211,6 +212,7 @@ type CreateAssetEventParams struct {
 	OccurredAt          string
 	CreatedByUserID     string
 	CreatedAt           string
+	EventTypeID         string
 }
 
 func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventParams) error {
@@ -233,14 +235,15 @@ func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventPara
 		arg.OccurredAt,
 		arg.CreatedByUserID,
 		arg.CreatedAt,
+		arg.EventTypeID,
 	)
 	return err
 }
 
 const createAssetEventType = `-- name: CreateAssetEventType :exec
 INSERT INTO asset_event_types
-    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateAssetEventTypeParams struct {
@@ -251,6 +254,7 @@ type CreateAssetEventTypeParams struct {
 	CashflowDirection string
 	CreatedByUserID   string
 	CreatedAt         string
+	UpdatedAt         string
 }
 
 func (q *Queries) CreateAssetEventType(ctx context.Context, arg CreateAssetEventTypeParams) error {
@@ -262,6 +266,7 @@ func (q *Queries) CreateAssetEventType(ctx context.Context, arg CreateAssetEvent
 		arg.CashflowDirection,
 		arg.CreatedByUserID,
 		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	return err
 }
@@ -882,7 +887,7 @@ func (q *Queries) GetAsset(ctx context.Context, arg GetAssetParams) (GetAssetRow
 }
 
 const getAssetEvent = `-- name: GetAssetEvent :one
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.event_type_id, t.system_code,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
@@ -892,6 +897,7 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
            WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
        ) AS is_voided
 FROM asset_events e
+JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
 WHERE e.tenant_id = ? AND e.id = ?
 `
 
@@ -906,6 +912,8 @@ type GetAssetEventRow struct {
 	AssetID             string
 	TransactionID       string
 	EventType           string
+	EventTypeID         string
+	SystemCode          string
 	BaseAmountMinor     int64
 	BaseCurrency        string
 	OriginalAmountMinor sql.NullInt64
@@ -931,6 +939,8 @@ func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (G
 		&i.AssetID,
 		&i.TransactionID,
 		&i.EventType,
+		&i.EventTypeID,
+		&i.SystemCode,
 		&i.BaseAmountMinor,
 		&i.BaseCurrency,
 		&i.OriginalAmountMinor,
@@ -951,10 +961,11 @@ func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (G
 
 const getAssetSummary = `-- name: GetAssetSummary :one
 WITH effective_events AS (
-    SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+    SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
     FROM asset_events e
+    JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
     WHERE e.tenant_id = ?2 AND e.asset_id = ?1
-      AND e.event_type != 'void'
+      AND et.system_code != 'void'
       AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
 ), latest_event AS (
     SELECT event_type FROM effective_events
@@ -1081,10 +1092,11 @@ func (q *Queries) GetModel3DResource(ctx context.Context, arg GetModel3DResource
 
 const getPortfolioSummary = `-- name: GetPortfolioSummary :one
 WITH effective_events AS (
-    SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+    SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
     FROM asset_events e
+    JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
     WHERE e.tenant_id = ?1
-      AND e.event_type != 'void'
+      AND et.system_code != 'void'
       AND NOT EXISTS (
           SELECT 1 FROM asset_events void_event
           WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
@@ -1242,21 +1254,35 @@ func (q *Queries) GetTenantBaseCurrency(ctx context.Context, id string) (GetTena
 }
 
 const listAssetEventTypes = `-- name: ListAssetEventTypes :many
-SELECT id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at
-FROM asset_event_types
-WHERE tenant_id = ?
-ORDER BY normalized_name, id
+SELECT t.id, t.tenant_id, t.name, t.normalized_name, t.cashflow_direction, t.created_by_user_id, t.created_at, t.system_code, t.enabled, t.updated_at, (SELECT COUNT(*) FROM asset_events e WHERE e.tenant_id = t.tenant_id AND e.event_type_id = t.id) AS reference_count
+FROM asset_event_types t
+WHERE t.tenant_id = ?
+ORDER BY CASE t.system_code WHEN 'purchase' THEN 0 WHEN 'repair' THEN 1 WHEN 'sale' THEN 2 WHEN 'void' THEN 3 ELSE 4 END, t.normalized_name, t.id
 `
 
-func (q *Queries) ListAssetEventTypes(ctx context.Context, tenantID string) ([]AssetEventType, error) {
+type ListAssetEventTypesRow struct {
+	ID                string
+	TenantID          string
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	CreatedByUserID   string
+	CreatedAt         string
+	SystemCode        string
+	Enabled           int64
+	UpdatedAt         string
+	ReferenceCount    int64
+}
+
+func (q *Queries) ListAssetEventTypes(ctx context.Context, tenantID string) ([]ListAssetEventTypesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAssetEventTypes, tenantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []AssetEventType
+	var items []ListAssetEventTypesRow
 	for rows.Next() {
-		var i AssetEventType
+		var i ListAssetEventTypesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.TenantID,
@@ -1265,6 +1291,85 @@ func (q *Queries) ListAssetEventTypes(ctx context.Context, tenantID string) ([]A
 			&i.CashflowDirection,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
+			&i.SystemCode,
+			&i.Enabled,
+			&i.UpdatedAt,
+			&i.ReferenceCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssetEventTypesPage = `-- name: ListAssetEventTypesPage :many
+SELECT t.id, t.tenant_id, t.name, t.normalized_name, t.cashflow_direction, t.created_by_user_id, t.created_at, t.system_code, t.enabled, t.updated_at, (SELECT COUNT(*) FROM asset_events e WHERE e.tenant_id = t.tenant_id AND e.event_type_id = t.id) AS reference_count, COUNT(*) OVER () AS total_count
+FROM asset_event_types t
+WHERE t.tenant_id = ?1 AND t.system_code <> 'void'
+  AND (CAST(?2 AS TEXT) = '' OR LOWER(t.name) LIKE '%' || LOWER(CAST(?2 AS TEXT)) || '%')
+  AND (CAST(?3 AS TEXT) = '' OR (CAST(?3 AS TEXT) = 'enabled' AND t.enabled = 1) OR (CAST(?3 AS TEXT) = 'disabled' AND t.enabled = 0))
+ORDER BY CASE t.system_code WHEN 'purchase' THEN 0 WHEN 'repair' THEN 1 WHEN 'sale' THEN 2 WHEN 'void' THEN 3 ELSE 4 END, t.normalized_name, t.id
+LIMIT ?5 OFFSET ?4
+`
+
+type ListAssetEventTypesPageParams struct {
+	TenantID     string
+	SearchQuery  string
+	StatusFilter string
+	PageOffset   int64
+	PageSize     int64
+}
+
+type ListAssetEventTypesPageRow struct {
+	ID                string
+	TenantID          string
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	CreatedByUserID   string
+	CreatedAt         string
+	SystemCode        string
+	Enabled           int64
+	UpdatedAt         string
+	ReferenceCount    int64
+	TotalCount        int64
+}
+
+func (q *Queries) ListAssetEventTypesPage(ctx context.Context, arg ListAssetEventTypesPageParams) ([]ListAssetEventTypesPageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssetEventTypesPage,
+		arg.TenantID,
+		arg.SearchQuery,
+		arg.StatusFilter,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssetEventTypesPageRow
+	for rows.Next() {
+		var i ListAssetEventTypesPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Name,
+			&i.NormalizedName,
+			&i.CashflowDirection,
+			&i.CreatedByUserID,
+			&i.CreatedAt,
+			&i.SystemCode,
+			&i.Enabled,
+			&i.UpdatedAt,
+			&i.ReferenceCount,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1280,7 +1385,7 @@ func (q *Queries) ListAssetEventTypes(ctx context.Context, tenantID string) ([]A
 }
 
 const listAssetEvents = `-- name: ListAssetEvents :many
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.event_type_id, t.system_code,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
@@ -1290,6 +1395,7 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
            WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
        ) AS is_voided
 FROM asset_events e
+JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
 WHERE e.tenant_id = ? AND e.asset_id = ?
 ORDER BY e.occurred_at, e.created_at, e.id
 `
@@ -1305,6 +1411,8 @@ type ListAssetEventsRow struct {
 	AssetID             string
 	TransactionID       string
 	EventType           string
+	EventTypeID         string
+	SystemCode          string
 	BaseAmountMinor     int64
 	BaseCurrency        string
 	OriginalAmountMinor sql.NullInt64
@@ -1336,6 +1444,8 @@ func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams
 			&i.AssetID,
 			&i.TransactionID,
 			&i.EventType,
+			&i.EventTypeID,
+			&i.SystemCode,
 			&i.BaseAmountMinor,
 			&i.BaseCurrency,
 			&i.OriginalAmountMinor,
@@ -1379,7 +1489,7 @@ WITH RECURSIVE list_options AS (
     JOIN event_lineage lineage ON lineage.id = e.replaces_event_id
     WHERE e.tenant_id = ?1 AND e.asset_id = ?2
 )
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.event_type_id, t.system_code,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
@@ -1390,16 +1500,17 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        ) AS is_voided,
        COUNT(*) OVER () AS total_count
 FROM asset_events e
+JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
 JOIN event_lineage lineage ON lineage.id = e.id
 CROSS JOIN list_options o
 WHERE e.tenant_id = ?1 AND e.asset_id = ?2
-  AND e.event_type != 'void'
+  AND t.system_code != 'void'
   AND (o.show_voided = 1 OR NOT EXISTS (
       SELECT 1 FROM asset_events v
       WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
   ))
   AND (CAST(?3 AS TEXT) = '' OR LOWER(e.notes) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%' OR LOWER(COALESCE(e.fx_rate_source, '')) LIKE '%' || LOWER(CAST(?3 AS TEXT)) || '%')
-  AND (CAST(?4 AS TEXT) = '' OR e.event_type = CAST(?4 AS TEXT))
+  AND (CAST(?4 AS TEXT) = '' OR CAST(e.event_type_id AS TEXT) = CAST(?4 AS TEXT) OR t.name = CAST(?4 AS TEXT))
 ORDER BY
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN e.occurred_at END ASC,
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.occurred_at END DESC,
@@ -1409,8 +1520,8 @@ ORDER BY
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.created_at END DESC,
   CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'asc' THEN e.base_amount_minor END ASC,
   CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'desc' THEN e.base_amount_minor END DESC,
-  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'asc' THEN e.event_type END ASC,
-  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'desc' THEN e.event_type END DESC,
+  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'asc' THEN t.name END ASC,
+  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'desc' THEN t.name END DESC,
   e.created_at DESC, e.id DESC
 LIMIT ?6 OFFSET ?5
 `
@@ -1433,6 +1544,8 @@ type ListAssetEventsPageRow struct {
 	AssetID             string
 	TransactionID       string
 	EventType           string
+	EventTypeID         string
+	SystemCode          string
 	BaseAmountMinor     int64
 	BaseCurrency        string
 	OriginalAmountMinor sql.NullInt64
@@ -1475,6 +1588,8 @@ func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPa
 			&i.AssetID,
 			&i.TransactionID,
 			&i.EventType,
+			&i.EventTypeID,
+			&i.SystemCode,
 			&i.BaseAmountMinor,
 			&i.BaseCurrency,
 			&i.OriginalAmountMinor,
@@ -1579,10 +1694,11 @@ func (q *Queries) ListAssets(ctx context.Context, tenantID string) ([]ListAssets
 
 const listAssetsWithSummary = `-- name: ListAssetsWithSummary :many
 WITH effective_events AS (
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type, e.base_amount_minor, e.base_currency, e.original_amount_minor, e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source, e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at, e.created_by_user_id, e.created_at
+SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
 FROM asset_events e
+JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
 WHERE e.tenant_id = ?4
-  AND e.event_type != 'void'
+  AND et.system_code != 'void'
   AND NOT EXISTS (
       SELECT 1 FROM asset_events void_event
       WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
@@ -2408,6 +2524,39 @@ func (q *Queries) SaveLifecycleRequest(ctx context.Context, arg SaveLifecycleReq
 		arg.EventID,
 	)
 	return err
+}
+
+const updateAssetEventType = `-- name: UpdateAssetEventType :execrows
+UPDATE asset_event_types
+SET name = ?1, normalized_name = ?2,
+    cashflow_direction = ?3, enabled = ?4, updated_at = ?5
+WHERE tenant_id = ?6 AND id = ?7 AND system_code = ''
+`
+
+type UpdateAssetEventTypeParams struct {
+	Name              string
+	NormalizedName    string
+	CashflowDirection string
+	Enabled           int64
+	UpdatedAt         string
+	TenantID          string
+	ID                string
+}
+
+func (q *Queries) UpdateAssetEventType(ctx context.Context, arg UpdateAssetEventTypeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateAssetEventType,
+		arg.Name,
+		arg.NormalizedName,
+		arg.CashflowDirection,
+		arg.Enabled,
+		arg.UpdatedAt,
+		arg.TenantID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateCatalogAsset = `-- name: UpdateCatalogAsset :execrows

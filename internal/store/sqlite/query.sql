@@ -171,10 +171,11 @@ ORDER BY a.created_at DESC, a.id;
 
 -- name: ListAssetsWithSummary :many
 WITH effective_events AS (
-SELECT e.*
+SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
 FROM asset_events e
+JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
 WHERE e.tenant_id = sqlc.arg(tenant_id)
-  AND e.event_type != 'void'
+  AND et.system_code != 'void'
   AND NOT EXISTS (
       SELECT 1 FROM asset_events void_event
       WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
@@ -264,10 +265,11 @@ LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
 
 -- name: CountAssetsWithSummary :one
 WITH effective_events AS (
-SELECT e.*
+SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
 FROM asset_events e
+JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
 WHERE e.tenant_id = sqlc.arg(tenant_id)
-  AND e.event_type != 'void'
+  AND et.system_code != 'void'
   AND NOT EXISTS (
       SELECT 1 FROM asset_events void_event
       WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
@@ -409,10 +411,11 @@ WHERE id = ?;
 
 -- name: GetPortfolioSummary :one
 WITH effective_events AS (
-    SELECT e.*
+    SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
     FROM asset_events e
+    JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
     WHERE e.tenant_id = sqlc.arg(tenant_id)
-      AND e.event_type != 'void'
+      AND et.system_code != 'void'
       AND NOT EXISTS (
           SELECT 1 FROM asset_events void_event
           WHERE void_event.tenant_id = e.tenant_id AND void_event.voids_event_id = e.id
@@ -444,22 +447,22 @@ INSERT INTO asset_events
     (id, tenant_id, asset_id, transaction_id, event_type, base_amount_minor,
      base_currency, original_amount_minor, original_currency, fx_rate_scaled,
      fx_rate_date, fx_rate_source, notes, voids_event_id, replaces_event_id,
-     occurred_at, created_by_user_id, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+     occurred_at, created_by_user_id, created_at, event_type_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: CreateAssetEventType :exec
 INSERT INTO asset_event_types
-    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+    (id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListAssetEventTypes :many
-SELECT id, tenant_id, name, normalized_name, cashflow_direction, created_by_user_id, created_at
-FROM asset_event_types
-WHERE tenant_id = ?
-ORDER BY normalized_name, id;
+SELECT t.*, (SELECT COUNT(*) FROM asset_events e WHERE e.tenant_id = t.tenant_id AND e.event_type_id = t.id) AS reference_count
+FROM asset_event_types t
+WHERE t.tenant_id = ?
+ORDER BY CASE t.system_code WHEN 'purchase' THEN 0 WHEN 'repair' THEN 1 WHEN 'sale' THEN 2 WHEN 'void' THEN 3 ELSE 4 END, t.normalized_name, t.id;
 
 -- name: GetAssetEvent :one
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.event_type_id, t.system_code,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
@@ -469,10 +472,11 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
            WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
        ) AS is_voided
 FROM asset_events e
+JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
 WHERE e.tenant_id = ? AND e.id = ?;
 
 -- name: ListAssetEvents :many
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.event_type_id, t.system_code,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
@@ -482,6 +486,7 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
            WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
        ) AS is_voided
 FROM asset_events e
+JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
 WHERE e.tenant_id = ? AND e.asset_id = ?
 ORDER BY e.occurred_at, e.created_at, e.id;
 
@@ -500,7 +505,7 @@ WITH RECURSIVE list_options AS (
     JOIN event_lineage lineage ON lineage.id = e.replaces_event_id
     WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
 )
-SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
+SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.event_type_id, t.system_code,
        e.base_amount_minor, e.base_currency, e.original_amount_minor,
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
@@ -511,16 +516,17 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, e.event_type,
        ) AS is_voided,
        COUNT(*) OVER () AS total_count
 FROM asset_events e
+JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
 JOIN event_lineage lineage ON lineage.id = e.id
 CROSS JOIN list_options o
 WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
-  AND e.event_type != 'void'
+  AND t.system_code != 'void'
   AND (o.show_voided = 1 OR NOT EXISTS (
       SELECT 1 FROM asset_events v
       WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
   ))
   AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR LOWER(e.notes) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR LOWER(COALESCE(e.fx_rate_source, '')) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')
-  AND (CAST(sqlc.arg(event_type_filter) AS TEXT) = '' OR e.event_type = CAST(sqlc.arg(event_type_filter) AS TEXT))
+  AND (CAST(sqlc.arg(event_type_filter) AS TEXT) = '' OR CAST(e.event_type_id AS TEXT) = CAST(sqlc.arg(event_type_filter) AS TEXT) OR t.name = CAST(sqlc.arg(event_type_filter) AS TEXT))
 ORDER BY
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'asc' THEN e.occurred_at END ASC,
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.occurred_at END DESC,
@@ -530,17 +536,18 @@ ORDER BY
   CASE WHEN o.sort_key = 'occurred' AND o.sort_direction = 'desc' THEN e.created_at END DESC,
   CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'asc' THEN e.base_amount_minor END ASC,
   CASE WHEN o.sort_key = 'amount' AND o.sort_direction = 'desc' THEN e.base_amount_minor END DESC,
-  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'asc' THEN e.event_type END ASC,
-  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'desc' THEN e.event_type END DESC,
+  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'asc' THEN t.name END ASC,
+  CASE WHEN o.sort_key = 'type' AND o.sort_direction = 'desc' THEN t.name END DESC,
   e.created_at DESC, e.id DESC
 LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
 
 -- name: GetAssetSummary :one
 WITH effective_events AS (
-    SELECT e.*
+    SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
     FROM asset_events e
+    JOIN asset_event_types et ON et.tenant_id = e.tenant_id AND et.id = e.event_type_id
     WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
-      AND e.event_type != 'void'
+      AND et.system_code != 'void'
       AND NOT EXISTS (SELECT 1 FROM asset_events v WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id)
 ), latest_event AS (
     SELECT event_type FROM effective_events
@@ -649,3 +656,17 @@ SELECT a.display_name, COALESCE(CAST(a.model_3d_resource_id AS TEXT),''),
 FROM assets a JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
 JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
 WHERE a.tenant_id=sqlc.arg(tenant_id) AND a.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='asset';
+-- name: UpdateAssetEventType :execrows
+UPDATE asset_event_types
+SET name = sqlc.arg(name), normalized_name = sqlc.arg(normalized_name),
+    cashflow_direction = sqlc.arg(cashflow_direction), enabled = sqlc.arg(enabled), updated_at = sqlc.arg(updated_at)
+WHERE tenant_id = sqlc.arg(tenant_id) AND id = sqlc.arg(id) AND system_code = '';
+
+-- name: ListAssetEventTypesPage :many
+SELECT t.*, (SELECT COUNT(*) FROM asset_events e WHERE e.tenant_id = t.tenant_id AND e.event_type_id = t.id) AS reference_count, COUNT(*) OVER () AS total_count
+FROM asset_event_types t
+WHERE t.tenant_id = sqlc.arg(tenant_id) AND t.system_code <> 'void'
+  AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR LOWER(t.name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')
+  AND (CAST(sqlc.arg(status_filter) AS TEXT) = '' OR (CAST(sqlc.arg(status_filter) AS TEXT) = 'enabled' AND t.enabled = 1) OR (CAST(sqlc.arg(status_filter) AS TEXT) = 'disabled' AND t.enabled = 0))
+ORDER BY CASE t.system_code WHEN 'purchase' THEN 0 WHEN 'repair' THEN 1 WHEN 'sale' THEN 2 WHEN 'void' THEN 3 ELSE 4 END, t.normalized_name, t.id
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);

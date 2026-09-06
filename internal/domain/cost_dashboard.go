@@ -15,6 +15,7 @@ type CostPoint struct {
 }
 
 type CostCategory struct {
+	TypeID        string
 	Type          AssetEventType
 	AmountMinor   int64
 	PercentTenths int64
@@ -35,7 +36,7 @@ func CalculateCostDashboard(events []AssetEvent, currency string, now time.Time,
 	d := CostDashboard{Currency: currency}
 	active := make([]AssetEvent, 0, len(events))
 	for _, e := range events {
-		if !e.IsVoided && e.Type != AssetEventVoid {
+		if !e.IsVoided && e.Kind() != AssetEventVoid {
 			active = append(active, e)
 		}
 	}
@@ -49,7 +50,8 @@ func CalculateCostDashboard(events []AssetEvent, currency string, now time.Time,
 		return active[i].OccurredAt.Before(active[j].OccurredAt)
 	})
 	expense, income, net := new(big.Int), new(big.Int), new(big.Int)
-	groups := map[AssetEventType]*big.Int{}
+	groups := map[string]*big.Int{}
+	labels := map[string]AssetEventType{}
 	badDates := false
 	for _, e := range active {
 		if e.BaseCurrency != currency {
@@ -59,10 +61,15 @@ func CalculateCostDashboard(events []AssetEvent, currency string, now time.Time,
 		if amount.Sign() < 0 {
 			amount.Neg(amount)
 			expense.Add(expense, amount)
-			if groups[e.Type] == nil {
-				groups[e.Type] = new(big.Int)
+			key := e.TypeID
+			if key == "" {
+				key = string(e.Type)
 			}
-			groups[e.Type].Add(groups[e.Type], amount)
+			labels[key] = e.Type
+			if groups[key] == nil {
+				groups[key] = new(big.Int)
+			}
+			groups[key].Add(groups[key], amount)
 		} else {
 			income.Add(income, amount)
 		}
@@ -73,10 +80,10 @@ func CalculateCostDashboard(events []AssetEvent, currency string, now time.Time,
 		if e.OccurredAt.IsZero() || e.OccurredAt.After(now) {
 			badDates = true
 		}
-		if e.Type == AssetEventPurchase && d.Start.IsZero() {
+		if e.Kind() == AssetEventPurchase && d.Start.IsZero() {
 			d.Start = e.OccurredAt
 		}
-		if e.Type == AssetEventSale {
+		if e.Kind() == AssetEventSale {
 			d.Sold = true
 			if d.End.IsZero() {
 				d.End = e.OccurredAt
@@ -91,7 +98,7 @@ func CalculateCostDashboard(events []AssetEvent, currency string, now time.Time,
 		share := new(big.Int).Mul(amount, big.NewInt(1000))
 		share.Add(share, new(big.Int).Quo(new(big.Int).Set(expense), big.NewInt(2)))
 		share.Quo(share, expense)
-		d.Categories = append(d.Categories, CostCategory{kind, amount.Int64(), share.Int64()})
+		d.Categories = append(d.Categories, CostCategory{TypeID: kind, Type: labels[kind], AmountMinor: amount.Int64(), PercentTenths: share.Int64()})
 	}
 	sort.Slice(d.Categories, func(i, j int) bool {
 		if d.Categories[i].AmountMinor == d.Categories[j].AmountMinor {

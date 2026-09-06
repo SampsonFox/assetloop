@@ -24,6 +24,10 @@ type AssetEventTypeDefinition struct {
 	NormalizedName  string
 	Cashflow        AssetEventCashflow
 	BuiltIn         bool
+	SystemCode      AssetEventType
+	Enabled         bool
+	ReferenceCount  int64
+	UpdatedAt       time.Time
 	CreatedByUserID string
 	CreatedAt       time.Time
 }
@@ -48,6 +52,8 @@ type FXEvidence struct {
 }
 
 type AssetEvent struct {
+	SystemType      AssetEventType
+	TypeID          string
 	ID              string
 	TenantID        string
 	AssetID         string
@@ -71,4 +77,21 @@ type AssetSummary struct {
 	IncomeMinor      int64
 	NetCashflowMinor int64
 	Status           string
+}
+
+// StorageType is a compatibility marker, never a custom display name.
+func (e AssetEvent) StorageType() string {
+	switch e.Kind() {
+	case AssetEventPurchase, AssetEventRepair, AssetEventSale, AssetEventVoid:
+		return string(e.Kind())
+	}
+	return "custom"
+}
+
+// Kind uses the immutable linked system code; the fallback supports unpersisted fixtures.
+func (e AssetEvent) Kind() AssetEventType {
+	if e.TypeID != "" {
+		return e.SystemType
+	}
+	return e.Type
 }

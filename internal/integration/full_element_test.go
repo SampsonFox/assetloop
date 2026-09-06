@@ -325,6 +325,35 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		t.Fatal("cost dashboard depends on pagination")
 	}
 	var auditCount int
+	custom, err := lifecycle.CreateEventType(ctx, owner, application.CreateAssetEventType{Name: "Inspection", Cashflow: domain.AssetEventNeutral})
+	if err != nil {
+		t.Fatal(err)
+	}
+	customCmd := application.RecordEvent{AssetID: asset.ID, TypeID: custom.ID, Currency: "CNY", OccurredAt: time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC), Source: "full-element-type"}
+	customEvent, err := lifecycle.Record(ctx, owner, customCmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.UpdateEventType(ctx, owner, custom.ID, application.UpdateEventType{Name: "Annual inspection", Cashflow: domain.AssetEventNeutral}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.SetEventTypeEnabled(ctx, owner, custom.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	typePage, err := lifecycle.TimelinePage(ctx, viewerSession.Principal, asset.ID, application.EventListOptions{Type: custom.ID})
+	if err != nil || typePage.Total != 1 || typePage.Events[0].Type != "Annual inspection" {
+		t.Fatalf("renamed disabled type history: %+v %v", typePage, err)
+	}
+	if _, err := lifecycle.Correct(ctx, owner, customEvent.ID, customCmd); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lifecycle.SetEventTypeEnabled(ctx, owner, custom.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	afterTypes, err := lifecycle.CostDashboard(ctx, owner, asset.ID)
+	if err != nil || afterTypes.NetMinor != cost.NetMinor || afterTypes.Days != cost.Days {
+		t.Fatalf("type management changed cost: %+v %v", afterTypes, err)
+	}
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM security_audit_events WHERE tenant_id = "+placeholder(driver), owner.TenantID).Scan(&auditCount); err != nil {
 		t.Fatalf("count security audit events: %v", err)
 	}

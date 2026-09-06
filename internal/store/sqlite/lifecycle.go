@@ -31,7 +31,7 @@ func (s *Store) CreateAssetEventType(ctx context.Context, eventType domain.Asset
 	return s.queries().CreateAssetEventType(ctx, sqlitedb.CreateAssetEventTypeParams{
 		ID: eventType.ID, TenantID: eventType.TenantID, Name: eventType.Name,
 		NormalizedName: eventType.NormalizedName, CashflowDirection: string(eventType.Cashflow),
-		CreatedByUserID: eventType.CreatedByUserID, CreatedAt: sqliteTime(eventType.CreatedAt),
+		CreatedByUserID: eventType.CreatedByUserID, CreatedAt: sqliteTime(eventType.CreatedAt), UpdatedAt: sqliteTime(eventType.CreatedAt),
 	})
 }
 
@@ -84,13 +84,18 @@ func (s *Store) CorrectAssetEvent(ctx context.Context, transaction domain.AssetT
 	})
 }
 
-func sqliteEventType(row sqlitedb.AssetEventType) (domain.AssetEventTypeDefinition, error) {
+func sqliteEventType(row sqlitedb.ListAssetEventTypesRow) (domain.AssetEventTypeDefinition, error) {
 	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
 	if err != nil {
 		return domain.AssetEventTypeDefinition{}, fmt.Errorf("parse event type created_at: %w", err)
 	}
+	updatedAt, err := time.Parse(time.RFC3339Nano, row.UpdatedAt)
+	if err != nil {
+		return domain.AssetEventTypeDefinition{}, err
+	}
 	return domain.AssetEventTypeDefinition{
-		ID: row.ID, TenantID: row.TenantID, Name: row.Name, NormalizedName: row.NormalizedName,
+		ID: row.ID, TenantID: row.TenantID, Name: row.Name, NormalizedName: row.NormalizedName, UpdatedAt: updatedAt,
+		SystemCode: domain.AssetEventType(row.SystemCode), BuiltIn: row.SystemCode != "", Enabled: row.Enabled != 0, ReferenceCount: row.ReferenceCount,
 		Cashflow: domain.AssetEventCashflow(row.CashflowDirection), CreatedByUserID: row.CreatedByUserID, CreatedAt: createdAt,
 	}, nil
 }
@@ -100,7 +105,7 @@ func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (do
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
-	return sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+	return sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID, row.SystemCode,
 		row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 		row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
 		row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
@@ -113,7 +118,7 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 	}
 	result := make([]domain.AssetEvent, 0, len(rows))
 	for _, row := range rows {
-		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID, row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
 			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
@@ -142,7 +147,7 @@ func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID strin
 	total := 0
 	for _, row := range rows {
 		total = int(row.TotalCount)
-		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType,
+		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID, row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
 			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
@@ -191,7 +196,7 @@ func createSQLiteTransaction(ctx context.Context, q *sqlitedb.Queries, transacti
 func sqliteEventParams(event domain.AssetEvent) sqlitedb.CreateAssetEventParams {
 	params := sqlitedb.CreateAssetEventParams{
 		ID: event.ID, TenantID: event.TenantID, AssetID: event.AssetID, TransactionID: event.TransactionID,
-		EventType: string(event.Type), BaseAmountMinor: event.BaseAmountMinor, BaseCurrency: event.BaseCurrency,
+		EventType: event.StorageType(), EventTypeID: event.TypeID, BaseAmountMinor: event.BaseAmountMinor, BaseCurrency: event.BaseCurrency,
 		Notes: event.Notes, VoidsEventID: nullableString(event.VoidsEventID),
 		ReplacesEventID: nullableString(event.ReplacesEventID), OccurredAt: sqliteTime(event.OccurredAt),
 		CreatedByUserID: event.CreatedByUserID, CreatedAt: sqliteTime(event.CreatedAt),
@@ -206,7 +211,7 @@ func sqliteEventParams(event domain.AssetEvent) sqlitedb.CreateAssetEventParams 
 	return params
 }
 
-func sqliteEvent(id, tenantID, assetID, transactionID, eventType string, baseAmount int64, baseCurrency string,
+func sqliteEvent(id, tenantID, assetID, transactionID, eventType, typeID, systemType string, baseAmount int64, baseCurrency string,
 	originalAmount sql.NullInt64, originalCurrency sql.NullString, rate sql.NullInt64, rateDate, rateSource sql.NullString,
 	notes string, voidsID, replacesID sql.NullString, occurredAt, userID, createdAt string, isVoided bool) (domain.AssetEvent, error) {
 	occurred, err := time.Parse(time.RFC3339Nano, occurredAt)
@@ -219,7 +224,7 @@ func sqliteEvent(id, tenantID, assetID, transactionID, eventType string, baseAmo
 	}
 	event := domain.AssetEvent{
 		ID: id, TenantID: tenantID, AssetID: assetID, TransactionID: transactionID,
-		Type: domain.AssetEventType(eventType), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency,
+		TypeID: typeID, SystemType: domain.AssetEventType(systemType), Type: domain.AssetEventType(eventType), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency,
 		Notes: notes, VoidsEventID: voidsID.String, ReplacesEventID: replacesID.String,
 		OccurredAt: occurred, CreatedByUserID: userID, CreatedAt: created, IsVoided: isVoided,
 	}
