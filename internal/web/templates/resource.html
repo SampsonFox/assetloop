@@ -1,5 +1,5 @@
 {{define "content"}}{{$s := .Strings}}
-<section class="page-heading"><h1>{{.Resource.Name}}</h1><a href="/admin/3d">{{t $s "resource.back"}}</a></section>
+<section class="page-heading"><h2>{{.Resource.Name}}</h2><a href="/admin/3d">{{t $s "resource.back"}}</a></section>
 {{if .Error}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
 {{if eq .Resource.Status "ready"}}
 <section class="card asset-profile resource-profile">

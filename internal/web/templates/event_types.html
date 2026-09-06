@@ -1,5 +1,5 @@
 {{define "content"}}{{$s := .Strings}}
-<header class="page-heading"><div><h1>{{t $s "types.title"}}</h1><p class="muted">{{t $s "types.help"}}</p></div>{{if .CanManageLifecycle}}<div class="heading-actions"><a class="button" href="/admin/event-types?dialog=event-type-manage">{{t $s "asset.event_type_add"}}</a></div>{{end}}</header>
+<header class="page-heading"><div><h2>{{t $s "types.title"}}</h2><p class="muted">{{t $s "types.help"}}</p></div>{{if .CanManageLifecycle}}<div class="heading-actions"><a class="button" href="/admin/event-types?dialog=event-type-manage">{{t $s "asset.event_type_add"}}</a></div>{{end}}</header>
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
 <form class="asset-filters" method="get" action="/admin/event-types">
 <label>{{t $s "types.search"}}<input type="search" name="q" value="{{.TableQuery}}"></label>

@@ -62,7 +62,7 @@ func (s *Server) renderEventTypes(w http.ResponseWriter, r *http.Request, status
 	if r.Method == http.MethodPost && message != "" {
 		form = eventTypeFormFromRequest(r)
 	}
-	s.render(w, status, "event_types", pageData{Title: textFor(actor.Locale, "types.title"), Principal: &actor, CSRFToken: s.ensureCSRF(w, r), CanManageLifecycle: actor.Can(application.CapabilityManageLifecycle), EventTypes: result.Types, EditingEventType: editing, EventTypeForm: form, Error: message, TableQuery: query, TableFilter: state, TablePage: page, TableTotalPages: pages, TableTotal: result.Total, TablePreviousURL: previous, TableNextURL: next})
+	s.render(w, status, "event_types", pageData{Title: textFor(actor.Locale, "types.title"), ReturnTo: eventTypesURL(query, state, page), Principal: &actor, CSRFToken: s.ensureCSRF(w, r), CanManageLifecycle: actor.Can(application.CapabilityManageLifecycle), EventTypes: result.Types, EditingEventType: editing, EventTypeForm: form, Error: message, TableQuery: query, TableFilter: state, TablePage: page, TableTotalPages: pages, TableTotal: result.Total, TablePreviousURL: previous, TableNextURL: next})
 }
 func eventTypesURL(query, state string, page int) string {
 	values := url.Values{}

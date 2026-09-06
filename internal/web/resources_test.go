@@ -382,7 +382,7 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 				t.Fatalf("viewer exposed mutation %s", forbidden)
 			}
 		}
-		if !strings.Contains(page.Body.String(), `lang="en"`) || !strings.Contains(page.Body.String(), "3D resource library") {
+		if !strings.Contains(page.Body.String(), `lang="en"`) || !strings.Contains(page.Body.String(), "3D resources") {
 			t.Fatal("resource English localization missing")
 		}
 	}

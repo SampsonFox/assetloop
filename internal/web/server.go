@@ -125,6 +125,7 @@ type pageData struct {
 	AssetFormEditing    bool
 	NavAssets           bool
 	NavCatalog          bool
+	SettingsSection     string
 	NavMembers          bool
 	EventForm           eventFormData
 	Model3D             *domain.ProductModel3D
@@ -265,6 +266,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/members", s.members)
 	mux.HandleFunc("POST /admin/members", s.addMember)
 	mux.HandleFunc("GET /catalog", s.legacyCatalog)
+	mux.HandleFunc("GET /settings", s.settingsPage)
 	mux.HandleFunc("GET /admin/catalog", s.catalogPage)
 	mux.HandleFunc("POST /admin/catalog/categories", s.createCategory)
 	mux.HandleFunc("POST /admin/catalog/categories/{id}", s.updateCategory)
@@ -1544,6 +1546,7 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 	if returnURL, err := url.Parse(data.ReturnTo); err == nil {
 		data.NavAssets = returnURL.Path == "/" || strings.HasPrefix(returnURL.Path, "/assets/") || strings.HasPrefix(returnURL.Path, "/events/")
 		data.NavCatalog = strings.HasPrefix(returnURL.Path, "/admin/catalog")
+		data.SettingsSection = settingsSection(returnURL.Path)
 		data.NavMembers = strings.HasPrefix(returnURL.Path, "/admin/members")
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -100,7 +100,7 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 	}
 	editorSession := responseCookie(t, response, sessionCookie)
 	editorHome := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{editorSession, csrf})
-	if !strings.Contains(editorHome.Body.String(), `href="/admin/catalog"`) || strings.Contains(editorHome.Body.String(), `href="/imports"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
+	if !strings.Contains(editorHome.Body.String(), `href="/settings"`) || strings.Contains(editorHome.Body.String(), `href="/imports"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
 		t.Fatalf("editor account menu has incorrect entries: %s", editorHome.Body.String())
 	}
 	forbidden := request(t, handler, http.MethodGet, "/admin/members", nil, []*http.Cookie{editorSession, csrf})
@@ -147,7 +147,7 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	}, []*http.Cookie{csrf})
 	session := responseCookie(t, setup, sessionCookie)
 	home := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{`class="account-menu"`, `summary aria-label="用户菜单"`, `href="/admin/catalog"`, `href="/admin/members"`, `action="/preferences"`} {
+	for _, want := range []string{`class="account-menu"`, `summary aria-label="用户菜单"`, `href="/settings"`, `href="/admin/members"`, `action="/preferences"`} {
 		if !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("owner account menu missing %q: %s", want, home.Body.String())
 		}
@@ -172,7 +172,7 @@ func TestAnonymousLocaleAndAccountPreferences(t *testing.T) {
 	}
 	zhCookie := &http.Cookie{Name: localeCookie, Value: "zh-CN"}
 	english := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf, zhCookie})
-	for _, want := range []string{`<html lang="en" data-theme="dark" data-accent="violet">`, "My assets", "Asset type settings", "Log out"} {
+	for _, want := range []string{`<html lang="en" data-theme="dark" data-accent="violet">`, "My assets", "Settings", "Log out"} {
 		if !strings.Contains(english.Body.String(), want) {
 			t.Fatalf("stored preference missing %q: %s", want, english.Body.String())
 		}

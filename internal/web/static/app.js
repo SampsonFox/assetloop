@@ -121,7 +121,11 @@
     target?.focus();
   };
 
+  const initializedDialogs = new WeakSet();
+  const initDialogs = () => {
   for (const dialog of document.querySelectorAll("dialog.drawer")) {
+    if (initializedDialogs.has(dialog)) continue;
+    initializedDialogs.add(dialog);
     dialog.addEventListener("cancel", (event) => {
       if (!canDiscardDialog(dialog)) {
         event.preventDefault();
@@ -135,6 +139,8 @@
       dialogOpeners.get(dialog)?.focus();
     });
   }
+
+  };
 
   document.addEventListener("click", (event) => {
     for (const menu of document.querySelectorAll(".account-menu[open]")) {
@@ -260,6 +266,8 @@
     event.returnValue = "";
   });
 
+  const initPage = () => {
+  initDialogs();
   for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
   for (const select of document.querySelectorAll("[data-event-type-select]")) syncEventTypeFields(select);
 
@@ -290,4 +298,7 @@
       document.querySelector("[data-error-summary]")?.focus();
     }
   }
+  };
+  document.addEventListener("settings:loaded", initPage);
+  initPage();
 })();

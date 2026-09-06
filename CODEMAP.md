@@ -155,3 +155,14 @@ Resource deletion -> reject references -> pending deletion -> BlobStore.Delete -
 ## Maintenance rule
 
 Do not list every file. List stable entry points, ports, and ownership boundaries. Once code exists, use `rg` inside the selected path rather than loading the whole repository.
+
+## Unified settings navigation
+
+`internal/web/settings.go` owns the authenticated `/settings` landing and module
+classification. Existing catalog, tag, 3D and lifecycle-type routes share the
+settings shell in `templates/base.html`; members remain separate.
+`static/settings.js` replaces only root management content, preserves per-tab
+list/binding context, handles history/retry and guards dirty/uploading forms.
+Preview detail routes use native navigation so viewer modules keep their own
+lifecycle. `static/app.js` idempotently initializes replaced drawers through
+`settings:loaded`. Tests: `settings_test.go`, `settings_navigation.test.mjs`.

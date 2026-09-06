@@ -18,6 +18,7 @@ var localeMatcher = language.NewMatcher([]language.Tag{
 
 var messages = map[application.Locale]map[string]string{
 	application.LocaleZhCN: {
+		"settings.title": "设置", "settings.catalog": "物品类型", "settings.tags": "规格标签", "settings.resources": "3D 资源", "settings.events": "生命周期类型", "settings.loading": "正在加载…", "settings.failure": "加载失败，当前内容已保留。", "settings.retry": "重试", "settings.login": "登录已失效，请重新登录。", "settings.login_link": "登录",
 		"app.name": "AssetLoop 物迹", "nav.main": "主导航", "nav.assets": "物品",
 		"menu.label": "用户菜单", "menu.catalog": "物品类型管理", "menu.members": "成员管理",
 		"menu.preferences": "界面偏好", "menu.language": "语言", "menu.theme": "明暗", "menu.accent": "主题色", "menu.logout": "退出登录", "menu.save": "保存偏好",
@@ -86,6 +87,7 @@ var messages = map[application.Locale]map[string]string{
 		"preferences.updated": "界面偏好已保存。",
 	},
 	application.LocaleEn: {
+		"settings.title": "Settings", "settings.catalog": "Product types", "settings.tags": "Specification tags", "settings.resources": "3D resources", "settings.events": "Lifecycle types", "settings.loading": "Loading…", "settings.failure": "Unable to load. Current content is unchanged.", "settings.retry": "Retry", "settings.login": "Your session expired. Please sign in again.", "settings.login_link": "Sign in",
 		"app.name": "AssetLoop", "nav.main": "Primary navigation", "nav.assets": "Assets",
 		"menu.label": "User menu", "menu.catalog": "Asset type settings", "menu.members": "Members",
 		"menu.preferences": "Interface preferences", "menu.language": "Language", "menu.theme": "Appearance", "menu.accent": "Accent", "menu.logout": "Log out", "menu.save": "Save preferences",

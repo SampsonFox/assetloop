@@ -121,3 +121,12 @@ being manipulated; reduced-motion preference disables autoplay.
 - Don't treat descriptive resource tags as automatic model-binding instructions.
 - Don't canonize inherited eyebrow decoration or overly tight global heading
   tracking into new surfaces; those are incumbent debt outside this feature.
+
+### Settings center
+
+One account-menu Settings entry opens the shared, compact management shell.
+Product types, specification tags, 3D resources and lifecycle types use real-link
+navigation with an accent underline; members and quick preferences remain outside.
+Root-page switches replace only module content; deep previews navigate normally.
+Mobile tabs scroll horizontally without widening the page. Each module keeps its
+own search state; dirty edits and ongoing submissions guard navigation.
