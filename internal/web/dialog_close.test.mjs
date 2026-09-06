@@ -9,7 +9,7 @@ function harness(forms) {
   const start=source.indexOf('  const formBaselines =');
   assert.notEqual(start,-1,'compare actual values to opening baseline, not input-event flags');
   const state=source.slice(start,source.indexOf('  // Use an in-page modal:',start));
-  const close=source.slice(source.indexOf('  const closingDialogs ='),source.indexOf('  const focusDialog ='));
+  const close=source.slice(source.indexOf('  const closingDialogs ='),source.indexOf('  // Standalone editors'));
   let answer=true, prompts=0, resets=0, pending;
   const dialog={open:true,querySelectorAll:()=>forms,close(){this.open=false;}};
   const context={confirmDiscard:()=>{prompts++;return pending || Promise.resolve(answer);},discardDialogForms:()=>{resets++;}};
@@ -57,4 +57,23 @@ test('cancel, X, backdrop and Escape share close path; prompt is page-owned and 
   const prompt=source.slice(source.indexOf('  const confirmDiscard'),source.indexOf('  // Deep links'));
   assert.doesNotMatch(prompt,/window.confirm/);assert.match(prompt,/aria-labelledby/);assert.match(prompt,/stay.focus\(\)/);
   assert.match(prompt,/Keep editing/);assert.match(prompt,/放弃修改/);
+});
+
+test('standalone editor navigation confirms once, preserves rejected drafts and bypasses duplicate unload prompt',async()=>{
+  const block=source.slice(source.indexOf('  const pageForms ='),source.indexOf("  document.addEventListener('click', (event) =>"));
+  assert.ok(block.includes('leaveEditor'));
+  const form={dataset:{dirty:'true',discardConfirm:'Discard?'},closest:()=>null};
+  let answer=false,calls=0;const navigated=[];
+  const context={document:{querySelectorAll:()=>[form]},updateDirty:()=>{},confirmDiscard:async()=>{calls++;return answer;},window:{location:{assign:url=>navigated.push(url)}}};
+  vm.createContext(context);vm.runInContext(`${block}\nthis.leave=leaveEditor;this.leaving=()=>leavingPage;`,context);
+  await context.leave('/');assert.deepEqual(navigated,[]);assert.equal(context.leaving(),false);
+  answer=true;await context.leave('/');assert.deepEqual(navigated,['/']);assert.equal(context.leaving(),true);
+  await context.leave('/');assert.equal(calls,2);
+  assert.match(source,/if \(leavingPage\) return;/);
+});
+test('unchanged standalone editor leaves without asking',async()=>{
+  const block=source.slice(source.indexOf('  const pageForms ='),source.indexOf("  document.addEventListener('click', (event) =>"));
+  let navigated=false;
+  const context={document:{querySelectorAll:()=>[{dataset:{dirty:'false'},closest:()=>null}]},updateDirty:()=>{},confirmDiscard:()=>assert.fail('unexpected prompt'),window:{location:{assign:()=>{navigated=true;}}}};
+  vm.createContext(context);vm.runInContext(`${block}\nthis.leave=leaveEditor;`,context);await context.leave('/');assert.equal(navigated,true);
 });

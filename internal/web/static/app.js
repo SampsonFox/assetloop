@@ -173,6 +173,32 @@
       return true;
     } finally { closingDialogs.delete(dialog); }
   };
+  // Standalone editors navigate away rather than closing a drawer.
+  const pageForms = () => [...document.querySelectorAll('form[data-guard-dirty]')]
+    .filter((form) => !form.closest('dialog, #settings-content'));
+  let leavingPage = false, checkingPageLeave = false;
+  const leaveEditor = async (url) => {
+    if (checkingPageLeave || leavingPage) return;
+    checkingPageLeave = true;
+    try {
+      const forms = pageForms();
+      for (const form of forms) updateDirty(form);
+      const dirty = forms.find((form) => form.dataset.dirty === 'true');
+      if (dirty && !await confirmDiscard(dirty.dataset.discardConfirm)) return;
+      // Avoid a second, browser-native beforeunload prompt after confirmation.
+      leavingPage = true;
+      window.location.assign(url);
+    } finally { checkingPageLeave = false; }
+  };
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest('a[href]');
+    if (!link || link.target || link.hasAttribute('download') || link.closest('dialog') || !pageForms().length) return;
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin || (url.pathname === window.location.pathname && url.search === window.location.search && url.hash)) return;
+    event.preventDefault();
+    leaveEditor(url.href);
+  });
   const focusDialog = (dialog) => {
     const target = dialog.querySelector("[data-error-summary]")
       || dialog.querySelector("[data-dialog-initial-focus]")
@@ -319,6 +345,7 @@
   });
 
   window.addEventListener("beforeunload", (event) => {
+    if (leavingPage) return;
     if (!document.querySelector("form[data-guard-dirty][data-dirty='true']")) return;
     event.preventDefault();
     event.returnValue = "";
@@ -328,6 +355,12 @@
   initDialogs();
   for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
   for (const select of document.querySelectorAll("[data-event-type-select]")) syncEventTypeFields(select);
+  for (const form of pageForms()) {
+    if (!formBaselines.has(form)) {
+      formBaselines.set(form, formValues(form));
+      form.dataset.dirty = 'false';
+    }
+  }
 
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");

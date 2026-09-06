@@ -184,3 +184,6 @@ opening snapshot, routes Cancel/X/backdrop/Escape through one close guard, and
 uses a page-owned confirmation dialog instead of browser-native confirm.
 `dialog_close.test.mjs` covers unchanged/reverted values, secondary forms,
 retaining/discarding drafts, upload changes and duplicate close requests.
+Standalone form pages use the same visible discard prompt for ordinary same-tab
+links (including Return/Cancel); confirmed navigation bypasses the duplicate
+native unload warning. Browser refresh/tab close retains native unload protection.
