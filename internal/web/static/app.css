@@ -417,7 +417,6 @@ button[aria-busy="true"]::after { content:" …"; }
 .compact-timeline .timeline-item:not(:last-child)::before { top:21px; bottom:-21px; }
 .compact-timeline .timeline-entry { padding:0 12px; margin-inline:0; border:0; background:transparent; border-radius:12px; transform-origin:right top; transition:transform 240ms cubic-bezier(.16,1,.3,1),background-color 180ms ease-out; }
 .compact-timeline .timeline-entry:has(.timeline-trigger[aria-expanded="true"]) { background:color-mix(in srgb,var(--field) 65%,var(--paper)); transform:scale(1.02); }
-.compact-timeline .timeline-item:has(.timeline-trigger[aria-expanded="true"]) { z-index:2; }
 .compact-timeline .timeline-dot { width:10px; height:10px; margin:16px 0 0 3px; border:0; box-shadow:none; transition:transform 180ms ease-out; }
 .compact-timeline .timeline-item:has(.timeline-trigger[aria-expanded="true"]) .timeline-dot { transform:scale(1.1); }
 .timeline-trigger { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; background:transparent; color:var(--ink); border:0; padding:8px 0; text-align:left; font-weight:400; }

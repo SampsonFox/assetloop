@@ -45,6 +45,12 @@ test('expanded record keeps a gutter clear of the timeline rail',()=>{
   assert.ok(!css.includes('transform:scale(1.045)'));
 });
 
+test('expansion never raises the entire row and its connector above adjacent dots',()=>{
+  const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+  assert.doesNotMatch(css,/\.timeline-item:has\([^}]+\)\s*\{[^}]*z-index/);
+  assert.match(css,/\.timeline-dot\s*\{[^}]*z-index:1/);
+});
+
 test('record has one timestamp which reveals clock time inline on expansion',()=>{
   const template=readFileSync(new URL('./templates/asset.html',import.meta.url),'utf8');
   const row=template.split('\n').find(line=>line.includes('data-timeline-item'));
