@@ -119,6 +119,7 @@ type EventListResult struct {
 }
 
 type ModelMediaStore interface {
+	AppearanceStore
 	CreateAndBindModel3DResource(context.Context, domain.Model3DResource, BindModel3DResource) error
 	GetModel3DBinding(context.Context, string, string, string) (Model3DBinding, error)
 	CreateModel3DResource(context.Context, domain.Model3DResource) error

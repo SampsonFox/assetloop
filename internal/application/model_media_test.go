@@ -54,7 +54,15 @@ func (s *mediaTestStore) UpdateProductModel3D(_ context.Context, tenant, id stri
 	}
 	s.updates = append(s.updates, media)
 	s.model.Model3D = &media
+	s.model.Model3DResourceID = media.ResourceID
 	return nil
+}
+
+func (s *mediaTestStore) SpecificationSnapshot(_ context.Context, tenant string) (SpecificationSnapshot, error) {
+	if tenant != s.model.TenantID {
+		return SpecificationSnapshot{}, errors.New("not found")
+	}
+	return SpecificationSnapshot{}, nil
 }
 
 type memoryBlob struct {

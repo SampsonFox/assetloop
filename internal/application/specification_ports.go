@@ -53,3 +53,10 @@ type SpecificationStore interface {
 	GetModel3DResource(context.Context, string, string) (domain.Model3DResource, error)
 	ListModel3DResources(context.Context, string, Model3DResourceListOptions) (Model3DResourceListResult, error)
 }
+
+type AppearanceStore interface {
+	GetAsset(context.Context, string, string) (domain.Asset, error)
+	GetProductModel(context.Context, string, string) (domain.ProductModel, error)
+	GetModel3DResource(context.Context, string, string) (domain.Model3DResource, error)
+	SpecificationSnapshot(context.Context, string) (SpecificationSnapshot, error)
+}

@@ -127,7 +127,12 @@ func (s *Server) renderResource(w http.ResponseWriter, r *http.Request, p applic
 	if draft != nil {
 		resource.Name, resource.SourceURL, resource.Author, resource.License = draft.Name, draft.SourceURL, draft.Author, draft.License
 	}
-	s.render(w, status, "resource", pageData{Title: resource.Name, Principal: &p, CSRFToken: s.ensureCSRF(w, r), Error: message, Resource: &resource, References: references, CanManageCatalog: p.Can(application.CapabilityManageCatalog), ReturnTo: "/admin/3d/" + resource.ID})
+	data := pageData{Title: resource.Name, Principal: &p, CSRFToken: s.ensureCSRF(w, r), Error: message, Resource: &resource, References: references, CanManageCatalog: p.Can(application.CapabilityManageCatalog), ReturnTo: "/admin/3d/" + resource.ID}
+	if err := s.resourceTagData(r, p, &data); err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	s.render(w, status, "resource", data)
 }
 
 func resourceDraft(r *http.Request) domain.Model3DResource {

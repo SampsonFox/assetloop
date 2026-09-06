@@ -111,8 +111,10 @@ Transport adapters contain authentication, parsing, and response formatting, not
 
 The approved target is `ItemCategory -> ProductModel -> Asset`. Product identities
 remain entities; only specification descriptions become reusable typed tags.
-Implementation is staged: pure policies exist, while persistence and Web below
-still use the legacy variant hierarchy until the migration and integration land.
+Implementation is staged: persistence, application policies and the tag dictionary,
+item selection and resource-description Web paths exist. Appearance-management UI
+and legacy-entry retirement remain in progress; the live preview is still on the
+previous schema until the complete integrated upgrade is verified.
 
 - Tag types own single/multiple selection and default appearance relevance; tag
   values have stable tenant-scoped IDs and normalized names unique within a type.
@@ -349,6 +351,14 @@ The metadata row selects the store for reads. A configuration value selects the 
 A store migration copies the object under the same key, verifies size and SHA-256, changes `store_id`, then optionally removes the old object.
 
 A tenant-owned `Model3DResource` holds an immutable self-contained GLB and editable name and attribution. Product models, variants, and assets reference resources independently; multiple records can share a resource. Effective media is resolved in the application layer in asset override, variant default, then product-model default order. Only absent bindings inherit; a selected file that fails to load falls back to the static image or category icon. The resource table contains no color or capacity fields.
+
+With migration 00013, live application media reads instead resolve asset override,
+confirmed appearance default, then product-model default. Resource reference lists,
+counts and deletion guards include model defaults, asset overrides, appearance rules
+and unresolved legacy mappings. Retained variant resource IDs are compatibility
+evidence, not live references. Resolving a legacy mapping removes its protection,
+but does not erase the mapping or change an existing asset override. Resource tag
+and category edits are descriptive and never rewrite confirmed bindings.
 
 Uploads write and verify new resource-specific blobs before transactionally creating metadata and binding the target. Replacing a binding never deletes the previous resource. A referenced resource cannot be deleted: binding and deletion share a transaction isolation protocol, and pending-deletion resources reject new bindings. Unreferenced deletion first persists pending state, then removes the blob and finally the row; failures remain visible and retryable. No distributed transaction or background cleanup service is introduced. Authenticated reads are proxied by Web; source URL, author, and license remain descriptive metadata.
 

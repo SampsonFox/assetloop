@@ -8,8 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/config"
 	basestore "github.com/SampsonFox/assetloop/internal/store"
+	"github.com/SampsonFox/assetloop/internal/store/postgres"
+	"github.com/SampsonFox/assetloop/internal/store/sqlite"
 )
 
 func TestSpecificationMigration(t *testing.T) {
@@ -76,6 +79,40 @@ func TestSpecificationMigration(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM specification_tags", 4)
+			// Retained variant columns are audit data, not live references. Only
+			// unresolved legacy mappings and current bindings protect the GLB.
+			var media application.ModelMediaStore = sqlite.New(db)
+			if driver == "postgres" {
+				media = postgres.New(db)
+			}
+			refs, err := media.Model3DReferences(context.Background(), resourceUpgradeTenant, secondResource)
+			if err != nil || len(refs) != 2 {
+				t.Fatalf("migrated references: %+v %v", refs, err)
+			}
+			seen := map[string]bool{}
+			for _, ref := range refs {
+				seen[ref.Kind] = true
+			}
+			if !seen["legacy"] || !seen["asset"] || seen["variant"] {
+				t.Fatalf("wrong active reference kinds: %+v", refs)
+			}
+			page, err := media.ListModel3DResources(context.Background(), resourceUpgradeTenant, application.Model3DResourceListOptions{Query: "Other body", Page: 1, PageSize: 10})
+			if err != nil || len(page.Resources) != 1 || page.Resources[0].ReferenceCount != 2 {
+				t.Fatalf("legacy reference count: %+v %v", page, err)
+			}
+			mustSpecificationExec(t, db, "UPDATE assets SET model_3d_resource_id=NULL WHERE model_3d_resource_id='"+secondResource+"'")
+			if err := media.MarkModel3DResourcePendingDelete(context.Background(), resourceUpgradeTenant, secondResource); err == nil {
+				t.Fatal("unresolved legacy mapping did not protect resource")
+			}
+			mustSpecificationExec(t, db, "UPDATE legacy_variant_media SET resolved=TRUE WHERE resource_id='"+secondResource+"'")
+			if err := media.MarkModel3DResourcePendingDelete(context.Background(), resourceUpgradeTenant, secondResource); err != nil {
+				t.Fatalf("resolved legacy mapping blocked deletion: %v", err)
+			}
+			if err := media.FinishModel3DResourceDelete(context.Background(), resourceUpgradeTenant, secondResource); err != nil {
+				t.Fatal(err)
+			}
+			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM product_variants WHERE model_3d_resource_id='"+secondResource+"'", 1)
+			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM legacy_variant_media WHERE resource_id='"+secondResource+"' AND resolved=TRUE", 1)
 		})
 	}
 }

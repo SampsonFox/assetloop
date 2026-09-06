@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -211,4 +212,64 @@ func RunSpecifications(t *testing.T, first, second Store) {
 	if err := svc.SaveModel(ctx, foreign, application.SaveModelSpecification{ModelID: model.ID, TagIDs: allowed}); err == nil {
 		t.Fatal("cross-space model editable")
 	}
+	t.Run("concurrent allowance removal and selection", func(t *testing.T) {
+		start := make(chan struct{})
+		var wait sync.WaitGroup
+		var selectionErr, removalErr error
+		wait.Add(2)
+		go func() {
+			defer wait.Done()
+			<-start
+			_, selectionErr = svc.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ModelID: model.ID, DisplayName: "Concurrent white", TagIDs: []string{white.ID}})
+		}()
+		go func() {
+			defer wait.Done()
+			<-start
+			removalErr = reader.SaveModel(ctx, actor, application.SaveModelSpecification{ModelID: model.ID, TagIDs: []string{black.ID, small.ID, large.ID, matte.ID}})
+		}()
+		close(start)
+		wait.Wait()
+		if (selectionErr == nil) == (removalErr == nil) {
+			t.Fatalf("one operation must win: selection=%v removal=%v", selectionErr, removalErr)
+		}
+		state, err := reader.Snapshot(ctx, actor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := state.ValidateExisting(); err != nil {
+			t.Fatalf("race broke a persisted invariant: %v", err)
+		}
+	})
+	t.Run("concurrent appearance binding and resource deletion", func(t *testing.T) {
+		candidate := resource("Race resource")
+		start := make(chan struct{})
+		var wait sync.WaitGroup
+		var bindingErr, deletionErr error
+		wait.Add(2)
+		go func() {
+			defer wait.Done()
+			<-start
+			_, bindingErr = svc.SaveAppearance(ctx, actor, application.SaveAppearanceDefault{ModelID: model.ID, ResourceID: candidate.ID, TagIDs: []string{black.ID}})
+		}()
+		go func() {
+			defer wait.Done()
+			<-start
+			deletionErr = second.MarkModel3DResourcePendingDelete(ctx, actor.TenantID, candidate.ID)
+		}()
+		close(start)
+		wait.Wait()
+		if (bindingErr == nil) == (deletionErr == nil) {
+			t.Fatalf("one operation must win: binding=%v deletion=%v", bindingErr, deletionErr)
+		}
+		persisted, err := second.GetModel3DResource(ctx, actor.TenantID, candidate.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bindingErr == nil && persisted.Status != "ready" {
+			t.Fatal("bound resource became pending deletion")
+		}
+		if deletionErr == nil && persisted.Status != "pending-delete" {
+			t.Fatalf("resource status=%s", persisted.Status)
+		}
+	})
 }

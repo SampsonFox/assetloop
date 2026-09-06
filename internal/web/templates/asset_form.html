@@ -9,10 +9,16 @@
     {{$productImage := productImage .Asset}}{{if $productImage}}<img class="asset-product-image" src="{{$productImage}}" alt="{{.Asset.Model}} · {{t $s "asset.model_image_caption"}}" width="1728" height="912" decoding="async" fetchpriority="high"><figcaption class="asset-product-caption">{{t $s "asset.model_image_caption"}}</figcaption>{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{if .Asset.CategoryIcon}}{{.Asset.CategoryIcon}}{{else}}package{{end}}"></use></svg>{{end}}
   </figure>
   <div class="asset-profile-content">
-    {{if .Variants}}
+    {{if or .Variants (and .HasSpecifications .Models)}}
     <form id="asset-form" class="asset-editor-form" action="{{.AssetFormAction}}" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <div class="form-field"><div class="field-heading"><label for="asset-variant">{{t $s "assets.variant"}}</label><button class="link-button" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "assets.add_type"}}" data-action="/admin/catalog/variants">{{t $s "assets.add_type"}}</button></div><select id="asset-variant" name="variant_id" required><option value="">{{t $s "common.select"}}</option>{{range .Variants}}<option value="{{.ID}}"{{if eq .ID $.Asset.VariantID}} selected{{end}}>{{.CategoryName}} / {{.ModelName}} / {{.Name}}{{if .Color}} · {{.Color}}{{end}}</option>{{end}}</select></div>
+      {{if .HasSpecifications}}
+      <div class="form-field"><div class="field-heading"><label for="asset-model">{{t $s "catalog.model_name"}}</label><button class="link-button" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_model"}}</button></div><select id="asset-model" name="model_id" required data-asset-model data-remove-tags-confirm="{{t $s "tags.remove_on_switch"}}"><option value="">{{t $s "common.select"}}</option>{{range .Models}}<option value="{{.ID}}"{{if eq .ID $.Asset.ModelID}} selected{{end}}>{{.CategoryName}} / {{.Name}}</option>{{end}}</select></div>
+      <p class="muted">{{t $s "tags.item_optional"}}</p>
+      <div data-asset-tag-fields>{{range .AssetTagEditors}}{{if eq .ModelID $.Asset.ModelID}}{{template "asset-tag-dimensions" (tagEditor . $s)}}{{end}}{{end}}</div>
+      <p class="muted" role="status" data-tag-change-status></p>
+      {{range .AssetTagEditors}}<template data-asset-tag-template="{{.ModelID}}">{{template "asset-tag-dimensions" (tagEditor . $s)}}</template>{{end}}
+      {{else}}<div class="form-field"><div class="field-heading"><label for="asset-variant">{{t $s "assets.variant"}}</label><button class="link-button" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "assets.add_type"}}" data-action="/admin/catalog/variants">{{t $s "assets.add_type"}}</button></div><select id="asset-variant" name="variant_id" required><option value="">{{t $s "common.select"}}</option>{{range .Variants}}<option value="{{.ID}}"{{if eq .ID $.Asset.VariantID}} selected{{end}}>{{.CategoryName}} / {{.ModelName}} / {{.Name}}{{if .Color}} · {{.Color}}{{end}}</option>{{end}}</select></div>{{end}}
       <div class="asset-editor-fields">
         <label>{{t $s "assets.display_name"}}<input name="display_name" value="{{.Asset.DisplayName}}" required maxlength="200" placeholder="{{t $s "assets.display_placeholder"}}"></label>
         <label>{{t $s "assets.serial_number"}}<input name="serial_number" value="{{.Asset.SerialNumber}}" maxlength="200"></label>
@@ -23,10 +29,15 @@
     </form>
     {{else}}
     <div class="empty-inline"><strong>{{t $s "assets.no_types"}}</strong><p class="muted">{{t $s "assets.no_types_help"}}</p></div>
-    <button class="button auto" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "assets.add_type"}}" data-action="/admin/catalog/variants">{{t $s "assets.add_type"}}</button>
+    {{if .HasSpecifications}}<button class="button auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_model"}}</button>{{else}}<button class="button auto" type="button" data-dialog-open="variant-drawer" data-title="{{t $s "assets.add_type"}}" data-action="/admin/catalog/variants">{{t $s "assets.add_type"}}</button>{{end}}
     {{end}}
   </div>
 </section>
 {{if .AssetFormEditing}}<p><a class="button secondary" href="/admin/3d?kind=asset&amp;target={{.Asset.ID}}&amp;name={{.Asset.DisplayName}}">{{t $s "resource.manage_binding"}}</a></p>{{end}}
 {{template "catalog-drawers" .}}
+{{if .HasSpecifications}}<script src="/static/asset-tags.js" defer></script>{{end}}
+{{end}}
+
+{{define "asset-tag-dimensions"}}{{$s := .Strings}}
+{{range .Editor.Dimensions}}<fieldset class="asset-tag-dimension"><legend>{{.Name}}</legend>{{if .Multiple}}<div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" data-tag-name="{{.Name}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div>{{else}}<label><span class="visually-hidden">{{.Name}}</span><select name="tag_ids"><option value="">{{t $s "tags.not_selected"}}</option>{{range .Choices}}<option value="{{.ID}}" data-tag-name="{{.Name}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if not .Enabled}} · {{t $s "types.disabled"}}{{end}}</option>{{end}}</select></label>{{end}}</fieldset>{{end}}
 {{end}}

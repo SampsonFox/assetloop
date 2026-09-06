@@ -45,6 +45,41 @@ type AppearanceCandidateList struct {
 	Total      int
 }
 
+func (s *SpecificationService) Asset(ctx context.Context, actor Principal, id string) (domain.Asset, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return domain.Asset{}, err
+	}
+	if err := validID("asset ID", id); err != nil {
+		return domain.Asset{}, err
+	}
+	asset, err := s.store.GetAsset(ctx, actor.TenantID, id)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	items, err := s.DescribeAssets(ctx, actor, []domain.Asset{asset})
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	return items[0], nil
+}
+
+// DescribeAssets decorates an already authorized result page in one batch, never
+// deriving current descriptions from retained legacy specification columns.
+func (s *SpecificationService) DescribeAssets(ctx context.Context, actor Principal, assets []domain.Asset) ([]domain.Asset, error) {
+	state, err := s.Snapshot(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	result := append([]domain.Asset(nil), assets...)
+	for i := range result {
+		if result[i].TenantID != actor.TenantID {
+			return nil, ErrForbidden
+		}
+		state.HydrateSelection(&result[i], state.Selected("asset", result[i].ID))
+	}
+	return result, nil
+}
+
 func (s *SpecificationService) ListTypes(ctx context.Context, actor Principal, opts SpecificationListOptions) (SpecificationTypeList, error) {
 	state, err := s.Snapshot(ctx, actor)
 	if err != nil {
@@ -82,6 +117,10 @@ func (s *SpecificationService) ListTags(ctx context.Context, actor Principal, op
 }
 
 func (s *SpecificationService) EffectiveForAsset(ctx context.Context, actor Principal, id string) (EffectiveAppearance, error) {
+	return effectiveAppearance(ctx, s.store, actor, id)
+}
+
+func effectiveAppearance(ctx context.Context, store AppearanceStore, actor Principal, id string) (EffectiveAppearance, error) {
 	result := EffectiveAppearance{}
 	if err := actor.Require(CapabilityView); err != nil {
 		return result, err
@@ -89,7 +128,7 @@ func (s *SpecificationService) EffectiveForAsset(ctx context.Context, actor Prin
 	if err := validID("asset ID", id); err != nil {
 		return result, err
 	}
-	asset, err := s.store.GetAsset(ctx, actor.TenantID, id)
+	asset, err := store.GetAsset(ctx, actor.TenantID, id)
 	if err != nil {
 		return result, err
 	}
@@ -97,7 +136,7 @@ func (s *SpecificationService) EffectiveForAsset(ctx context.Context, actor Prin
 	if resourceID != "" {
 		result.Source = "asset"
 	} else {
-		state, err := s.store.SpecificationSnapshot(ctx, actor.TenantID)
+		state, err := store.SpecificationSnapshot(ctx, actor.TenantID)
 		if err != nil {
 			return result, err
 		}
@@ -107,7 +146,7 @@ func (s *SpecificationService) EffectiveForAsset(ctx context.Context, actor Prin
 		if resourceID != "" {
 			result.Source = "appearance"
 		} else {
-			model, err := s.store.GetProductModel(ctx, actor.TenantID, asset.ModelID)
+			model, err := store.GetProductModel(ctx, actor.TenantID, asset.ModelID)
 			if err != nil {
 				return result, err
 			}
@@ -120,7 +159,7 @@ func (s *SpecificationService) EffectiveForAsset(ctx context.Context, actor Prin
 	if resourceID == "" {
 		return result, nil
 	}
-	resource, err := s.store.GetModel3DResource(ctx, actor.TenantID, resourceID)
+	resource, err := store.GetModel3DResource(ctx, actor.TenantID, resourceID)
 	if err != nil {
 		return result, err
 	}

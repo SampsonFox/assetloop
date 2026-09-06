@@ -178,6 +178,11 @@
         }
         const manager = dialog.querySelector("[data-model-variants]");
         if (manager) manager.hidden = !modelId;
+        const tags = dialog.querySelector("[data-model-tags]");
+        if (tags) tags.hidden = !modelId;
+        for (const group of dialog.querySelectorAll("[data-model-tag-group]")) {
+          group.hidden = group.dataset.modelTagGroup !== modelId;
+        }
         for (const group of dialog.querySelectorAll("[data-variant-group]")) {
           group.hidden = group.dataset.variantGroup !== modelId;
         }

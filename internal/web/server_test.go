@@ -691,7 +691,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("duplicate custom event type must reopen its form: status=%d body=%s", duplicateEventType.Code, duplicateEventType.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1]+"?dialog=event-drawer&event_type=%E4%BF%9D%E5%85%BB", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`value="`+customTypeID+`" data-cashflow="neutral" selected`, `name="event_type"`, `新增类型`} {
+	for _, want := range []string{`value="` + customTypeID + `" data-cashflow="neutral" selected`, `name="event_type"`, `新增类型`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("custom event type must be selectable %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -1015,7 +1015,7 @@ func newTestHandler(t *testing.T) http.Handler {
 	return newTestHandlerWithBlob(t, nil)
 }
 
-func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) application.BlobStore) http.Handler {
+func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) application.BlobStore, tagged ...bool) http.Handler {
 	t.Helper()
 	cfg := config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "web.db")}
 	db, err := basestore.Open(cfg)
@@ -1039,7 +1039,11 @@ func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) appli
 		testBlob = wrap(testBlob)
 	}
 	modelMedia := application.NewModelMediaService(adapter, blob.Registry{"local": testBlob}, blob.ObjectKeyMapper{}, "local")
-	server, err := New(auth, catalog, lifecycle, db, Options{AuthMode: "local", ModelMedia: modelMedia})
+	options := Options{AuthMode: "local", ModelMedia: modelMedia}
+	if len(tagged) > 0 && tagged[0] {
+		options.Specifications = application.NewSpecificationService(adapter)
+	}
+	server, err := New(auth, catalog, lifecycle, db, options)
 	if err != nil {
 		t.Fatal(err)
 	}

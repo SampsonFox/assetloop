@@ -31,6 +31,7 @@ type scenarioStore interface {
 	application.CatalogStore
 	application.LifecycleStore
 	application.ModelMediaStore
+	application.SpecificationStore
 }
 
 func TestFullElementScenario(t *testing.T) {
@@ -101,33 +102,44 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil {
 		t.Fatalf("create model: %v", err)
 	}
-	variant256, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "钛金属"})
+	spec := application.NewSpecificationService(store)
+	color, err := spec.SaveType(ctx, owner, application.SaveSpecificationType{Name: "颜色", Enabled: true, AffectsAppearance: true})
 	if err != nil {
-		t.Fatalf("create 256GB variant: %v", err)
+		t.Fatal(err)
 	}
-	if _, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "512GB"}); err != nil {
-		t.Fatalf("create 512GB variant: %v", err)
+	storage, err := spec.SaveType(ctx, owner, application.SaveSpecificationType{Name: "储存", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
 	}
-	blackVariant, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "黑色"})
-	if err != nil || blackVariant.ID == variant256.ID {
-		t.Fatalf("create distinct color variant: %+v err=%v", blackVariant, err)
+	tag := func(kind, name string) domain.SpecificationTag {
+		t.Helper()
+		value, err := spec.SaveTag(ctx, owner, application.SaveSpecificationTag{TypeID: kind, Name: name, Enabled: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
 	}
-	if _, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "钛金属"}); err == nil {
-		t.Fatal("duplicate model/name/color variant was accepted")
+	titanium, black := tag(color.ID, "钛金属"), tag(color.ID, "黑色")
+	capacity256, capacity512 := tag(storage.ID, "256GB"), tag(storage.ID, "512GB")
+	if _, err := spec.SaveTag(ctx, owner, application.SaveSpecificationTag{TypeID: storage.ID, Name: " 256gb ", Enabled: true}); err == nil {
+		t.Fatal("duplicate normalized tag accepted")
 	}
-	asset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{
-		VariantID: variant256.ID, DisplayName: "全要素测试手机", SerialNumber: "FULL-ELEMENT-001",
+	if err := spec.SaveModel(ctx, owner, application.SaveModelSpecification{ModelID: model.ID, TagIDs: []string{titanium.ID, black.ID, capacity256.ID, capacity512.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	asset, err := spec.SaveAsset(ctx, owner, application.SaveSpecificationAsset{
+		ModelID: model.ID, TagIDs: []string{titanium.ID, capacity256.ID}, DisplayName: "全要素测试手机", SerialNumber: "FULL-ELEMENT-001",
 		PurchaseChannel: "官方商城", Notes: "全要素目录记录",
 	})
 	if err != nil {
 		t.Fatalf("create catalog asset: %v", err)
 	}
-	got, err := catalog.GetAsset(ctx, owner, asset.ID)
-	if err != nil || got.DisplayName != "全要素测试手机" || got.SerialNumber != "FULL-ELEMENT-001" || got.Variant != "256GB" || got.Color != "钛金属" {
+	got, err := spec.Asset(ctx, owner, asset.ID)
+	if err != nil || got.DisplayName != "全要素测试手机" || got.SerialNumber != "FULL-ELEMENT-001" || got.ModelID != model.ID || got.VariantID != "" || len(got.Tags) != 2 || !strings.Contains(got.Variant, "256GB") || !strings.Contains(got.Variant, "钛金属") {
 		t.Fatalf("get catalog asset: got=%+v err=%v", got, err)
 	}
 	snapshot, err := catalog.Snapshot(ctx, viewerSession.Principal)
-	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 3 || len(snapshot.Assets) != 1 {
+	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 0 || len(snapshot.Assets) != 1 {
 		t.Fatalf("viewer catalog snapshot: %+v err=%v", snapshot, err)
 	}
 	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, application.CreateCategory{Name: "禁止写入"}); !errors.Is(err, application.ErrForbidden) {
@@ -156,16 +168,12 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		t.Fatalf("resolved model GLB differs: read=%v close=%v", readErr, closeErr)
 	}
 
-	// One resource can serve unrelated models and variants; each asset may override it.
+	// One resource can serve multiple models and appearance defaults; each asset may override it.
 	sharedModel, err := catalog.CreateModel(ctx, owner, application.CreateModel{CategoryID: category.ID, Name: "共享资源手机"})
 	if err != nil {
 		t.Fatalf("create sharing model: %v", err)
 	}
-	sharedVariant, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: sharedModel.ID, Name: "128GB", Color: "银色"})
-	if err != nil {
-		t.Fatalf("create sharing variant: %v", err)
-	}
-	sharedAsset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: sharedVariant.ID, DisplayName: "共享模型资产"})
+	sharedAsset, err := spec.SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: sharedModel.ID, DisplayName: "共享模型资产"})
 	if err != nil {
 		t.Fatalf("create sharing asset: %v", err)
 	}
@@ -210,8 +218,19 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if err != nil {
 		t.Fatalf("upload variant resource: %v", err)
 	}
-	bind("variant", variant256.ID, variantResource.ID)
-	bind("variant", blackVariant.ID, variantResource.ID)
+	titaniumRule, err := spec.SaveAppearance(ctx, owner, application.SaveAppearanceDefault{ModelID: model.ID, ResourceID: variantResource.ID, TagIDs: []string{titanium.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blackRule, err := spec.SaveAppearance(ctx, owner, application.SaveAppearanceDefault{ModelID: model.ID, ResourceID: variantResource.ID, TagIDs: []string{black.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherCapacity, err := spec.SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: model.ID, TagIDs: []string{titanium.ID, capacity512.ID}, DisplayName: "同外观不同容量"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertResource(otherCapacity.ID, variantResource.ID)
 	assertResource(asset.ID, variantResource.ID)
 	assertReferenced(variantResource.ID)
 	override, err := modelMedia.Upload(ctx, owner, application.UploadModel3DResource{Name: "资产独立资源", File: glb, License: "CC0"})
@@ -235,10 +254,14 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		_ = reader.Close()
 		t.Fatal("deleted resource bytes remain readable")
 	}
-	bind("variant", variant256.ID, "")
+	if err := spec.DeleteAppearance(ctx, owner, titaniumRule.ID); err != nil {
+		t.Fatal(err)
+	}
 	assertResource(asset.ID, media.ResourceID)
-	assertReferenced(variantResource.ID) // The other variant still references it.
-	bind("variant", blackVariant.ID, "")
+	assertReferenced(variantResource.ID) // The other confirmed appearance rule still references it.
+	if err := spec.DeleteAppearance(ctx, owner, blackRule.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := modelMedia.DeleteResource(ctx, owner, variantResource.ID); err != nil {
 		t.Fatalf("delete fully unbound variant resource: %v", err)
 	}

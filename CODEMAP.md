@@ -20,7 +20,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 |---|---|
 | `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |
 | `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, inherited GLB viewer, code-defined zh-CN/en language packs, account menu, semantic light/dark themes with user accent palettes, shared catalog drawers, inline custom lifecycle event types, and progressively disclosed FX evidence forms |
-| `internal/web/resources.go`, `resources_i18n.go`, `templates/resources.html`, `templates/resource.html` | Paged 3D library, on-demand preview, shared attribution, model/variant/asset selection and deletion retry |
+| `internal/web/resources.go`, `resource_tags.go`, `resources_i18n.go`, `templates/resources.html`, `templates/resource.html` | Paged 3D library, on-demand preview, shared attribution, descriptive tags/categories, current reference navigation and deletion retry |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
@@ -63,6 +63,8 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 Specification-tag refactor (in progress): `internal/domain/specifications.go` owns optional typed selections, retained disabled values, per-model appearance overrides and deterministic confirmed-rule matching. Paired `00013` SQL files define the direct asset/model relation and typed associations; `internal/store/specification_upgrade.go` executes their DDL and Unicode-aware legacy backfill in one Goose transaction. `specification_migration_test.go` covers rollback/retry, old colors/descriptions, conflicting GLBs and preserved history. `internal/application/specifications.go`, `specification_queries.go` and `specification_ports.go` provide transactional tag/model/asset/resource maintenance, references, candidates and effective appearance resolution. Both Store `specifications.go` adapters use generated `specification.sql` queries and the shared tenant write lock. `storetest/specifications.go` tests these application paths over both adapters (PostgreSQL execution needs its test DSN). Web and existing catalog/media integration remain in progress; do not deploy this checkpoint as the completed tag UI.
 
+Tag Web integration: `internal/web/specifications.go` and `templates/specifications.html` provide the type/value dictionary, references and shared-name confirmation. `model_tags.go` owns model allowance transport and appearance-rule endpoints; `asset_tags.go`, `static/asset-tags.js` and `asset_tags.test.mjs` implement direct model selection, optional tag inputs and confirmation before dropping incompatible selections. `resource_tags.go` edits descriptive resource associations without rebinding. The media application service uses the shared appearance resolver, not the old variant resolver. Pending work includes the full appearance editor/candidate workflow, legacy-entry retirement, browser acceptance and deployment of migration 13.
+
 Cost dashboard: `internal/application/cost_dashboard.go` reads the full authorized lifecycle; `internal/domain/cost_dashboard.go` owns exact net/daily cost, calendar-day duration, trend and expense grouping. `internal/web/cost_dashboard.go`, `templates/cost_dashboard.html` and `static/cost-timeline.js` render SVG reports and progressive timeline details without market estimates or persistence changes. Timeline list filters never scope dashboard calculations.
 
 `internal/web/static/timeline-query.js` progressively enhances timeline GET forms with debounced search, separately applied advanced filters, cancellable result-only refresh, and outside/Escape dismissal. The model viewer and cost dashboard DOM remain untouched.
@@ -84,7 +86,7 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 | `internal/web/i18n.go` | registered locales, stable message keys, browser/cookie locale matching, and zh-CN fallback |
 | `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, GLB upload/read and fallback, progressive FX evidence, correction, totals, and role denial |
 | `internal/web/viewer_mechanics.test.mjs` | Dependency-free Node test harness for viewer framing, keyboard controls, reduced motion, idle rendering and failure fallback |
-| `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → color specifications → shared/default/dedicated GLB and inheritance → foreign purchase → repair correction → sale scenario on both databases |
+| `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → typed model allowances → direct items with different capacity tags sharing an appearance GLB → dedicated override/inheritance → foreign purchase → repair correction → sale scenario on both databases |
 
 ## Read paths by task
 

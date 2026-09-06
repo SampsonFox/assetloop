@@ -51,6 +51,7 @@ type BindModel3DResource struct{ Kind, TargetID, ResourceID string }
 type Model3DReference struct{ Kind, ID, Name string }
 type Model3DBinding struct {
 	Name, ResourceID, EffectiveResourceID, Source string
+	Conflict                                      bool
 	Effective                                     *domain.ProductModel3D
 }
 type Model3DResourceListOptions struct {
@@ -197,6 +198,22 @@ func (s *ModelMediaService) Binding(ctx context.Context, actor Principal, kind, 
 	if err := validID("target ID", targetID); err != nil {
 		return Model3DBinding{}, err
 	}
+	if kind == "asset" {
+		asset, err := s.store.GetAsset(ctx, actor.TenantID, targetID)
+		if err != nil {
+			return Model3DBinding{}, err
+		}
+		resolved, err := effectiveAppearance(ctx, s.store, actor, targetID)
+		if err != nil {
+			return Model3DBinding{}, err
+		}
+		binding := Model3DBinding{Name: asset.DisplayName, ResourceID: asset.Model3DResourceID, Source: resolved.Source, Conflict: resolved.Conflict}
+		if resolved.Resource != nil {
+			binding.EffectiveResourceID = resolved.Resource.ID
+			binding.Effective = &resolved.Resource.ProductModel3D
+		}
+		return binding, nil
+	}
 	binding, err := s.store.GetModel3DBinding(ctx, actor.TenantID, kind, targetID)
 	if err != nil {
 		return Model3DBinding{}, err
@@ -339,8 +356,14 @@ func (s *ModelMediaService) ResolveForAsset(ctx context.Context, actor Principal
 	if err := validID("asset ID", assetID); err != nil {
 		return domain.ProductModel3D{}, err
 	}
-	r, err := s.store.ResolveAssetModel3D(ctx, actor.TenantID, assetID)
-	return r.ProductModel3D, err
+	r, err := effectiveAppearance(ctx, s.store, actor, assetID)
+	if err != nil {
+		return domain.ProductModel3D{}, err
+	}
+	if r.Resource == nil {
+		return domain.ProductModel3D{}, ErrModel3DNotFound
+	}
+	return r.Resource.ProductModel3D, nil
 }
 func (s *ModelMediaService) OpenForAsset(ctx context.Context, actor Principal, assetID string) (OpenProductModel3D, error) {
 	media, err := s.ResolveForAsset(ctx, actor, assetID)

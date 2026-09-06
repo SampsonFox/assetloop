@@ -32,30 +32,38 @@ func RunModelResources(t *testing.T, first, second Store, db *sql.DB, driver str
 	if err != nil {
 		t.Fatal(err)
 	}
-	red, err := cat.CreateVariant(ctx, actor, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: " Red "})
+	specs := application.NewSpecificationService(first)
+	color, err := specs.SaveType(ctx, actor, application.SaveSpecificationType{Name: "Body color", Enabled: true, AffectsAppearance: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	blue, err := cat.CreateVariant(ctx, actor, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "Blue"})
+	red, err := specs.SaveTag(ctx, actor, application.SaveSpecificationTag{TypeID: color.ID, Name: " Red ", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if red.Color != "Red" {
-		t.Fatalf("color not normalized: %q", red.Color)
-	}
-	if _, err := cat.CreateVariant(ctx, actor, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "Red"}); err == nil {
-		t.Fatal("duplicate variant identity accepted")
-	}
-	asset, err := cat.CreateAsset(ctx, actor, application.CreateCatalogAsset{VariantID: red.ID, DisplayName: "Colored"})
+	blue, err := specs.SaveTag(ctx, actor, application.SaveSpecificationTag{TypeID: color.ID, Name: "Blue", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if asset.Color != "Red" {
-		t.Fatalf("asset color=%q", asset.Color)
+	if red.Name != "Red" {
+		t.Fatalf("color not normalized: %q", red.Name)
 	}
-	asset, err = cat.UpdateAsset(ctx, actor, application.UpdateCatalogAsset{ID: asset.ID, VariantID: blue.ID, DisplayName: "Colored"})
-	if err != nil || asset.Color != "Blue" {
-		t.Fatalf("variant color not hydrated: %+v %v", asset, err)
+	if _, err := specs.SaveTag(ctx, actor, application.SaveSpecificationTag{TypeID: color.ID, Name: "Red", Enabled: true}); err == nil {
+		t.Fatal("duplicate tag identity accepted")
+	}
+	if err := specs.SaveModel(ctx, actor, application.SaveModelSpecification{ModelID: model.ID, TagIDs: []string{red.ID, blue.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	asset, err := specs.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ModelID: model.ID, TagIDs: []string{red.ID}, DisplayName: "Colored"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(asset.Tags) != 1 || asset.Tags[0].Name != "Red" {
+		t.Fatalf("asset tags=%+v", asset.Tags)
+	}
+	asset, err = specs.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ID: asset.ID, ModelID: model.ID, TagIDs: []string{blue.ID}, DisplayName: "Colored"})
+	if err != nil || len(asset.Tags) != 1 || asset.Tags[0].Name != "Blue" {
+		t.Fatalf("selected color not hydrated: %+v %v", asset, err)
 	}
 	create := func(name string) domain.Model3DResource {
 		t.Helper()
@@ -68,24 +76,24 @@ func RunModelResources(t *testing.T, first, second Store, db *sql.DB, driver str
 		return r
 	}
 	resource := create("Conformance resource")
-	for _, b := range []application.BindModel3DResource{{Kind: "model", TargetID: model.ID}, {Kind: "variant", TargetID: red.ID}, {Kind: "asset", TargetID: asset.ID}} {
+	for _, b := range []application.BindModel3DResource{{Kind: "model", TargetID: model.ID}, {Kind: "asset", TargetID: asset.ID}} {
 		b.ResourceID = resource.ID
 		if err := first.BindModel3DResource(ctx, actor.TenantID, b); err != nil {
 			t.Fatal(err)
 		}
+	}
+	rule, err := specs.SaveAppearance(ctx, actor, application.SaveAppearanceDefault{ModelID: model.ID, ResourceID: resource.ID, TagIDs: []string{red.ID}})
+	if err != nil {
+		t.Fatal(err)
 	}
 	refs, err := first.Model3DReferences(ctx, actor.TenantID, resource.ID)
 	if err != nil || len(refs) != 3 {
 		t.Fatalf("references=%+v err=%v", refs, err)
 	}
 	for _, ref := range refs {
-		if ref.Kind == "variant" && ref.Name != "256GB (Red)" {
-			t.Fatalf("variant reference ambiguous: %+v", ref)
+		if ref.Kind == "appearance" && (ref.ID != rule.ID || ref.Name != model.Name) {
+			t.Fatalf("appearance reference ambiguous: %+v", ref)
 		}
-	}
-	variantBinding, err := first.GetModel3DBinding(ctx, actor.TenantID, "variant", red.ID)
-	if err != nil || variantBinding.Name != "256GB (Red)" {
-		t.Fatalf("variant binding ambiguous: %+v %v", variantBinding, err)
 	}
 	page, err := first.ListModel3DResources(ctx, actor.TenantID, application.Model3DResourceListOptions{Query: "Conformance", Page: 1, PageSize: 1})
 	if err != nil || page.Total != 1 || len(page.Resources) != 1 || page.Resources[0].ReferenceCount != 3 {
@@ -144,8 +152,8 @@ func RunModelResources(t *testing.T, first, second Store, db *sql.DB, driver str
 	if err != nil || got.ObjectKey != resource.ObjectKey || got.SHA256 != resource.SHA256 || got.Author != "Shared author" {
 		t.Fatalf("metadata update=%+v %v", got, err)
 	}
-	binding, err := first.GetModel3DBinding(ctx, actor.TenantID, "asset", asset.ID)
-	if err != nil || binding.Source != "asset" || binding.ResourceID != resource.ID {
+	binding, err := specs.EffectiveForAsset(ctx, actor, asset.ID)
+	if err != nil || binding.Source != "asset" || binding.Resource == nil || binding.Resource.ID != resource.ID {
 		t.Fatalf("binding=%+v %v", binding, err)
 	}
 	// A failed target bind rolls back the just-created resource.
@@ -159,10 +167,13 @@ func RunModelResources(t *testing.T, first, second Store, db *sql.DB, driver str
 	if _, err := first.GetModel3DResource(ctx, actor.TenantID, candidate.ID); !errors.Is(err, application.ErrModel3DNotFound) {
 		t.Fatalf("failed binding persisted resource: %v", err)
 	}
-	for _, b := range []application.BindModel3DResource{{Kind: "model", TargetID: model.ID}, {Kind: "variant", TargetID: red.ID}, {Kind: "asset", TargetID: asset.ID}} {
+	for _, b := range []application.BindModel3DResource{{Kind: "model", TargetID: model.ID}, {Kind: "asset", TargetID: asset.ID}} {
 		if err := first.BindModel3DResource(ctx, actor.TenantID, b); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := specs.DeleteAppearance(ctx, actor, rule.ID); err != nil {
+		t.Fatal(err)
 	}
 	if err := first.MarkModel3DResourcePendingDelete(ctx, actor.TenantID, resource.ID); err != nil {
 		t.Fatal(err)

@@ -581,7 +581,8 @@ SELECT * FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc
 -- name: ListModel3DResources :many
 SELECT r.*,
  (SELECT COUNT(*) FROM product_models m WHERE m.tenant_id=r.tenant_id AND m.model_3d_resource_id=r.id)
- +(SELECT COUNT(*) FROM product_variants v WHERE v.tenant_id=r.tenant_id AND v.model_3d_resource_id=r.id)
+ +(SELECT COUNT(*) FROM model_appearance_defaults d WHERE d.tenant_id=r.tenant_id AND d.resource_id=r.id)
+ +(SELECT COUNT(*) FROM legacy_variant_media l WHERE l.tenant_id=r.tenant_id AND l.resource_id=r.id AND NOT l.resolved)
  +(SELECT COUNT(*) FROM assets a WHERE a.tenant_id=r.tenant_id AND a.model_3d_resource_id=r.id) AS reference_count
 FROM model_3d_resources r WHERE r.tenant_id=sqlc.arg(tenant_id)
  AND (CAST(sqlc.arg(search_query) AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')
@@ -599,7 +600,8 @@ WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id) AND status='ready';
 UPDATE model_3d_resources SET status='pending-delete'
 WHERE model_3d_resources.tenant_id=sqlc.arg(tenant_id) AND model_3d_resources.id=sqlc.arg(id)
  AND NOT EXISTS(SELECT 1 FROM product_models WHERE product_models.tenant_id=sqlc.arg(tenant_id) AND product_models.model_3d_resource_id=sqlc.arg(id))
- AND NOT EXISTS(SELECT 1 FROM product_variants WHERE product_variants.tenant_id=sqlc.arg(tenant_id) AND product_variants.model_3d_resource_id=sqlc.arg(id))
+ AND NOT EXISTS(SELECT 1 FROM model_appearance_defaults WHERE model_appearance_defaults.tenant_id=sqlc.arg(tenant_id) AND model_appearance_defaults.resource_id=sqlc.arg(id))
+ AND NOT EXISTS(SELECT 1 FROM legacy_variant_media WHERE legacy_variant_media.tenant_id=sqlc.arg(tenant_id) AND legacy_variant_media.resource_id=sqlc.arg(id) AND NOT legacy_variant_media.resolved)
  AND NOT EXISTS(SELECT 1 FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id));
 
 -- name: FinishModel3DResourceDelete :execrows
@@ -608,7 +610,9 @@ DELETE FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.a
 -- name: Model3DReferences :many
 SELECT CAST('model' AS TEXT) AS kind,id,name FROM product_models WHERE product_models.tenant_id=sqlc.arg(tenant_id) AND product_models.model_3d_resource_id=sqlc.arg(id)
 UNION ALL
-SELECT CAST('variant' AS TEXT),id,name || CASE WHEN color<>'' THEN ' (' || color || ')' ELSE '' END FROM product_variants WHERE product_variants.tenant_id=sqlc.arg(tenant_id) AND product_variants.model_3d_resource_id=sqlc.arg(id)
+SELECT CAST('appearance' AS TEXT),d.id,m.name FROM model_appearance_defaults d JOIN product_models m ON m.tenant_id=d.tenant_id AND m.id=d.model_id WHERE d.tenant_id=sqlc.arg(tenant_id) AND d.resource_id=sqlc.arg(id)
+UNION ALL
+SELECT CAST('legacy' AS TEXT),l.variant_id,v.name FROM legacy_variant_media l JOIN product_variants v ON v.tenant_id=l.tenant_id AND v.id=l.variant_id WHERE l.tenant_id=sqlc.arg(tenant_id) AND l.resource_id=sqlc.arg(id) AND NOT l.resolved
 UNION ALL
 SELECT CAST('asset' AS TEXT),id,display_name FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id);
 
