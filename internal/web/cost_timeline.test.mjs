@@ -6,7 +6,7 @@ import vm from 'node:vm';
 function harness() {
   const doc = {listeners:{}, addEventListener(k,fn){this.listeners[k]=fn;}, activeElement:null};
   const items = [0,1].map(() => {
-    const panel={hidden:true};
+    const panel={hidden:true,inert:true};
     const trigger={listeners:{},attrs:{},setAttribute(k,v){this.attrs[k]=v;},addEventListener(k,fn){this.listeners[k]=fn;},focus(){doc.activeElement=this;}};
     return {panel,trigger,listeners:{},querySelector(s){return s==='.timeline-trigger'?trigger:panel;},contains(x){return x===this || x===trigger || x===panel;},addEventListener(k,fn){this.listeners[k]=fn;}};
   });
@@ -16,13 +16,25 @@ function harness() {
   return {items,doc,tick(){const fn=callback;callback=null;fn?.();}};
 }
 
-test('timeline delayed hover, cancellation and popover interaction',()=>{
+test('timeline delayed focus, cancellation and inline details',()=>{
   const {items:[a],tick}=harness();
   a.listeners.pointerenter({pointerType:'mouse'});assert.equal(a.panel.hidden,true);
   a.listeners.pointerleave();tick();assert.equal(a.panel.hidden,true);
   a.listeners.pointerenter({pointerType:'mouse'});tick();assert.equal(a.panel.hidden,false);
   assert.equal(a.trigger.attrs['aria-expanded'],'true');
+  assert.equal(a.panel.inert,false);
   a.listeners.pointerleave();assert.equal(a.panel.hidden,true);
+});
+
+test('details expand inside the same record, with no detached popup',()=>{
+  const template=readFileSync(new URL('./templates/asset.html',import.meta.url),'utf8');
+  const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+  assert.ok(template.includes('class="timeline-details"'));
+  assert.ok(template.includes('class="timeline-details-inner"'));
+  assert.ok(!template.includes('timeline-popover'));
+  assert.match(css,/\.timeline-details\s*\{[^}]*grid-template-rows:1fr/);
+  assert.match(css,/\.timeline-details\[hidden\]\s*\{[^}]*grid-template-rows:0fr/);
+  assert.match(css,/prefers-reduced-motion:reduce[^]*\.timeline-details/);
 });
 test('touch pins one item, outside click and Escape close',()=>{
   const {items:[a,b],doc,tick}=harness();

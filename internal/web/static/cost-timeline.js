@@ -5,7 +5,9 @@
     clearTimeout(timer);
     if (active) {
       active.querySelector('.timeline-trigger').setAttribute('aria-expanded', 'false');
-      active.querySelector('.timeline-popover').hidden = true;
+      const details = active.querySelector('.timeline-details');
+      details.hidden = true;
+      details.inert = true;
     }
     active = null;
     pinned = false;
@@ -13,7 +15,9 @@
   const open = (item) => {
     if (active !== item) close();
     active = item;
-    item.querySelector('.timeline-popover').hidden = false;
+    const details = item.querySelector('.timeline-details');
+    details.hidden = false;
+    details.inert = false;
     item.querySelector('.timeline-trigger').setAttribute('aria-expanded', 'true');
   };
   for (const item of items) {
