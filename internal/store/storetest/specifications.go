@@ -115,7 +115,9 @@ func RunSpecifications(t *testing.T, first, second Store) {
 	// This replaces the retired implicit category/model/variant creation test:
 	// reads still preserve every supported field and isolate the owning space.
 	loaded, err := reader.Asset(ctx, actor, one.ID)
-	if err != nil || !loaded.CreatedAt.Equal(one.CreatedAt) {
+	// PostgreSQL persists timestamps at microsecond precision; compare the
+	// common precision while still checking every other field exactly below.
+	if err != nil || !loaded.CreatedAt.Truncate(time.Microsecond).Equal(one.CreatedAt.Truncate(time.Microsecond)) {
 		t.Fatalf("tagged asset read time: %+v %v", loaded, err)
 	}
 	loaded.CreatedAt = one.CreatedAt
