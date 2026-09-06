@@ -46,7 +46,7 @@ func RunModelResources(t *testing.T, first, second Store, db *sql.DB, driver str
 	if _, err := cat.CreateVariant(ctx, actor, application.CreateVariant{ModelID: model.ID, Name: "256GB", Color: "Red"}); err == nil {
 		t.Fatal("duplicate variant identity accepted")
 	}
-	asset, err := cat.CreateAsset(ctx, actor, application.CreateCatalogAsset{VariantID: red.ID, DisplayName: "Colored", Color: "obsolete"})
+	asset, err := cat.CreateAsset(ctx, actor, application.CreateCatalogAsset{VariantID: red.ID, DisplayName: "Colored"})
 	if err != nil {
 		t.Fatal(err)
 	}

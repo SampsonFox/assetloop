@@ -264,7 +264,7 @@ func runCatalog(t *testing.T, store Store) {
 	}
 	asset, err := service.CreateAsset(ctx, owner, application.CreateCatalogAsset{
 		VariantID: variant256.ID, DisplayName: "Daily Phone", SerialNumber: "SERIAL-001",
-		Color: "Black", PurchaseChannel: "Official Store", Notes: "Complete catalog record",
+		PurchaseChannel: "Official Store", Notes: "Complete catalog record",
 	})
 	if err != nil {
 		t.Fatalf("create catalog asset: %v", err)
@@ -281,7 +281,7 @@ func runCatalog(t *testing.T, store Store) {
 	if _, err := service.UpdateVariant(ctx, owner, application.UpdateVariant{ID: variant256.ID, ModelID: model.ID, Name: "256 GB"}); err != nil {
 		t.Fatalf("update variant: %v", err)
 	}
-	updatedAsset, err := service.UpdateAsset(ctx, owner, application.UpdateCatalogAsset{ID: asset.ID, VariantID: variant256.ID, DisplayName: "Updated Phone", SerialNumber: "SERIAL-001", Color: "Blue", PurchaseChannel: "Retail", Notes: "Updated"})
+	updatedAsset, err := service.UpdateAsset(ctx, owner, application.UpdateCatalogAsset{ID: asset.ID, VariantID: variant256.ID, DisplayName: "Updated Phone", SerialNumber: "SERIAL-001", PurchaseChannel: "Retail", Notes: "Updated"})
 	if err != nil || updatedAsset.DisplayName != "Updated Phone" || updatedAsset.CategoryIcon != "tablet" || updatedAsset.Category != "Phones" || updatedAsset.Model != "Example Ultra" || updatedAsset.Variant != "256 GB" {
 		t.Fatalf("updated catalog hierarchy mismatch: asset=%+v err=%v", updatedAsset, err)
 	}

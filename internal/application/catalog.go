@@ -85,7 +85,6 @@ type CreateCatalogAsset struct {
 	VariantID       string
 	DisplayName     string
 	SerialNumber    string
-	Color           string
 	PurchaseChannel string
 	Notes           string
 }
@@ -95,7 +94,6 @@ type UpdateCatalogAsset struct {
 	VariantID       string
 	DisplayName     string
 	SerialNumber    string
-	Color           string
 	PurchaseChannel string
 	Notes           string
 }
@@ -269,13 +267,13 @@ func (s *CatalogService) CreateAsset(ctx context.Context, actor Principal, cmd C
 	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return domain.Asset{}, err
 	}
-	values, err := validateAssetFields(cmd.VariantID, cmd.DisplayName, cmd.SerialNumber, cmd.Color, cmd.PurchaseChannel, cmd.Notes)
+	values, err := validateAssetFields(cmd.VariantID, cmd.DisplayName, cmd.SerialNumber, cmd.PurchaseChannel, cmd.Notes)
 	if err != nil {
 		return domain.Asset{}, err
 	}
 	asset := domain.Asset{
 		ID: newID(), TenantID: actor.TenantID, VariantID: values.VariantID,
-		DisplayName: values.DisplayName, SerialNumber: values.SerialNumber, Color: values.Color,
+		DisplayName: values.DisplayName, SerialNumber: values.SerialNumber,
 		PurchaseChannel: values.PurchaseChannel, Notes: values.Notes, CreatedAt: s.now().UTC(),
 	}
 	if err := s.store.CreateCatalogAsset(ctx, asset); err != nil {
@@ -297,7 +295,7 @@ func categoryIcon(value string) (string, error) {
 	return "", NewInputError("validation.category_icon")
 }
 
-func validateAssetFields(variantID, displayName, serialNumber, color, purchaseChannel, notes string) (domain.Asset, error) {
+func validateAssetFields(variantID, displayName, serialNumber, purchaseChannel, notes string) (domain.Asset, error) {
 	if err := validID("variant ID", variantID); err != nil {
 		return domain.Asset{}, err
 	}
@@ -311,7 +309,6 @@ func validateAssetFields(variantID, displayName, serialNumber, color, purchaseCh
 	}{
 		{"display name", displayName, 200, true, &values.DisplayName},
 		{"serial number", serialNumber, 200, false, &values.SerialNumber},
-		{"color", color, 120, false, &values.Color},
 		{"purchase channel", purchaseChannel, 160, false, &values.PurchaseChannel},
 		{"notes", notes, 2000, false, &values.Notes},
 	}
@@ -332,11 +329,11 @@ func (s *CatalogService) UpdateAsset(ctx context.Context, actor Principal, cmd U
 	if err := validID("asset ID", cmd.ID); err != nil {
 		return domain.Asset{}, err
 	}
-	values, err := validateAssetFields(cmd.VariantID, cmd.DisplayName, cmd.SerialNumber, cmd.Color, cmd.PurchaseChannel, cmd.Notes)
+	values, err := validateAssetFields(cmd.VariantID, cmd.DisplayName, cmd.SerialNumber, cmd.PurchaseChannel, cmd.Notes)
 	if err != nil {
 		return domain.Asset{}, err
 	}
-	asset := domain.Asset{ID: cmd.ID, TenantID: actor.TenantID, VariantID: values.VariantID, DisplayName: values.DisplayName, SerialNumber: values.SerialNumber, Color: values.Color, PurchaseChannel: values.PurchaseChannel, Notes: values.Notes}
+	asset := domain.Asset{ID: cmd.ID, TenantID: actor.TenantID, VariantID: values.VariantID, DisplayName: values.DisplayName, SerialNumber: values.SerialNumber, PurchaseChannel: values.PurchaseChannel, Notes: values.Notes}
 	if err := s.store.UpdateCatalogAsset(ctx, asset); err != nil {
 		return domain.Asset{}, fmt.Errorf("update asset: %w", err)
 	}

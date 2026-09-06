@@ -916,7 +916,7 @@ func (s *Server) renderAssetMutationError(w http.ResponseWriter, r *http.Request
 func assetFromForm(r *http.Request, id string) domain.Asset {
 	return domain.Asset{
 		ID: id, VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
-		SerialNumber: r.FormValue("serial_number"), Color: r.FormValue("color"),
+		SerialNumber: r.FormValue("serial_number"),
 		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	}
 }
