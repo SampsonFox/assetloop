@@ -96,3 +96,10 @@ test('one reset action belongs to the dimension heading; only default-affecting 
  assert.match(js,/note:d.appearance\?text.inherited:''/);
  assert.match(js,/state.resetAllAppearance\(\)/);
 });
+
+test('transfer boundaries pass scrolling to the drawer, while the drawer contains background scrolling',()=>{
+ const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+ const rule=css.match(/\.transfer-list\s*\{([^}]+)\}/)[1];
+ assert.match(rule,/overscroll-behavior:\s*auto/);
+ assert.match(css,/\.drawer-panel,\.drawer-body\s*\{\s*overscroll-behavior:contain/);
+});

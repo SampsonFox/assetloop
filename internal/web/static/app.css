@@ -521,7 +521,7 @@ button[aria-busy="true"]::after { content:" …"; }
 .transfer-header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px; font-size:.9rem; }
 .transfer-header { background:var(--field); }
 .transfer-search { width:calc(100% - 24px); margin:12px; }
-.transfer-list { height:220px; overflow:auto; overscroll-behavior:contain; padding:0 12px; }
+.transfer-list { height:220px; overflow:auto; overscroll-behavior:auto; padding:0 12px; }
 .transfer-row { padding:2px 0; display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
 .transfer-row small { font-size:.75rem; }
 .transfer-row > button:not(.transfer-choice) { padding:4px 8px; font-size:.75rem; }
