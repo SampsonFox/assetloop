@@ -49,7 +49,6 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 | Symbol | Expected location | Implementations |
 |---|---|---|
-| `Store` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `BlobStore` | `internal/application/ports.go` | Local, Aliyun OSS |
 | `ObjectKeyMapper` | `internal/blob/key_mapper.go` | one shared mapper |
 | `MarketDataProvider` | `internal/application/ports.go` | OneBound, Manual |
@@ -107,6 +106,11 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 | Change Git/release workflow | `docs/DEVELOPMENT_WORKFLOW.md` | `AGENTS.md`, delivery architecture, GitHub workflows |
 
 ## Core execution flows
+
+Retired foundation path: the unused `AssetService`, implicit category/model/variant
+upsert Store API, and its generated queries are removed. `ids.go` retains the shared
+ID generator; typed `SaveAsset` conformance now proves asset round trips, explicit
+model reuse and cross-space reads instead of testing the retired implicit creation.
 
 Approved follow-up: retire the old variant hierarchy completely. The specification
 asset command and draft no longer translate legacy IDs; Web rejects obsolete

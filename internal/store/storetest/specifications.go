@@ -2,7 +2,9 @@ package storetest
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +112,19 @@ func RunSpecifications(t *testing.T, first, second Store) {
 	one := makeAsset("128 black", black.ID, small.ID, matte.ID)
 	two := makeAsset("256 black", black.ID, large.ID)
 	empty := makeAsset("No optional tags")
+	// This replaces the retired implicit category/model/variant creation test:
+	// reads still preserve every supported field and isolate the owning space.
+	loaded, err := reader.Asset(ctx, actor, one.ID)
+	if err != nil || !loaded.CreatedAt.Equal(one.CreatedAt) {
+		t.Fatalf("tagged asset read time: %+v %v", loaded, err)
+	}
+	loaded.CreatedAt = one.CreatedAt
+	if !reflect.DeepEqual(loaded, one) || one.ModelID != two.ModelID || one.CategoryID != two.CategoryID {
+		t.Fatalf("tagged asset round trip/reused identity: %+v != %+v", loaded, one)
+	}
+	if _, err := second.GetAsset(ctx, uuid.NewString(), one.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("cross-space asset read: %v", err)
+	}
 	if len(one.Tags) != 3 || len(empty.Tags) != 0 {
 		t.Fatal("selection hydration failed")
 	}

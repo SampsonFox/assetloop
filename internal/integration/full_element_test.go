@@ -27,7 +27,6 @@ import (
 )
 
 type scenarioStore interface {
-	application.Store
 	application.AuthStore
 	application.CatalogStore
 	application.LifecycleStore

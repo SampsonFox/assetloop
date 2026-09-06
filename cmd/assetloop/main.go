@@ -83,7 +83,6 @@ func run(args []string) error {
 			return err
 		}
 		var appStore interface {
-			application.Store
 			application.AuthStore
 			application.CatalogStore
 			application.LifecycleStore

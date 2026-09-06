@@ -1,27 +1,3 @@
--- name: EnsureTenant :exec
-INSERT INTO tenants (id, name, base_currency, created_at) VALUES (?, ?, ?, ?)
-ON CONFLICT (id) DO NOTHING;
-
--- name: EnsureCategory :one
-INSERT INTO item_categories (id, tenant_id, name, created_at) VALUES (?, ?, ?, ?)
-ON CONFLICT (tenant_id, name) DO UPDATE SET name = excluded.name
-RETURNING id;
-
--- name: EnsureModel :one
-INSERT INTO product_models (id, tenant_id, category_id, name, created_at) VALUES (?, ?, ?, ?, ?)
-ON CONFLICT (tenant_id, category_id, name) DO UPDATE SET name = excluded.name
-RETURNING id;
-
--- name: EnsureVariant :one
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color) VALUES (?, ?, ?, ?, ?, ?)
-ON CONFLICT (tenant_id, model_id, name, color) DO UPDATE SET name = excluded.name
-RETURNING id;
-
--- name: CreateAsset :exec
-INSERT INTO assets (id, tenant_id, variant_id, model_id, display_name, created_at)
-VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.narg(variant_id),
- COALESCE(sqlc.narg(model_id), (SELECT model_id FROM product_variants WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.narg(variant_id))),
- sqlc.arg(display_name), sqlc.arg(created_at));
 
 -- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
