@@ -28,6 +28,7 @@ type SpecificationSnapshot struct {
 }
 
 type SpecificationStore interface {
+	CreateModel3DResource(context.Context, domain.Model3DResource) error
 	WithSpecificationWrite(context.Context, string, func(SpecificationStore) error) error
 	SpecificationSnapshot(context.Context, string) (SpecificationSnapshot, error)
 	PutSpecificationType(context.Context, domain.SpecificationTagType) error

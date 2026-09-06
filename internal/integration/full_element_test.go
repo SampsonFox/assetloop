@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -145,7 +146,8 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, application.CreateCategory{Name: "禁止写入"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("viewer should not mutate catalog, got %v", err)
 	}
-	localStore, err := localblob.New(t.TempDir())
+	blobRoot := t.TempDir()
+	localStore, err := localblob.New(blobRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,14 +216,54 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	assertResource(sharedAsset.ID, media.ResourceID)
 	assertReferenced(media.ResourceID)
 
-	variantResource, err := modelMedia.Upload(ctx, owner, application.UploadModel3DResource{Name: "变体共享资源", File: glb, License: "CC0"})
+	variantResource, err := modelMedia.UploadAppearance(ctx, owner, application.UploadModel3DResource{Name: "外观共享资源", File: glb, License: "CC0"}, application.SaveAppearanceDefault{ModelID: model.ID, TagIDs: []string{titanium.ID}})
 	if err != nil {
-		t.Fatalf("upload variant resource: %v", err)
+		t.Fatalf("upload appearance and bind atomically: %v", err)
 	}
-	titaniumRule, err := spec.SaveAppearance(ctx, owner, application.SaveAppearanceDefault{ModelID: model.ID, ResourceID: variantResource.ID, TagIDs: []string{titanium.ID}})
+	appearanceState, err := spec.Snapshot(ctx, owner)
 	if err != nil {
 		t.Fatal(err)
 	}
+	var titaniumRule domain.AppearanceDefault
+	for _, rule := range appearanceState.Defaults {
+		if rule.ModelID == model.ID && rule.ResourceID == variantResource.ID {
+			titaniumRule = rule
+		}
+	}
+	if titaniumRule.ID == "" {
+		t.Fatal("upload did not persist its confirmed appearance rule")
+	}
+	countBlobs := func() int {
+		t.Helper()
+		count := 0
+		if err := filepath.WalkDir(blobRoot, func(_ string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() {
+				count++
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	blobsBefore := countBlobs()
+	if _, err := modelMedia.UploadAppearance(ctx, owner, application.UploadModel3DResource{Name: "Rejected duplicate appearance", File: glb}, application.SaveAppearanceDefault{ModelID: model.ID, TagIDs: []string{titanium.ID}}); err == nil {
+		t.Fatal("duplicate appearance accepted")
+	}
+	if countBlobs() != blobsBefore {
+		t.Fatal("failed appearance upload left a new blob or removed an existing blob")
+	}
+	failedPage, err := modelMedia.ListResources(ctx, owner, application.Model3DResourceListOptions{Query: "Rejected duplicate appearance", Page: 1, PageSize: 10})
+	if err != nil || failedPage.Total != 0 {
+		t.Fatalf("failed appearance upload retained metadata: %+v %v", failedPage, err)
+	}
+	if _, err := modelMedia.UploadAppearance(ctx, viewerSession.Principal, application.UploadModel3DResource{Name: "Forbidden", File: glb}, application.SaveAppearanceDefault{ModelID: model.ID, TagIDs: []string{black.ID}}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("viewer upload: %v", err)
+	}
+	assertResource(asset.ID, variantResource.ID)
 	blackRule, err := spec.SaveAppearance(ctx, owner, application.SaveAppearanceDefault{ModelID: model.ID, ResourceID: variantResource.ID, TagIDs: []string{black.ID}})
 	if err != nil {
 		t.Fatal(err)

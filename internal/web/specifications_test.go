@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/config"
+	"github.com/SampsonFox/assetloop/internal/domain"
 	basestore "github.com/SampsonFox/assetloop/internal/store"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
 )
@@ -96,6 +98,16 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 		t.Fatal("restore failed")
 	}
 	catalog := application.NewCatalogService(adapter)
+	for _, path := range []string{"/admin/catalog/variants", "/admin/catalog/variants/00000000-0000-0000-0000-000000000001", "/admin/catalog/variants/00000000-0000-0000-0000-000000000001/delete"} {
+		result := request(t, handler, "POST", path, url.Values{"csrf_token": {csrf.Value}, "name": {"Must not create legacy spec"}}, cookies)
+		if result.Code != 303 || result.Header().Get("Location") != "/admin/catalog" {
+			t.Fatalf("legacy write not retired: %d", result.Code)
+		}
+	}
+	legacySnapshot, err := catalog.Snapshot(ctx, owner)
+	if err != nil || len(legacySnapshot.Variants) != 0 {
+		t.Fatalf("legacy write changed specifications: %+v %v", legacySnapshot, err)
+	}
 	category, err := catalog.CreateCategory(ctx, owner, application.CreateCategory{Name: "Tagged phones"})
 	if err != nil {
 		t.Fatal(err)
@@ -185,5 +197,26 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 	page = request(t, handler, "GET", "/admin/tags?view=types", nil, cookies)
 	if page.Code != 200 || !strings.Contains(page.Body.String(), "Specification tags") || !strings.Contains(page.Body.String(), "All dimensions are optional") {
 		t.Fatal("English management copy missing")
+	}
+}
+
+func TestAppearanceConflictNoticeIsEditorOnly(t *testing.T) {
+	s, err := New(nil, nil, nil, nil, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, canManage := range []bool{true, false} {
+		p := application.Principal{TenantID: "tenant", Role: application.RoleViewer, Locale: application.LocaleZhCN}
+		if canManage {
+			p.Role = application.RoleEditor
+		}
+		w := httptest.NewRecorder()
+		s.render(w, 200, "asset", pageData{Principal: &p, Asset: &domain.Asset{ID: "item", ModelID: "model", DisplayName: "Phone"}, CanManageCatalog: canManage, Binding: &application.Model3DBinding{Conflict: true}, BaseCurrency: "CNY"})
+		if w.Code != 200 {
+			t.Fatalf("render: %d %s", w.Code, w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), "多个同等具体的外观默认") != canManage {
+			t.Fatal("conflict warning visibility incorrect")
+		}
 	}
 }

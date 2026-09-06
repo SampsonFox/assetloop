@@ -145,6 +145,7 @@ type pageData struct {
 	ResourceTags       modelTagEditor
 	ResourceCategories []tagChoice
 	ReferenceURLs      map[string]string
+	Appearance         appearancePageData
 }
 
 type eventFormData struct {
@@ -237,7 +238,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -271,6 +272,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/catalog/variants", s.createVariant)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/tags", s.saveModelTags)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance", s.saveAppearance)
+	mux.HandleFunc("GET /admin/catalog/models/{id}/appearance", s.appearancePage)
+	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance/upload", s.uploadAppearance)
+	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance/legacy/{variant}/resolve", s.resolveLegacyAppearance)
 	mux.HandleFunc("POST /admin/catalog/appearance/{id}/delete", s.deleteAppearance)
 	mux.HandleFunc("POST /admin/catalog/variants/{id}", s.updateVariant)
 	mux.HandleFunc("POST /admin/catalog/variants/{id}/delete", s.deleteVariant)
@@ -439,6 +443,10 @@ func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.FormValue("flow") == "asset" {
+		if s.options.Specifications != nil {
+			http.Redirect(w, r, "/assets/new?model_id="+model.ID, http.StatusSeeOther)
+			return
+		}
 		s.redirectAfterCatalogCreate(w, r, "variant-drawer", "model_id", model.ID)
 		return
 	}
@@ -462,6 +470,9 @@ func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
+	if s.retiredVariantWrite(w, r) {
+		return
+	}
 	if !s.verifyCSRF(w, r) {
 		return
 	}
@@ -485,6 +496,9 @@ func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
+	if s.retiredVariantWrite(w, r) {
+		return
+	}
 	if !s.verifyCSRF(w, r) {
 		return
 	}
@@ -505,6 +519,9 @@ func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteVariant(w http.ResponseWriter, r *http.Request) {
+	if s.retiredVariantWrite(w, r) {
+		return
+	}
 	if !s.verifyCSRF(w, r) {
 		return
 	}

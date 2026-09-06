@@ -113,7 +113,8 @@ The approved target is `ItemCategory -> ProductModel -> Asset`. Product identiti
 remain entities; only specification descriptions become reusable typed tags.
 Implementation is staged: persistence, application policies and the tag dictionary,
 item selection and resource-description Web paths exist. Appearance-management UI
-and legacy-entry retirement remain in progress; the live preview is still on the
+and transactional upload/binding are connected; legacy-read cleanup and browser
+acceptance remain in progress. The live preview is still on the
 previous schema until the complete integrated upgrade is verified.
 
 - Tag types own single/multiple selection and default appearance relevance; tag
@@ -359,6 +360,13 @@ and unresolved legacy mappings. Retained variant resource IDs are compatibility
 evidence, not live references. Resolving a legacy mapping removes its protection,
 but does not erase the mapping or change an existing asset override. Resource tag
 and category edits are descriptive and never rewrite confirmed bindings.
+
+`ModelMediaService.UploadAppearance` reuses GLB validation and BlobStore verification,
+then creates the resource and confirmed appearance rule under the specification
+write transaction. The ordinary rule editor and upload path call the same in-transaction
+rule validation. An ambiguous commit preserves bytes unless a separate read proves
+the resource did not persist. Legacy acknowledgement is constrained to the actor's
+tenant and specified product model; it preserves the historical mapping and item pins.
 
 Uploads write and verify new resource-specific blobs before transactionally creating metadata and binding the target. Replacing a binding never deletes the previous resource. A referenced resource cannot be deleted: binding and deletion share a transaction isolation protocol, and pending-deletion resources reject new bindings. Unreferenced deletion first persists pending state, then removes the blob and finally the row; failures remain visible and retryable. No distributed transaction or background cleanup service is introduced. Authenticated reads are proxied by Web; source URL, author, and license remain descriptive metadata.
 

@@ -45,6 +45,16 @@ type AppearanceCandidateList struct {
 	Total      int
 }
 
+func (s *SpecificationService) Model(ctx context.Context, actor Principal, id string) (domain.ProductModel, error) {
+	if err := actor.Require(CapabilityView); err != nil {
+		return domain.ProductModel{}, err
+	}
+	if err := validID("model ID", id); err != nil {
+		return domain.ProductModel{}, err
+	}
+	return s.store.GetProductModel(ctx, actor.TenantID, id)
+}
+
 func (s *SpecificationService) Asset(ctx context.Context, actor Principal, id string) (domain.Asset, error) {
 	if err := actor.Require(CapabilityView); err != nil {
 		return domain.Asset{}, err

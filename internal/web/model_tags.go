@@ -15,6 +15,27 @@ type tagChoice struct {
 	Selected, Enabled bool
 }
 
+// Old bookmarks and forms lead back to the catalog. They must never maintain a
+// second specification tree once typed selections are enabled.
+func (s *Server) retiredVariantWrite(w http.ResponseWriter, r *http.Request) bool {
+	if s.options.Specifications == nil {
+		return false
+	}
+	actor, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return true
+	}
+	if !actor.Can(application.CapabilityManageCatalog) {
+		s.renderForbidden(w, actor, "error.forbidden_catalog")
+		return true
+	}
+	if !s.verifyCSRF(w, r) {
+		return true
+	}
+	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+	return true
+}
+
 func (s *Server) saveAppearance(w http.ResponseWriter, r *http.Request) {
 	if !s.verifyCSRF(w, r) {
 		return
@@ -34,7 +55,11 @@ func (s *Server) saveAppearance(w http.ResponseWriter, r *http.Request) {
 			s.renderForbidden(w, actor, "error.forbidden_asset")
 			return
 		}
-		s.renderCatalog(w, r, 422, actor, s.userError(actor.Locale, err))
+		s.renderAppearance(w, r, actor, 422, s.userError(actor.Locale, err))
+		return
+	}
+	if r.PostForm.Get("return_appearance") == "1" {
+		http.Redirect(w, r, "/admin/catalog/models/"+rule.ModelID+"/appearance?rule_id="+rule.ID, http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/admin/catalog?"+url.Values{"dialog": {"model-drawer"}, "edit_model_id": {rule.ModelID}, "appearance_rule_id": {rule.ID}}.Encode(), http.StatusSeeOther)
@@ -59,6 +84,12 @@ func (s *Server) deleteAppearance(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalog(w, r, 422, actor, s.userError(actor.Locale, err))
 		return
 	}
+	if modelID := r.PostForm.Get("return_model_id"); modelID != "" {
+		if _, err := s.options.Specifications.Model(r.Context(), actor, modelID); err == nil {
+			http.Redirect(w, r, "/admin/catalog/models/"+modelID+"/appearance", http.StatusSeeOther)
+			return
+		}
+	}
 	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
 }
 
@@ -68,9 +99,10 @@ type tagDimension struct {
 	Choices              []tagChoice
 }
 type modelTagEditor struct {
-	ModelID    string
-	Dimensions []tagDimension
-	Summary    []string
+	ModelID     string
+	Dimensions  []tagDimension
+	Summary     []string
+	LegacyCount int
 }
 
 func modelTagEditors(state application.SpecificationSnapshot, tenant string, models []domain.ProductModel) []modelTagEditor {
@@ -83,6 +115,11 @@ func modelTagEditors(state application.SpecificationSnapshot, tenant string, mod
 }
 func modelTagEditorFor(state application.SpecificationSnapshot, tenant, modelID string, ids []string, overrides map[string]bool) modelTagEditor {
 	result := modelTagEditor{ModelID: modelID}
+	for _, mapping := range state.LegacyMedia {
+		if mapping.ModelID == modelID && !mapping.Resolved {
+			result.LegacyCount++
+		}
+	}
 	selected := map[string]bool{}
 	for _, id := range ids {
 		selected[id] = true

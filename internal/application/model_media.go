@@ -111,6 +111,35 @@ func (s *ModelMediaService) UploadAndBind(ctx context.Context, actor Principal, 
 	return s.upload(ctx, actor, cmd, binding)
 }
 func (s *ModelMediaService) upload(ctx context.Context, actor Principal, cmd UploadModel3DResource, binding BindModel3DResource) (domain.Model3DResource, error) {
+	return s.uploadWithCommit(ctx, actor, cmd, func(media domain.Model3DResource) error {
+		if binding.Kind == "" {
+			return s.store.CreateModel3DResource(ctx, media)
+		}
+		binding.ResourceID = media.ID
+		return s.store.CreateAndBindModel3DResource(ctx, media, binding)
+	})
+}
+
+// UploadAppearance commits the verified immutable resource and its confirmed
+// rule together. Validation failure rolls both back before cleaning only the new blob.
+func (s *ModelMediaService) UploadAppearance(ctx context.Context, actor Principal, cmd UploadModel3DResource, binding SaveAppearanceDefault) (domain.Model3DResource, error) {
+	return s.uploadWithCommit(ctx, actor, cmd, func(media domain.Model3DResource) error {
+		return s.store.WithSpecificationWrite(ctx, actor.TenantID, func(store SpecificationStore) error {
+			state, err := store.SpecificationSnapshot(ctx, actor.TenantID)
+			if err != nil {
+				return err
+			}
+			if err := store.CreateModel3DResource(ctx, media); err != nil {
+				return err
+			}
+			binding.ResourceID = media.ID
+			_, err = saveAppearanceInTransaction(ctx, store, state, actor, binding)
+			return err
+		})
+	})
+}
+
+func (s *ModelMediaService) uploadWithCommit(ctx context.Context, actor Principal, cmd UploadModel3DResource, commit func(domain.Model3DResource) error) (domain.Model3DResource, error) {
 	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return domain.Model3DResource{}, err
 	}
@@ -165,12 +194,7 @@ func (s *ModelMediaService) upload(ctx context.Context, actor Principal, cmd Upl
 		return domain.Model3DResource{}, errors.New("stored GLB checksum mismatch")
 	}
 
-	if binding.Kind == "" {
-		err = s.store.CreateModel3DResource(ctx, media)
-	} else {
-		binding.ResourceID = media.ID
-		err = s.store.CreateAndBindModel3DResource(ctx, media, binding)
-	}
+	err = commit(media)
 	if err != nil {
 		// Commit errors may be ambiguous. Delete bytes only after positively confirming rollback.
 		probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)

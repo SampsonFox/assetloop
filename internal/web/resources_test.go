@@ -27,6 +27,11 @@ func resourceSession(t *testing.T, handler http.Handler) ([]*http.Cookie, string
 
 func uploadWebResource(t *testing.T, h http.Handler, fields url.Values, data []byte, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
+	return uploadWebResourceAt(t, h, "/admin/3d", fields, data, cookies)
+}
+
+func uploadWebResourceAt(t *testing.T, h http.Handler, path string, fields url.Values, data []byte, cookies []*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	for key, values := range fields {
@@ -46,7 +51,7 @@ func uploadWebResource(t *testing.T, h http.Handler, fields url.Values, data []b
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	r := httptest.NewRequest(http.MethodPost, "/admin/3d", &body)
+	r := httptest.NewRequest(http.MethodPost, path, &body)
 	r.Header.Set("Content-Type", w.FormDataContentType())
 	for _, cookie := range cookies {
 		r.AddCookie(cookie)
@@ -153,6 +158,28 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	if strings.Contains(description, "kind=appearance") {
 		t.Fatal("appearance reference must link to the model editor, not a nonexistent binding picker")
 	}
+	appearancePath := "/admin/catalog/models/" + model + "/appearance"
+	candidates := get(appearancePath + "?search=1&tag_ids=" + blue)
+	assertStatus(candidates, 200)
+	for _, want := range []string{"外观描述齐全", "appearance resource", `value="` + blue + `" checked`, `name="return_appearance"`, "已确认绑定"} {
+		if !strings.Contains(candidates.Body.String(), want) {
+			t.Fatalf("appearance candidate UI missing %s", want)
+		}
+	}
+	if strings.Contains(candidates.Body.String(), ">asset resource</td>") {
+		t.Fatal("uncategorized resource recommended")
+	}
+	manual := get(appearancePath + "?search=1&manual=1&tag_ids=" + blue)
+	assertStatus(manual, 200)
+	if !strings.Contains(manual.Body.String(), ">asset resource</td>") || !strings.Contains(manual.Body.String(), "未按标签匹配") {
+		t.Fatal("manual resource selection unavailable")
+	}
+	updatedRule := post(appearancePath, url.Values{"return_appearance": {"1"}, "rule_id": {appearanceRule}, "resource_id": {ids[1]}, "tag_ids": {blue}})
+	assertStatus(updatedRule, 303)
+	if updatedRule.Header().Get("Location") != appearancePath+"?rule_id="+appearanceRule {
+		t.Fatal("appearance save lost editor context")
+	}
+	assertStatus(get(appearancePath+"?rule_id=00000000-0000-0000-0000-000000000001"), 404)
 	assertStatus(request(t, h, "POST", descriptionPath, url.Values{"tag_ids": {blue}}, cookies), 403)
 	invalid := post(descriptionPath, url.Values{"tag_ids": {blue}, "category_ids": {"00000000-0000-0000-0000-000000000001"}})
 	assertStatus(invalid, 422)
@@ -213,6 +240,26 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	}
 	if strings.Contains(get("/admin/3d").Body.String(), "Must not persist") {
 		t.Fatal("failed atomic upload binding must not create a library resource")
+	}
+	// Appearance upload is the same verified-blob/atomic-metadata workflow.
+	badAppearance := uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"csrf_token": {csrf}, "name": {"Rejected appearance"}}, webTestGLB(), cookies)
+	assertStatus(badAppearance, 422)
+	if strings.Contains(get("/admin/3d").Body.String(), "Rejected appearance") {
+		t.Fatal("invalid appearance upload left a resource row")
+	}
+	assertStatus(uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"name": {"Missing CSRF"}, "tag_ids": {blue}}, webTestGLB(), cookies), 403)
+	boundAppearance := uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"csrf_token": {csrf}, "name": {"Uploaded appearance"}, "tag_ids": {blue}}, webTestGLB(), cookies)
+	assertStatus(boundAppearance, 303)
+	if !bytes.Equal(get(assetPath+"/model.glb").Body.Bytes(), webTestGLB()) {
+		t.Fatal("uploaded appearance not inherited")
+	}
+	duplicate := uploadWebResourceAt(t, h, appearancePath+"/upload", url.Values{"csrf_token": {csrf}, "name": {"Duplicate appearance"}, "tag_ids": {blue}}, webTestGLB(), cookies)
+	assertStatus(duplicate, 422)
+	if strings.Contains(get("/admin/3d").Body.String(), "Duplicate appearance") {
+		t.Fatal("duplicate conditions retained new resource")
+	}
+	if !strings.Contains(duplicate.Body.String(), `value="`+blue+`" checked`) || !strings.Contains(duplicate.Body.String(), `value="Duplicate appearance"`) {
+		t.Fatal("failed upload lost draft")
 	}
 }
 
@@ -289,6 +336,14 @@ func TestResourceDeleteFailureCanRetry(t *testing.T) {
 func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 	h := newTestHandlerWithBlob(t, nil, true)
 	owner, csrf := resourceSession(t, h)
+	request(t, h, "POST", "/admin/catalog/categories", url.Values{"csrf_token": {csrf}, "name": {"Viewer catalog"}, "icon_key": {"smartphone"}}, owner)
+	catalogPage := request(t, h, "GET", "/admin/catalog", nil, owner)
+	categoryID := optionID(t, catalogPage.Body.String(), "Viewer catalog")
+	createdModel := request(t, h, "POST", "/admin/catalog/models", url.Values{"csrf_token": {csrf}, "category_id": {categoryID}, "name": {"Viewer phone"}, "flow": {"asset"}}, owner)
+	if createdModel.Code != 303 || !strings.HasPrefix(createdModel.Header().Get("Location"), "/assets/new?model_id=") {
+		t.Fatal("inline model creation still requires a legacy specification")
+	}
+	modelID := strings.TrimPrefix(createdModel.Header().Get("Location"), "/assets/new?model_id=")
 	upload := uploadWebResource(t, h, url.Values{"csrf_token": {csrf}, "name": {"Viewer resource"}, "model_3d_author": {"Visible author"}}, webTestGLB(), owner)
 	if upload.Code != 303 {
 		t.Fatal(upload.Body.String())
@@ -303,6 +358,16 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 	preferences := request(t, h, http.MethodPost, "/preferences", url.Values{"csrf_token": {csrf}, "locale": {"en"}, "theme": {"light"}, "accent": {"emerald"}, "return_to": {"/admin/3d"}}, viewer)
 	if preferences.Code != 303 {
 		t.Fatal(preferences.Body.String())
+	}
+	appearancePath := "/admin/catalog/models/" + modelID + "/appearance"
+	appearancePage := request(t, h, "GET", appearancePath, nil, viewer)
+	if appearancePage.Code != 200 || !strings.Contains(appearancePage.Body.String(), "Appearance defaults") || strings.Contains(appearancePage.Body.String(), `method="post" action="`+appearancePath) {
+		t.Fatal("viewer appearance page is not localized and read-only")
+	}
+	for _, target := range []string{appearancePath, appearancePath + "/upload", appearancePath + "/legacy/00000000-0000-0000-0000-000000000001/resolve"} {
+		if response := request(t, h, "POST", target, url.Values{"csrf_token": {csrf}}, viewer); response.Code != 403 {
+			t.Fatalf("viewer appearance mutation %s: %d", target, response.Code)
+		}
 	}
 	for _, target := range []string{"/admin/3d", path, path + "/model.glb"} {
 		page := request(t, h, http.MethodGet, target, nil, viewer)

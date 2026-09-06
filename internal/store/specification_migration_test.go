@@ -82,8 +82,10 @@ func TestSpecificationMigration(t *testing.T) {
 			// Retained variant columns are audit data, not live references. Only
 			// unresolved legacy mappings and current bindings protect the GLB.
 			var media application.ModelMediaStore = sqlite.New(db)
+			var specificationStore application.SpecificationStore = sqlite.New(db)
 			if driver == "postgres" {
 				media = postgres.New(db)
+				specificationStore = postgres.New(db)
 			}
 			refs, err := media.Model3DReferences(context.Background(), resourceUpgradeTenant, secondResource)
 			if err != nil || len(refs) != 2 {
@@ -104,7 +106,19 @@ func TestSpecificationMigration(t *testing.T) {
 			if err := media.MarkModel3DResourcePendingDelete(context.Background(), resourceUpgradeTenant, secondResource); err == nil {
 				t.Fatal("unresolved legacy mapping did not protect resource")
 			}
-			mustSpecificationExec(t, db, "UPDATE legacy_variant_media SET resolved=TRUE WHERE resource_id='"+secondResource+"'")
+			specifications := application.NewSpecificationService(specificationStore)
+			actor := application.Principal{TenantID: resourceUpgradeTenant, UserID: resourceUpgradeAsset, Role: application.RoleOwner}
+			if err := specifications.ResolveLegacyMapping(context.Background(), actor, secondVariant, secondVariant); err == nil {
+				t.Fatal("wrong model resolved legacy mapping")
+			}
+			viewer := actor
+			viewer.Role = application.RoleViewer
+			if err := specifications.ResolveLegacyMapping(context.Background(), viewer, resourceUpgradeModel, secondVariant); err == nil {
+				t.Fatal("viewer resolved legacy mapping")
+			}
+			if err := specifications.ResolveLegacyMapping(context.Background(), actor, resourceUpgradeModel, secondVariant); err != nil {
+				t.Fatal(err)
+			}
 			if err := media.MarkModel3DResourcePendingDelete(context.Background(), resourceUpgradeTenant, secondResource); err != nil {
 				t.Fatalf("resolved legacy mapping blocked deletion: %v", err)
 			}

@@ -41,6 +41,7 @@
 {{define "model-tags"}}{{$s := .Strings}}
 <section data-model-tags hidden><h3>{{t $s "tags.allowed"}}</h3><p class="muted">{{t $s "tags.allowed_help"}}</p><a href="/admin/tags">{{t $s "tags.title"}}</a>
 {{range .ModelTagEditors}}{{$model := .}}
+<p data-model-tag-group="{{.ModelID}}" hidden><a href="/admin/catalog/models/{{.ModelID}}/appearance">{{t $s "appearance.title"}}</a>{{if .LegacyCount}} · <span>{{t $s "appearance.legacy"}} {{.LegacyCount}}</span>{{end}}</p>
 <form class="stack model-tag-editor" action="/admin/catalog/models/{{.ModelID}}/tags" method="post" data-model-tag-group="{{.ModelID}}" hidden data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
 {{range .Dimensions}}<fieldset><legend>{{.Name}}</legend><div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div>

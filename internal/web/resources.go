@@ -68,6 +68,10 @@ func (s *Server) renderResources(w http.ResponseWriter, r *http.Request, p appli
 	if !validBindingKind(kind) {
 		kind, id, name = "", "", ""
 	}
+	if kind == "variant" && s.options.Specifications != nil {
+		http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+		return
+	}
 	var binding *application.Model3DBinding
 	var boundResource *domain.Model3DResource
 	if kind != "" {
@@ -153,6 +157,10 @@ func (s *Server) uploadResource(w http.ResponseWriter, r *http.Request) {
 	if !s.verifyCSRF(w, r) {
 		return
 	}
+	if r.FormValue("kind") == "variant" && s.options.Specifications != nil {
+		http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+		return
+	}
 	draft := resourceDraft(r)
 	file, _, err := r.FormFile("model_3d")
 	if err != nil {
@@ -211,6 +219,10 @@ func (s *Server) bindResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind, id := r.PathValue("kind"), r.PathValue("id")
+	if kind == "variant" && s.options.Specifications != nil {
+		http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
+		return
+	}
 	err := s.modelMedia.Bind(r.Context(), p, application.BindModel3DResource{Kind: kind, TargetID: id, ResourceID: r.FormValue("resource_id")})
 	if err != nil {
 		r.Form.Set("kind", kind)

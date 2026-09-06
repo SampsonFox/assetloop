@@ -301,6 +301,16 @@ func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, c
 func (s *SpecificationService) SaveAppearance(ctx context.Context, actor Principal, cmd SaveAppearanceDefault) (domain.AppearanceDefault, error) {
 	var result domain.AppearanceDefault
 	err := s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+		var err error
+		result, err = saveAppearanceInTransaction(ctx, store, state, actor, cmd)
+		return err
+	})
+	return result, err
+}
+
+func saveAppearanceInTransaction(ctx context.Context, store SpecificationStore, state SpecificationSnapshot, actor Principal, cmd SaveAppearanceDefault) (domain.AppearanceDefault, error) {
+	var result domain.AppearanceDefault
+	err := func() error {
 		if err := validID("model ID", cmd.ModelID); err != nil {
 			return err
 		}
@@ -355,7 +365,7 @@ func (s *SpecificationService) SaveAppearance(ctx context.Context, actor Princip
 			}
 		}
 		return nil
-	})
+	}()
 	return result, err
 }
 
@@ -370,10 +380,10 @@ func (s *SpecificationService) DeleteAppearance(ctx context.Context, actor Princ
 	})
 }
 
-func (s *SpecificationService) ResolveLegacyMapping(ctx context.Context, actor Principal, variantID string) error {
+func (s *SpecificationService) ResolveLegacyMapping(ctx context.Context, actor Principal, modelID, variantID string) error {
 	return s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
 		for _, mapping := range state.LegacyMedia {
-			if mapping.VariantID == variantID {
+			if mapping.VariantID == variantID && mapping.ModelID == modelID {
 				return store.ResolveLegacyMedia(ctx, actor.TenantID, variantID)
 			}
 		}
