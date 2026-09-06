@@ -450,7 +450,7 @@ WHERE e.tenant_id = sqlc.arg(tenant_id) AND e.asset_id = sqlc.arg(asset_id)
       WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
   ))
   AND (sqlc.arg(search_query)::text = '' OR e.notes ILIKE '%' || sqlc.arg(search_query)::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || sqlc.arg(search_query)::text || '%')
-  AND (sqlc.arg(event_type_filter)::text = '' OR e.event_type = sqlc.arg(event_type_filter)::text)
+  AND (sqlc.arg(event_type_filter)::text = '' OR e.event_type_id::text = sqlc.arg(event_type_filter)::text)
 ORDER BY
   CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'asc' THEN e.occurred_at END ASC,
   CASE WHEN sqlc.arg(sort_key)::text = 'occurred' AND sqlc.arg(sort_direction)::text = 'desc' THEN e.occurred_at END DESC,

@@ -1267,7 +1267,7 @@ WHERE e.tenant_id = $1 AND e.asset_id = $2
       WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
   ))
   AND ($4::text = '' OR e.notes ILIKE '%' || $4::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || $4::text || '%')
-  AND ($5::text = '' OR e.event_type = $5::text)
+  AND ($5::text = '' OR e.event_type_id::text = $5::text)
 ORDER BY
   CASE WHEN $6::text = 'occurred' AND $7::text = 'asc' THEN e.occurred_at END ASC,
   CASE WHEN $6::text = 'occurred' AND $7::text = 'desc' THEN e.occurred_at END DESC,
