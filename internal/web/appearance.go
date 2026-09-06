@@ -185,5 +185,5 @@ func (s *Server) renderAppearance(w http.ResponseWriter, r *http.Request, p appl
 		return "/admin/catalog/models/" + model.ID + "/appearance?" + q.Encode()
 	})
 	draft := resourceDraft(r)
-	s.render(w, status, "appearance", pageData{Title: textFor(p.Locale, "appearance.title"), Principal: &p, CSRFToken: s.ensureCSRF(w, r), CanManageCatalog: p.Can(application.CapabilityManageCatalog), Error: message, Appearance: view, Resources: resources, Resource: &draft, TableQuery: query, TableTotal: total, TablePage: page, TableTotalPages: pages, TablePreviousURL: previous, TableNextURL: next})
+	s.render(w, status, "appearance", pageData{Title: textFor(p.Locale, "appearance.title"), ReturnTo: r.URL.RequestURI(), Principal: &p, CSRFToken: s.ensureCSRF(w, r), CanManageCatalog: p.Can(application.CapabilityManageCatalog), Error: message, Appearance: view, Resources: resources, Resource: &draft, TableQuery: query, TableTotal: total, TablePage: page, TableTotalPages: pages, TablePreviousURL: previous, TableNextURL: next})
 }

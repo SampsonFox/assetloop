@@ -40,6 +40,9 @@ func (s *Store) BootstrapAuth(ctx context.Context, tenant application.Tenant, us
 	if err := createUserAndMembershipPostgres(ctx, q, user, membership); err != nil {
 		return err
 	}
+	if err := (&Store{db: s.db, tx: tx}).PutSpecificationType(ctx, application.InitialColorTagType(tenant, user.Locale)); err != nil {
+		return err
+	}
 	eventParams, err := postgresSecurityEvent(event)
 	if err != nil {
 		return err

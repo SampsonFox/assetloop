@@ -413,8 +413,12 @@ button[aria-busy="true"]::after { content:" …"; }
 .tag-choices { display:flex; flex-wrap:wrap; gap:8px 18px; }
 .checkbox { display:flex; align-items:center; gap:8px; font-weight:500; }
 .checkbox input[type="checkbox"] { width:18px; height:18px; min-height:0; margin:0; flex:none; accent-color:var(--accent); }
-.model-tag-editor fieldset,.resource-tag-fields fieldset,#resource-tags fieldset { min-width:0; margin:0; padding:14px; border:1px solid var(--line); border-radius:12px; }
-.model-tag-editor legend,.resource-tag-fields legend,#resource-tags legend { padding-inline:5px; font-weight:600; }
+.model-tag-editor fieldset,.resource-tag-fields fieldset,#resource-tags fieldset,.asset-tag-dimension { min-width:0; margin:0; padding:14px; border:1px solid var(--line); border-radius:12px; }
+.model-tag-editor legend,.resource-tag-fields legend,#resource-tags legend,.asset-tag-dimension legend { padding-inline:5px; font-weight:600; }
+.asset-tag-dimension + .asset-tag-dimension { margin-top:14px; }
+.specification-navigation { display:flex; flex-wrap:wrap; align-items:center; gap:20px; margin-block:0 20px; }
+.specification-navigation a[aria-current="page"] { color:var(--text); text-decoration-thickness:2px; text-underline-offset:6px; }
+.specification-table th:last-child,.specification-table td:last-child { white-space:nowrap; }
 .model-tag-editor fieldset>label { margin-top:12px; }
 .resource-tag-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:16px; }
 .appearance-rules { list-style:none; padding:0; }

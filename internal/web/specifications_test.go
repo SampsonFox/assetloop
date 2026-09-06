@@ -48,6 +48,9 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 	if page.Code != 200 || !strings.Contains(page.Body.String(), "规格标签管理") {
 		t.Fatalf("page: %d %s", page.Code, page.Body.String())
 	}
+	if !strings.Contains(page.Body.String(), `name="return_to" value="/admin/tags?view=types"`) {
+		t.Fatal("preferences must return to the current tag page")
+	}
 	csrf := responseCookie(t, page, csrfCookie)
 	cookies := []*http.Cookie{session, csrf}
 	denied := request(t, handler, "POST", "/admin/tags/types", url.Values{"name": {"Storage"}, "enabled": {"1"}}, cookies)
@@ -130,6 +133,14 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 		t.Fatalf("asset tag form: %d %s", page.Code, page.Body.String())
 	}
 	assetForm := url.Values{"csrf_token": {csrf.Value}, "model_id": {model.ID}, "tag_ids": {tag.ID, ""}, "display_name": {"My tagged phone"}, "notes": {"Preserve notes"}}
+	page = request(t, handler, "GET", "/assets/new?"+url.Values{"model_id": {model.ID}, "tag_ids": {tag.ID}}.Encode(), nil, cookies)
+	if page.Code != 200 || !strings.Contains(page.Body.String(), `data-tag-name="128GB" selected`) {
+		t.Fatalf("tagged draft selection: %d %s", page.Code, page.Body.String())
+	}
+	page = request(t, handler, "GET", "/assets/new?"+url.Values{"model_id": {model.ID}, "variant_id": {"00000000-0000-0000-0000-000000000001"}}.Encode(), nil, cookies)
+	if page.Code != 422 {
+		t.Fatalf("ambiguous legacy/new draft accepted: %d", page.Code)
+	}
 	response = request(t, handler, "POST", "/assets", assetForm, cookies)
 	if response.Code != 303 {
 		t.Fatalf("create tagged item: %d %s", response.Code, response.Body.String())
@@ -162,11 +173,22 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 	if page.Code != 200 || !strings.Contains(page.Body.String(), "128 GB") {
 		t.Fatal("list description did not resolve current tag label")
 	}
+	page = request(t, handler, "GET", "/?q=128+GB", nil, cookies)
+	if page.Code != 200 || !strings.Contains(page.Body.String(), `href="`+assetURL+`"`) {
+		t.Fatal("list search did not use the current tag label")
+	}
 	allowed.Del("tag_ids")
 	allowed.Del("appearance_" + kind.ID)
 	response = request(t, handler, "POST", "/admin/catalog/models/"+model.ID+"/tags", allowed, cookies)
 	if response.Code != 422 || !strings.Contains(response.Body.String(), "请先处理引用") {
 		t.Fatal("used allowance removal accepted")
+	}
+	if !strings.Contains(response.Body.String(), `href="/assets/`+assetID+`/edit"`) || !strings.Contains(response.Body.String(), "data-dialog-initial-open") {
+		t.Fatal("allowance error must open the editor and link to its blocking references")
+	}
+	page = request(t, handler, "GET", "/admin/catalog?"+url.Values{"q": {"no model matches this"}, "dialog": {"model-drawer"}, "edit_model_id": {model.ID}}.Encode(), nil, cookies)
+	if page.Code != 200 || !strings.Contains(page.Body.String(), `data-edit-model-id="`+model.ID+`"`) || !strings.Contains(page.Body.String(), `data-model-tag-group="`+model.ID+`"`) || strings.Contains(page.Body.String(), "<tbody>") {
+		t.Fatalf("off-page editor must not change list results: %d %s", page.Code, page.Body.String())
 	}
 	create.Set("name", "128GB")
 	response = request(t, handler, "POST", "/admin/tags/values/"+tag.ID, create, cookies)

@@ -271,7 +271,7 @@
   const params = new URLSearchParams(window.location.search);
   const initialDialog = params.get("dialog");
   const initialModelId = params.get("edit_model_id");
-  let opener = [...document.querySelectorAll("[data-dialog-open]")].find(
+    let opener = document.querySelector("[data-dialog-initial-open]") || [...document.querySelectorAll("[data-dialog-open]")].find(
     (candidate) => candidate.dataset.dialogOpen === initialDialog
       && (!initialModelId || candidate.dataset.editModelId === initialModelId),
   );

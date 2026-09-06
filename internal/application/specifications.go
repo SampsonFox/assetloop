@@ -57,6 +57,16 @@ func (s *SpecificationService) Snapshot(ctx context.Context, actor Principal) (S
 	}
 	return s.store.SpecificationSnapshot(ctx, actor.TenantID)
 }
+
+// InitialColorTagType is part of tenant bootstrap policy. The auth Store persists
+// it in the same transaction as the tenant; no tag is selected on any item.
+func InitialColorTagType(tenant Tenant, locale Locale) domain.SpecificationTagType {
+	name := "颜色"
+	if locale == LocaleEn {
+		name = "Color"
+	}
+	return domain.SpecificationTagType{ID: newID(), TenantID: tenant.ID, SystemCode: "color", Name: name, NormalizedName: domain.NormalizeSpecificationName(name), Enabled: true, AffectsAppearance: true, CreatedAt: tenant.CreatedAt, UpdatedAt: tenant.CreatedAt}
+}
 func (s *SpecificationService) write(ctx context.Context, actor Principal, fn func(SpecificationStore, SpecificationSnapshot) error) error {
 	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return err
@@ -226,19 +236,10 @@ func (s *SpecificationService) SaveModel(ctx context.Context, actor Principal, c
 func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, cmd SaveSpecificationAsset) (domain.Asset, error) {
 	var result domain.Asset
 	err := s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
-		if cmd.VariantID != "" {
-			if cmd.ModelID != "" || cmd.TagIDs != nil {
-				return NewInputError("validation.specification_ambiguous")
-			}
-			for _, link := range state.Links {
-				if link.Kind == "legacy" && link.TargetID == cmd.VariantID {
-					cmd.ModelID = link.ModelID
-					cmd.TagIDs = append(cmd.TagIDs, link.TagID)
-				}
-			}
-			if cmd.ModelID == "" {
-				return NewInputError("validation.specification_missing")
-			}
+		var err error
+		cmd, err = state.resolveAssetSelection(cmd)
+		if err != nil {
+			return err
 		}
 		if err := validID("model ID", cmd.ModelID); err != nil {
 			return err

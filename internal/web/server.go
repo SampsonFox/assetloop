@@ -58,94 +58,95 @@ type Server struct {
 }
 
 type pageData struct {
-	Title              string
-	Locale             application.Locale
-	Theme              application.Theme
-	Accent             application.Accent
-	Strings            map[string]string
-	ReturnTo           string
-	CSRFToken          string
-	Error              string
-	Principal          *application.Principal
-	Members            []application.Member
-	Categories         []domain.ItemCategory
-	Models             []domain.ProductModel
-	Variants           []domain.ProductVariant
-	Assets             []domain.Asset
-	AssetSummaries     map[string]domain.AssetSummary
-	Asset              *domain.Asset
-	CanManageCatalog   bool
-	Events             []domain.AssetEvent
-	Summary            domain.AssetSummary
-	Cost               domain.CostDashboard
-	BaseCurrency       string
-	BaseCurrencyLocked bool
-	NowValue           string
-	CanManageLifecycle bool
-	EventTypes         []domain.AssetEventTypeDefinition
-	EditingEventType   *domain.AssetEventTypeDefinition
-	EventTypeError     string
-	EventTypeForm      eventTypeFormData
-	AssetCount         int
-	TotalExpenseMinor  int64
-	TotalIncomeMinor   int64
-	TotalNetMinor      int64
-	AssetView          string
-	AssetQuery         string
-	AssetStatus        string
-	AssetSort          string
-	AssetDirection     string
-	AssetSortURLs      map[string]string
-	AssetTotal         int
-	AssetPage          int
-	AssetTotalPages    int
-	AssetPreviousURL   string
-	AssetNextURL       string
-	AssetListURL       string
-	AssetGridURL       string
-	AssetClearURL      string
-	AssetHasFilters    bool
-	AssetAdvanced      bool
-	TableQuery         string
-	TableFilter        string
-	TableSort          string
-	TableDirection     string
-	TableShowVoided    bool
-	TableAdvanced      bool
-	TableTotal         int
-	TablePage          int
-	TableTotalPages    int
-	TablePreviousURL   string
-	TableNextURL       string
-	TableClearURL      string
-	TableHasFilters    bool
-	TableSortURLs      map[string]string
-	CategoryIcons      []application.CategoryIconOption
-	CatalogFlow        string
-	AssetFormAction    string
-	AssetFormEditing   bool
-	NavAssets          bool
-	NavCatalog         bool
-	NavMembers         bool
-	EventForm          eventFormData
-	Model3D            *domain.ProductModel3D
-	Resources          []domain.Model3DResource
-	Resource           *domain.Model3DResource
-	References         []application.Model3DReference
-	BindingKind        string
-	BindingID          string
-	BindingName        string
-	Binding            *application.Model3DBinding
-	BoundResource      *domain.Model3DResource
-	HasSpecifications  bool
-	Specifications     specificationPageData
-	ModelTagEditors    []modelTagEditor
-	TagReferences      []application.SpecificationLink
-	AssetTagEditors    []modelTagEditor
-	ResourceTags       modelTagEditor
-	ResourceCategories []tagChoice
-	ReferenceURLs      map[string]string
-	Appearance         appearancePageData
+	Title               string
+	Locale              application.Locale
+	Theme               application.Theme
+	Accent              application.Accent
+	Strings             map[string]string
+	ReturnTo            string
+	CSRFToken           string
+	Error               string
+	Principal           *application.Principal
+	Members             []application.Member
+	Categories          []domain.ItemCategory
+	Models              []domain.ProductModel
+	Variants            []domain.ProductVariant
+	Assets              []domain.Asset
+	AssetSummaries      map[string]domain.AssetSummary
+	Asset               *domain.Asset
+	CanManageCatalog    bool
+	Events              []domain.AssetEvent
+	Summary             domain.AssetSummary
+	Cost                domain.CostDashboard
+	BaseCurrency        string
+	BaseCurrencyLocked  bool
+	NowValue            string
+	CanManageLifecycle  bool
+	EventTypes          []domain.AssetEventTypeDefinition
+	EditingEventType    *domain.AssetEventTypeDefinition
+	EventTypeError      string
+	EventTypeForm       eventTypeFormData
+	AssetCount          int
+	TotalExpenseMinor   int64
+	TotalIncomeMinor    int64
+	TotalNetMinor       int64
+	AssetView           string
+	AssetQuery          string
+	AssetStatus         string
+	AssetSort           string
+	AssetDirection      string
+	AssetSortURLs       map[string]string
+	AssetTotal          int
+	AssetPage           int
+	AssetTotalPages     int
+	AssetPreviousURL    string
+	AssetNextURL        string
+	AssetListURL        string
+	AssetGridURL        string
+	AssetClearURL       string
+	AssetHasFilters     bool
+	AssetAdvanced       bool
+	TableQuery          string
+	TableFilter         string
+	TableSort           string
+	TableDirection      string
+	TableShowVoided     bool
+	TableAdvanced       bool
+	TableTotal          int
+	TablePage           int
+	TableTotalPages     int
+	TablePreviousURL    string
+	TableNextURL        string
+	TableClearURL       string
+	TableHasFilters     bool
+	TableSortURLs       map[string]string
+	CategoryIcons       []application.CategoryIconOption
+	CatalogFlow         string
+	AssetFormAction     string
+	AssetFormEditing    bool
+	NavAssets           bool
+	NavCatalog          bool
+	NavMembers          bool
+	EventForm           eventFormData
+	Model3D             *domain.ProductModel3D
+	Resources           []domain.Model3DResource
+	Resource            *domain.Model3DResource
+	References          []application.Model3DReference
+	BindingKind         string
+	BindingID           string
+	BindingName         string
+	Binding             *application.Model3DBinding
+	BoundResource       *domain.Model3DResource
+	HasSpecifications   bool
+	Specifications      specificationPageData
+	ModelTagEditors     []modelTagEditor
+	CatalogEditingModel *domain.ProductModel
+	TagReferences       []application.SpecificationLink
+	AssetTagEditors     []modelTagEditor
+	ResourceTags        modelTagEditor
+	ResourceCategories  []tagChoice
+	ReferenceURLs       map[string]string
+	Appearance          appearancePageData
 }
 
 type eventFormData struct {
@@ -569,7 +570,20 @@ func (s *Server) newAssetForm(w http.ResponseWriter, r *http.Request) {
 		s.renderForbidden(w, principal, "error.forbidden_asset")
 		return
 	}
-	s.renderAssetForm(w, r, http.StatusOK, principal, domain.Asset{ModelID: strings.TrimSpace(r.URL.Query().Get("model_id")), VariantID: strings.TrimSpace(r.URL.Query().Get("variant_id"))}, "")
+	draft := domain.Asset{ModelID: strings.TrimSpace(r.URL.Query().Get("model_id")), VariantID: strings.TrimSpace(r.URL.Query().Get("variant_id"))}
+	if s.options.Specifications != nil && (draft.ModelID != "" || draft.VariantID != "" || r.URL.Query().Has("tag_ids")) {
+		cmd := application.SaveSpecificationAsset{ModelID: draft.ModelID, VariantID: draft.VariantID}
+		if r.URL.Query().Has("tag_ids") {
+			cmd.TagIDs = nonemptyTagIDs(r.URL.Query()["tag_ids"])
+		}
+		var err error
+		draft, err = s.options.Specifications.AssetDraft(r.Context(), principal, cmd)
+		if err != nil {
+			s.renderAssetForm(w, r, http.StatusUnprocessableEntity, principal, draft, s.userError(principal.Locale, err))
+			return
+		}
+	}
+	s.renderAssetForm(w, r, http.StatusOK, principal, draft, "")
 }
 
 func (s *Server) editAssetForm(w http.ResponseWriter, r *http.Request) {
@@ -1233,7 +1247,7 @@ func assetView(r *http.Request) string {
 	return "list"
 }
 
-func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string) {
+func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string, references ...application.SpecificationLink) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	categoryID := strings.TrimSpace(r.URL.Query().Get("category"))
 	sortKey := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("sort")), "category")
@@ -1279,7 +1293,28 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 			s.renderError(w, r, 500, err)
 			return
 		}
-		data.ModelTagEditors = modelTagEditors(state, principal.TenantID, result.Models)
+		editID := strings.TrimSpace(r.URL.Query().Get("edit_model_id"))
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/tags") {
+			editID = r.PathValue("id")
+		}
+		editorModels := append([]domain.ProductModel(nil), result.Models...)
+		if editID != "" {
+			model, err := s.options.Specifications.Model(r.Context(), principal, editID)
+			if err != nil {
+				s.renderNotFound(w, principal, "validation.specification_missing")
+				return
+			}
+			data.CatalogEditingModel = &model
+			found := false
+			for _, existing := range editorModels {
+				found = found || existing.ID == editID
+			}
+			if !found {
+				editorModels = append(editorModels, model)
+			}
+		}
+		data.TagReferences = references
+		data.ModelTagEditors = modelTagEditors(state, principal.TenantID, editorModels)
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/tags") && message != "" {
 			cmd := modelTagsFromForm(r)
 			for i := range data.ModelTagEditors {

@@ -290,8 +290,8 @@ func (q *Queries) PutSpecificationTag(ctx context.Context, arg PutSpecificationT
 }
 
 const putSpecificationType = `-- name: PutSpecificationType :exec
-INSERT INTO specification_tag_types(id,tenant_id,name,normalized_name,multiple,affects_appearance,enabled,created_at,updated_at)
-VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
+INSERT INTO specification_tag_types(id,tenant_id,name,normalized_name,multiple,affects_appearance,enabled,system_code,created_at,updated_at)
+VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
 ON CONFLICT(tenant_id,id) DO UPDATE SET name=excluded.name,normalized_name=excluded.normalized_name,multiple=excluded.multiple,affects_appearance=excluded.affects_appearance,enabled=excluded.enabled,updated_at=excluded.updated_at
 `
 
@@ -303,6 +303,7 @@ type PutSpecificationTypeParams struct {
 	Multiple          int64
 	AffectsAppearance int64
 	Enabled           int64
+	SystemCode        string
 	CreatedAt         string
 	UpdatedAt         string
 }
@@ -316,6 +317,7 @@ func (q *Queries) PutSpecificationType(ctx context.Context, arg PutSpecification
 		arg.Multiple,
 		arg.AffectsAppearance,
 		arg.Enabled,
+		arg.SystemCode,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)

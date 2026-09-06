@@ -55,6 +55,50 @@ func (s *SpecificationService) Model(ctx context.Context, actor Principal, id st
 	return s.store.GetProductModel(ctx, actor.TenantID, id)
 }
 
+// A legacy selection is an input translation, never another active asset parent.
+// Both the read-only form draft and the transactional write use this resolver.
+func (state SpecificationSnapshot) resolveAssetSelection(cmd SaveSpecificationAsset) (SaveSpecificationAsset, error) {
+	if cmd.VariantID == "" {
+		return cmd, nil
+	}
+	if cmd.ModelID != "" || cmd.TagIDs != nil {
+		return cmd, NewInputError("validation.specification_ambiguous")
+	}
+	for _, link := range state.Links {
+		if link.Kind == "legacy" && link.TargetID == cmd.VariantID {
+			cmd.ModelID = link.ModelID
+			cmd.TagIDs = append(cmd.TagIDs, link.TagID)
+		}
+	}
+	if cmd.ModelID == "" {
+		return cmd, NewInputError("validation.specification_missing")
+	}
+	cmd.VariantID = ""
+	return cmd, nil
+}
+
+func (s *SpecificationService) AssetDraft(ctx context.Context, actor Principal, cmd SaveSpecificationAsset) (domain.Asset, error) {
+	state, err := s.Snapshot(ctx, actor)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	cmd, err = state.resolveAssetSelection(cmd)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	model, err := s.Model(ctx, actor, cmd.ModelID)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	ids, err := domain.ValidateSpecificationSelection(state.Model(actor.TenantID, model.ID), state.Types, state.Tags, cmd.TagIDs, nil)
+	if err != nil {
+		return domain.Asset{}, specificationInputError(err)
+	}
+	asset := domain.Asset{TenantID: actor.TenantID, ModelID: model.ID, Model: model.Name, CategoryID: model.CategoryID, Category: model.CategoryName, CategoryIcon: model.CategoryIcon}
+	state.HydrateSelection(&asset, ids)
+	return asset, nil
+}
+
 func (s *SpecificationService) Asset(ctx context.Context, actor Principal, id string) (domain.Asset, error) {
 	if err := actor.Require(CapabilityView); err != nil {
 		return domain.Asset{}, err

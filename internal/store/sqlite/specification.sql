@@ -20,8 +20,8 @@ SELECT CAST(variant_id AS TEXT) AS variant_id,CAST(model_id AS TEXT) AS model_id
 -- name: SpecificationCategories :many
 SELECT CAST(id AS TEXT) AS id FROM item_categories WHERE tenant_id=sqlc.arg(tenant_id);
 -- name: PutSpecificationType :exec
-INSERT INTO specification_tag_types(id,tenant_id,name,normalized_name,multiple,affects_appearance,enabled,created_at,updated_at)
-VALUES(sqlc.arg(id),sqlc.arg(tenant_id),sqlc.arg(name),sqlc.arg(normalized_name),sqlc.arg(multiple),sqlc.arg(affects_appearance),sqlc.arg(enabled),sqlc.arg(created_at),sqlc.arg(updated_at))
+INSERT INTO specification_tag_types(id,tenant_id,name,normalized_name,multiple,affects_appearance,enabled,system_code,created_at,updated_at)
+VALUES(sqlc.arg(id),sqlc.arg(tenant_id),sqlc.arg(name),sqlc.arg(normalized_name),sqlc.arg(multiple),sqlc.arg(affects_appearance),sqlc.arg(enabled),sqlc.arg(system_code),sqlc.arg(created_at),sqlc.arg(updated_at))
 ON CONFLICT(tenant_id,id) DO UPDATE SET name=excluded.name,normalized_name=excluded.normalized_name,multiple=excluded.multiple,affects_appearance=excluded.affects_appearance,enabled=excluded.enabled,updated_at=excluded.updated_at;
 -- name: PutSpecificationTag :exec
 INSERT INTO specification_tags(id,tenant_id,type_id,name,normalized_name,enabled,created_at,updated_at)

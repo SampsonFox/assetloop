@@ -25,13 +25,13 @@
   <div class="asset-profile-content">
     <p class="eyebrow">{{.Asset.Category}}</p>
     <h2>{{.Asset.Model}}</h2>
-    <p class="asset-variant-summary">{{.Asset.Variant}}{{if .Asset.Color}} · {{.Asset.Color}}{{end}}</p>
+    <p class="asset-variant-summary">{{.Asset.Variant}}{{if and (not .HasSpecifications) .Asset.Color}} · {{.Asset.Color}}{{end}}</p>
     <dl class="asset-details-grid">
       <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
-      <div class="asset-detail"><dt>{{t $s "asset.variant"}}</dt><dd>{{.Asset.Variant}}</dd></div>
+      <div class="asset-detail"><dt>{{if .HasSpecifications}}{{t $s "tags.values"}}{{else}}{{t $s "asset.variant"}}{{end}}</dt><dd>{{if .Asset.Variant}}{{.Asset.Variant}}{{else}}—{{end}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
-      <div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>
+      {{if not .HasSpecifications}}<div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>{{end}}
       <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
     </dl>
     {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "appearance"}}{{t $s "appearance.title"}}{{else if eq .Binding.Source "variant"}}{{t $s "resource.source_variant"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}

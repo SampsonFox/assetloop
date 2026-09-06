@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
@@ -12,7 +13,7 @@ import (
 
 type specificationPageData struct {
 	Values                                       bool
-	TypeID, EditingID, Name                      string
+	TypeID, FilterTypeID, EditingID, Name        string
 	Enabled, Multiple, Appearance, ConfirmRename bool
 	Types                                        []application.SpecificationTypeSummary
 	Tags                                         []application.SpecificationTagSummary
@@ -40,9 +41,9 @@ func (s *Server) renderSpecifications(w http.ResponseWriter, r *http.Request, ac
 		s.renderError(w, r, 500, err)
 		return
 	}
-	data := specificationPageData{Values: query.Get("view") != "types", TypeID: opts.TypeID, AllTypes: state.Types, Enabled: true, EditingID: query.Get("edit")}
+	data := specificationPageData{Values: query.Get("view") != "types", TypeID: opts.TypeID, FilterTypeID: opts.TypeID, AllTypes: state.Types, Enabled: true, EditingID: query.Get("edit")}
 	if r.Method == http.MethodPost {
-		data.Values = r.FormValue("entity") == "value"
+		data.Values = strings.HasPrefix(r.URL.Path, "/admin/tags/values")
 		data.EditingID = r.PathValue("id")
 	}
 	if data.EditingID != "" {
@@ -89,7 +90,7 @@ func (s *Server) renderSpecifications(w http.ResponseWriter, r *http.Request, ac
 		}
 		return "/admin/tags?" + values.Encode()
 	})
-	s.render(w, status, "specifications", pageData{Title: textFor(actor.Locale, "tags.title"), Principal: &actor, CSRFToken: s.ensureCSRF(w, r), CanManageCatalog: actor.Can(application.CapabilityManageCatalog), Error: message, Specifications: data, TableQuery: opts.Query, TableFilter: opts.Status, TablePage: opts.Page, TableTotalPages: pages, TableTotal: total, TablePreviousURL: previous, TableNextURL: next})
+	s.render(w, status, "specifications", pageData{Title: textFor(actor.Locale, "tags.title"), ReturnTo: r.URL.RequestURI(), Principal: &actor, CSRFToken: s.ensureCSRF(w, r), CanManageCatalog: actor.Can(application.CapabilityManageCatalog), Error: message, Specifications: data, TableQuery: opts.Query, TableFilter: opts.Status, TablePage: opts.Page, TableTotalPages: pages, TableTotal: total, TablePreviousURL: previous, TableNextURL: next})
 }
 
 func (s *Server) saveSpecificationType(w http.ResponseWriter, r *http.Request) {

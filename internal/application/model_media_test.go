@@ -146,17 +146,6 @@ func (s *mediaTestStore) CreateAndBindModel3DResource(ctx context.Context, r dom
 	b.ResourceID = r.ID
 	return s.BindModel3DResource(ctx, r.TenantID, b)
 }
-func (s *mediaTestStore) ResolveAssetModel3D(ctx context.Context, tenant, id string) (domain.Model3DResource, error) {
-	a, err := s.GetAsset(ctx, tenant, id)
-	if err != nil {
-		return domain.Model3DResource{}, err
-	}
-	m, err := s.GetProductModel(ctx, tenant, a.ModelID)
-	if err != nil || m.Model3D == nil {
-		return domain.Model3DResource{}, ErrModel3DNotFound
-	}
-	return s.GetModel3DResource(ctx, tenant, m.Model3D.ResourceID)
-}
 
 func TestModelMediaUploadReplaceAndRead(t *testing.T) {
 	tenant, modelID, assetID := uuid.NewString(), uuid.NewString(), uuid.NewString()

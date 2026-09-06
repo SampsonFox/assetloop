@@ -228,11 +228,15 @@ WHERE a.tenant_id = sqlc.arg(tenant_id)
   AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR (
        LOWER(a.display_name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(a.serial_number) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
-       LOWER(v.color) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(a.purchase_channel) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(a.notes) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(m.name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
-       LOWER(v.name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
+       EXISTS (SELECT 1 FROM asset_specification_tags ast
+         JOIN specification_tags st ON st.tenant_id=ast.tenant_id AND st.id=ast.tag_id
+         JOIN specification_tag_types tt ON tt.tenant_id=st.tenant_id AND tt.id=st.type_id
+         WHERE ast.tenant_id=a.tenant_id AND ast.asset_id=a.id
+           AND (st.normalized_name LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%'
+             OR tt.normalized_name LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')) OR
        LOWER(c.name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%'
   ))
 )
@@ -308,11 +312,15 @@ WHERE a.tenant_id = sqlc.arg(tenant_id)
   AND (CAST(sqlc.arg(search_query) AS TEXT) = '' OR (
        LOWER(a.display_name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(a.serial_number) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
-       LOWER(v.color) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(a.purchase_channel) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(a.notes) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
        LOWER(m.name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
-       LOWER(v.name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%' OR
+       EXISTS (SELECT 1 FROM asset_specification_tags ast
+         JOIN specification_tags st ON st.tenant_id=ast.tenant_id AND st.id=ast.tag_id
+         JOIN specification_tag_types tt ON tt.tenant_id=st.tenant_id AND tt.id=st.type_id
+         WHERE ast.tenant_id=a.tenant_id AND ast.asset_id=a.id
+           AND (st.normalized_name LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%'
+             OR tt.normalized_name LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')) OR
        LOWER(c.name) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%'
   ))
 )
@@ -640,12 +648,6 @@ UPDATE product_variants SET model_3d_resource_id=sqlc.narg(resource_id) WHERE te
 -- name: BindAsset3D :execrows
 UPDATE assets SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
 
--- name: ResolveAssetModel3D :one
-SELECT r.* FROM assets a
-JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
-JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
-JOIN model_3d_resources r ON r.tenant_id=a.tenant_id AND r.id=COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id)
-WHERE a.tenant_id=sqlc.arg(tenant_id) AND a.id=sqlc.arg(id) AND r.status='ready';
 
 -- name: GetModel3DBinding :one
 SELECT m.name, COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS resource_id,

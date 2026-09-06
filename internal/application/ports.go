@@ -131,7 +131,6 @@ type ModelMediaStore interface {
 	MarkModel3DResourcePendingDelete(context.Context, string, string) error
 	FinishModel3DResourceDelete(context.Context, string, string) error
 	BindModel3DResource(context.Context, string, BindModel3DResource) error
-	ResolveAssetModel3D(context.Context, string, string) (domain.Model3DResource, error)
 
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 	GetProductModel(context.Context, string, string) (domain.ProductModel, error)

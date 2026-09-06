@@ -107,11 +107,15 @@ WHERE a.tenant_id = $2
   AND ($3::text = '' OR (
        a.display_name ILIKE '%' || $3::text || '%' OR
        a.serial_number ILIKE '%' || $3::text || '%' OR
-       a.color ILIKE '%' || $3::text || '%' OR
        a.purchase_channel ILIKE '%' || $3::text || '%' OR
        a.notes ILIKE '%' || $3::text || '%' OR
        m.name ILIKE '%' || $3::text || '%' OR
-       v.name ILIKE '%' || $3::text || '%' OR
+       EXISTS (SELECT 1 FROM asset_specification_tags ast
+         JOIN specification_tags st ON st.tenant_id=ast.tenant_id AND st.id=ast.tag_id
+         JOIN specification_tag_types tt ON tt.tenant_id=st.tenant_id AND tt.id=st.type_id
+         WHERE ast.tenant_id=a.tenant_id AND ast.asset_id=a.id
+           AND (st.normalized_name LIKE '%' || LOWER(CAST($3 AS TEXT)) || '%'
+             OR tt.normalized_name LIKE '%' || LOWER(CAST($3 AS TEXT)) || '%')) OR
        c.name ILIKE '%' || $3::text || '%'
   ))
 )
@@ -1757,11 +1761,15 @@ WHERE a.tenant_id = $6
   AND ($7::text = '' OR (
        a.display_name ILIKE '%' || $7::text || '%' OR
        a.serial_number ILIKE '%' || $7::text || '%' OR
-       a.color ILIKE '%' || $7::text || '%' OR
        a.purchase_channel ILIKE '%' || $7::text || '%' OR
        a.notes ILIKE '%' || $7::text || '%' OR
        m.name ILIKE '%' || $7::text || '%' OR
-       v.name ILIKE '%' || $7::text || '%' OR
+       EXISTS (SELECT 1 FROM asset_specification_tags ast
+         JOIN specification_tags st ON st.tenant_id=ast.tenant_id AND st.id=ast.tag_id
+         JOIN specification_tag_types tt ON tt.tenant_id=st.tenant_id AND tt.id=st.type_id
+         WHERE ast.tenant_id=a.tenant_id AND ast.asset_id=a.id
+           AND (st.normalized_name LIKE '%' || LOWER(CAST($7 AS TEXT)) || '%'
+             OR tt.normalized_name LIKE '%' || LOWER(CAST($7 AS TEXT)) || '%')) OR
        c.name ILIKE '%' || $7::text || '%'
   ))
 )
@@ -2467,40 +2475,6 @@ func (q *Queries) Model3DReferences(ctx context.Context, arg Model3DReferencesPa
 		return nil, err
 	}
 	return items, nil
-}
-
-const resolveAssetModel3D = `-- name: ResolveAssetModel3D :one
-SELECT r.id, r.tenant_id, r.name, r.status, r.store_id, r.object_key, r.sha256, r.size_bytes, r.source_url, r.author, r.license, r.created_at, r.updated_at FROM assets a
-JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
-JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
-JOIN model_3d_resources r ON r.tenant_id=a.tenant_id AND r.id=COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id)
-WHERE a.tenant_id=$1 AND a.id=$2 AND r.status='ready'
-`
-
-type ResolveAssetModel3DParams struct {
-	TenantID uuid.UUID
-	ID       uuid.UUID
-}
-
-func (q *Queries) ResolveAssetModel3D(ctx context.Context, arg ResolveAssetModel3DParams) (Model3dResource, error) {
-	row := q.db.QueryRowContext(ctx, resolveAssetModel3D, arg.TenantID, arg.ID)
-	var i Model3dResource
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Name,
-		&i.Status,
-		&i.StoreID,
-		&i.ObjectKey,
-		&i.Sha256,
-		&i.SizeBytes,
-		&i.SourceUrl,
-		&i.Author,
-		&i.License,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const saveLifecycleRequest = `-- name: SaveLifecycleRequest :exec

@@ -187,8 +187,9 @@ func (s *Server) saveModelTags(w http.ResponseWriter, r *http.Request) {
 			s.renderForbidden(w, actor, "error.forbidden_asset")
 			return
 		}
-		// Render the posted choices unchanged; reference details remain available in the tag library.
-		s.renderCatalog(w, r, http.StatusUnprocessableEntity, actor, s.userError(actor.Locale, err))
+		var inUse application.SpecificationInUseError
+		errors.As(err, &inUse)
+		s.renderCatalog(w, r, http.StatusUnprocessableEntity, actor, s.userError(actor.Locale, err), inUse.References...)
 		return
 	}
 	s.redirectToModelEditor(w, r, cmd.ModelID)

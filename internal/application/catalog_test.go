@@ -47,8 +47,11 @@ func TestCatalogServiceNormalizesAssetListOptions(t *testing.T) {
 	if _, err := service.ListAssetsWithSummary(context.Background(), viewer, AssetListOptions{Query: "  iPhone  ", Status: "active"}); err != nil {
 		t.Fatal(err)
 	}
-	if store.listOptions.Query != "iPhone" || store.listOptions.Status != "active" || store.listOptions.Sort != "created" || store.listOptions.Direction != "desc" || store.listOptions.Page != 1 || store.listOptions.PageSize != 25 {
+	if store.listOptions.Query != "iphone" || store.listOptions.Status != "active" || store.listOptions.Sort != "created" || store.listOptions.Direction != "desc" || store.listOptions.Page != 1 || store.listOptions.PageSize != 25 {
 		t.Fatalf("asset list options were not normalized: %+v", store.listOptions)
+	}
+	if _, err := service.ListAssetsWithSummary(context.Background(), viewer, AssetListOptions{Query: " Δ容量 "}); err != nil || store.listOptions.Query != "δ容量" {
+		t.Fatalf("Unicode tag search normalization: %+v %v", store.listOptions, err)
 	}
 	if _, err := service.ListAssetsWithSummary(context.Background(), viewer, AssetListOptions{Status: "deleted"}); err == nil {
 		t.Fatal("unknown asset status filter should fail")

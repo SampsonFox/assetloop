@@ -379,7 +379,7 @@ func (s *CatalogService) ListAssetsWithSummary(ctx context.Context, actor Princi
 		return AssetListResult{}, err
 	}
 	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
-	opts.Query = strings.TrimSpace(opts.Query)
+	opts.Query = domain.NormalizeSpecificationName(opts.Query)
 	opts.Status = strings.TrimSpace(opts.Status)
 	if _, allowed := allowedAssetListStatuses[opts.Status]; !allowed {
 		return AssetListResult{}, NewInputError("validation.filter_invalid")

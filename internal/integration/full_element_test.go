@@ -104,9 +104,18 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		t.Fatalf("create model: %v", err)
 	}
 	spec := application.NewSpecificationService(store)
-	color, err := spec.SaveType(ctx, owner, application.SaveSpecificationType{Name: "颜色", Enabled: true, AffectsAppearance: true})
+	initialTags, err := spec.Snapshot(ctx, owner)
 	if err != nil {
 		t.Fatal(err)
+	}
+	var color domain.SpecificationTagType
+	for _, kind := range initialTags.Types {
+		if kind.SystemCode == "color" {
+			color = kind
+		}
+	}
+	if color.ID == "" || !color.AffectsAppearance || color.Multiple || !color.Enabled {
+		t.Fatalf("initial color type: %+v", color)
 	}
 	storage, err := spec.SaveType(ctx, owner, application.SaveSpecificationType{Name: "储存", Enabled: true})
 	if err != nil {

@@ -104,7 +104,7 @@ func (s *Store) PutSpecificationType(ctx context.Context, r domain.Specification
 	if err != nil {
 		return err
 	}
-	return s.queries().PutSpecificationType(ctx, postgresdb.PutSpecificationTypeParams{ID: idID, TenantID: tenantID, Name: r.Name, NormalizedName: r.NormalizedName, Multiple: r.Multiple, AffectsAppearance: r.AffectsAppearance, Enabled: r.Enabled, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
+	return s.queries().PutSpecificationType(ctx, postgresdb.PutSpecificationTypeParams{ID: idID, TenantID: tenantID, Name: r.Name, NormalizedName: r.NormalizedName, SystemCode: r.SystemCode, Multiple: r.Multiple, AffectsAppearance: r.AffectsAppearance, Enabled: r.Enabled, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
 }
 func (s *Store) PutSpecificationTag(ctx context.Context, r domain.SpecificationTag) error {
 	tenant, id, kind := r.TenantID, r.ID, r.TypeID

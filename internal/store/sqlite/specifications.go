@@ -104,7 +104,7 @@ func (s *Store) SpecificationSnapshot(ctx context.Context, tenant string) (appli
 func (s *Store) PutSpecificationType(ctx context.Context, r domain.SpecificationTagType) error {
 	tenant, id := r.TenantID, r.ID
 
-	return s.queries().PutSpecificationType(ctx, sqlitedb.PutSpecificationTypeParams{ID: id, TenantID: tenant, Name: r.Name, NormalizedName: r.NormalizedName, Multiple: specificationBool(r.Multiple), AffectsAppearance: specificationBool(r.AffectsAppearance), Enabled: specificationBool(r.Enabled), CreatedAt: sqliteTime(r.CreatedAt), UpdatedAt: sqliteTime(r.UpdatedAt)})
+	return s.queries().PutSpecificationType(ctx, sqlitedb.PutSpecificationTypeParams{ID: id, TenantID: tenant, Name: r.Name, NormalizedName: r.NormalizedName, SystemCode: r.SystemCode, Multiple: specificationBool(r.Multiple), AffectsAppearance: specificationBool(r.AffectsAppearance), Enabled: specificationBool(r.Enabled), CreatedAt: sqliteTime(r.CreatedAt), UpdatedAt: sqliteTime(r.UpdatedAt)})
 }
 func (s *Store) PutSpecificationTag(ctx context.Context, r domain.SpecificationTag) error {
 	tenant, id, kind := r.TenantID, r.ID, r.TypeID
