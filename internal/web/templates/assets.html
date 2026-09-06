@@ -1,6 +1,7 @@
 {{define "content"}}{{$s := .Strings}}
+<div id="asset-browser" data-failed="{{t $s "timeline.failed"}}" data-session="{{t $s "timeline.session"}}">
 <div class="page-heading asset-list-heading">
-  <div><h1>{{t $s "title.assets"}}</h1><p class="muted">{{.AssetTotal}} {{t $s "assets.count_suffix"}} · {{.Principal.TenantName}}</p></div>
+  <div><h1>{{t $s "title.assets"}}</h1><p class="muted" data-asset-count>{{.AssetTotal}} {{t $s "assets.count_suffix"}} · {{.Principal.TenantName}}</p></div>
 
 </div>
 {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
@@ -10,7 +11,7 @@
     <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="{{.AssetListURL}}" class="{{if eq .AssetView "list"}}is-active{{end}}" {{if eq .AssetView "list"}}aria-current="page"{{end}} aria-label="{{t $s "assets.list"}}" title="{{t $s "assets.list"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></a><a href="{{.AssetGridURL}}" class="{{if eq .AssetView "grid"}}is-active{{end}}" {{if eq .AssetView "grid"}}aria-current="page"{{end}} aria-label="{{t $s "assets.grid"}}" title="{{t $s "assets.grid"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></a></div>
     {{if .CanManageCatalog}}<a class="icon-button" href="/assets/new" aria-label="{{t $s "assets.create"}}" title="{{t $s "assets.create"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></a>{{end}}
   </div>
-  {{if eq .AssetView "grid"}}<input type="hidden" name="view" value="grid">{{end}}
+  <input type="hidden" name="view" value="{{.AssetView}}">
   <label class="asset-search"><input type="search" aria-label="{{t $s "assets.search"}}" name="q" value="{{.AssetQuery}}" placeholder="{{t $s "assets.search_placeholder"}}"></label>
   <div class="asset-filter-actions">
     <button class="icon-button" type="submit" aria-label="{{t $s "assets.search"}}" title="{{t $s "assets.search"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></button>
@@ -33,13 +34,14 @@
           <option value="cost" {{if eq .AssetSort "cost"}}selected{{end}}>{{t $s "assets.cost"}}</option>
         </select></label>
         <label><span>{{t $s "table.direction"}}</span><select name="direction"><option value="asc" {{if eq .AssetDirection "asc"}}selected{{end}}>{{t $s "table.ascending"}}</option><option value="desc" {{if eq .AssetDirection "desc"}}selected{{end}}>{{t $s "table.descending"}}</option></select></label>
-        <div class="asset-filter-panel-actions"><button class="icon-button" type="submit" aria-label="{{t $s "assets.filter"}}" title="{{t $s "assets.filter"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button></div>
+        <div class="asset-filter-panel-actions"><button class="icon-button" type="submit" data-asset-apply aria-label="{{t $s "assets.filter"}}" title="{{t $s "assets.filter"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button></div>
       </div>
     </details>
-    {{if .AssetHasFilters}}<a class="icon-button" href="{{.AssetClearURL}}" aria-label="{{t $s "assets.clear_filters"}}" title="{{t $s "assets.clear_filters"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 7M5 3v5h5"/></svg></a>{{end}}
+    <a {{if not .AssetHasFilters}}hidden{{end}} class="icon-button" data-asset-clear href="{{.AssetClearURL}}" aria-label="{{t $s "assets.clear_filters"}}" title="{{t $s "assets.clear_filters"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 7M5 3v5h5"/></svg></a>
   </div>
 </form>
 
+<div data-asset-results tabindex="-1">
 {{if .Assets}}
   {{if eq .AssetView "grid"}}
   <section class="asset-grid" aria-label="{{t $s "assets.cards_label"}}">{{range .Assets}}
@@ -72,10 +74,14 @@
     <div>{{if .AssetPreviousURL}}<a class="icon-button" href="{{.AssetPreviousURL}}" aria-label="{{t $s "assets.previous"}}" title="{{t $s "assets.previous"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></a>{{end}}{{if .AssetNextURL}}<a class="icon-button" href="{{.AssetNextURL}}" aria-label="{{t $s "assets.next"}}" title="{{t $s "assets.next"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></a>{{end}}</div>
   </nav>{{end}}
 {{else if .AssetHasFilters}}
-<section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "assets.no_results_heading"}}</h2><p class="muted">{{t $s "assets.no_results_help"}}</p><a class="icon-button" href="{{.AssetClearURL}}" aria-label="{{t $s "assets.clear_filters"}}" title="{{t $s "assets.clear_filters"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 7M5 3v5h5"/></svg></a></section>
+<section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "assets.no_results_heading"}}</h2><p class="muted">{{t $s "assets.no_results_help"}}</p><a class="icon-button" data-asset-clear href="{{.AssetClearURL}}" aria-label="{{t $s "assets.clear_filters"}}" title="{{t $s "assets.clear_filters"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 7M5 3v5h5"/></svg></a></section>
 {{else}}
 <section class="empty-state"><svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#package"></use></svg><h2>{{t $s "assets.empty_heading"}}</h2>
   {{if .CanManageCatalog}}<p class="muted">{{t $s "assets.empty_help_editor"}}</p><a class="button auto" href="/assets/new">{{t $s "assets.create_first"}}</a>{{else}}<p class="muted">{{t $s "assets.empty_help_viewer"}}</p>{{end}}
 </section>
 {{end}}
+</div>
+<div class="muted" data-asset-feedback hidden><span role="status" aria-live="polite"></span> <button type="button" class="icon-button" aria-label="{{t $s "timeline.retry"}}" title="{{t $s "timeline.retry"}}" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8a8 8 0 1 1-1 7M5 3v5h5"/></svg></button> <a href="/login" hidden>{{t $s "timeline.login"}}</a></div>
+</div>
+<script defer src="/static/asset-query.js"></script>
 {{end}}

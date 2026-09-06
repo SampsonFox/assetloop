@@ -65,6 +65,8 @@ Cost dashboard: `internal/application/cost_dashboard.go` reads the full authoriz
 
 `internal/web/static/timeline-query.js` progressively enhances timeline GET forms with debounced search, separately applied advanced filters, cancellable result-only refresh, and outside/Escape dismissal. The model viewer and cost dashboard DOM remain untouched.
 
+`internal/web/static/asset-query.js` enhances the asset toolbar with cancellable, debounced search and local filter/sort/page/view updates. It preserves the toolbar and focus, refreshes results/count/navigation from SSR, retains native GET fallback, and is covered by `internal/web/asset_query.test.mjs`.
+
 Event types: `internal/application/event_types.go` owns paged management, rename/direction locks and enable/disable policy under the lifecycle write transaction. Both Store `event_types.go` adapters use sqlc queries; migration `00012` links historical events to tenant-scoped IDs and seeds immutable system types. `internal/store/event_type_upgrade.go` reports unmappable legacy records before migration. `internal/web/event_types.go`, `event_types_i18n.go` and `templates/event_types.html` provide the management page and shared creation entry point. `storetest/event_types.go` and `event_type_migration_test.go` cover compatibility and concurrency.
 
 | Path | Coverage |

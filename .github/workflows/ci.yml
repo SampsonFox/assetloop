@@ -58,6 +58,11 @@ jobs:
       - run: sqlc generate
       - run: git diff --exit-code
       - run: go test ./...
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Test progressive list queries
+        run: node --test internal/web/asset_query.test.mjs internal/web/timeline_query.test.mjs
       - name: Run cumulative full-element scenario
         run: go test ./internal/integration -run '^TestFullElementScenario$' -count=1
       - run: go vet ./...
