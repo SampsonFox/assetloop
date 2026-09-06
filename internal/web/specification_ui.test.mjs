@@ -13,6 +13,16 @@ test('tag management has compact actions and uses its own table styling', () => 
 test('item tag dimensions use the themed fieldset styling', () => {
   assert.match(read('./static/app.css'), /\.asset-tag-dimension[^}]*border:1px solid var\(--line\)/);
 });
+test('drawer panels own bounded scrolling rather than trapping outer-dialog scroll', () => {
+  const css = read('./static/app.css');
+  const panel = css.match(/^\.drawer-panel \{([^}]+)\}/m)?.[1] || '';
+  const dialog = css.match(/^dialog\.drawer \{([^}]+)\}/m)?.[1] || '';
+  assert.match(panel, /(?:^|;)\s*height:100%;/, 'panel height must be bounded by the viewport dialog');
+  assert.match(panel, /overflow:auto/);
+  assert.match(dialog, /overflow:hidden/, 'outer dialog must not compete for wheel input');
+  assert.match(css, /\.event-drawer-panel \{[^}]*overflow:hidden/);
+  assert.match(css, /\.drawer-body \{[^}]*min-height:0;[^}]*overflow:auto/);
+});
 test('dictionary active navigation and heading use valid restrained theme styles', () => {
   const css = read('./static/app.css');
   assert.match(css, /\.specification-navigation a\[aria-current="page"\][^}]*color:var\(--ink\)/);
