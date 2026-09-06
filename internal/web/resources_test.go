@@ -62,7 +62,7 @@ func uploadWebResourceAt(t *testing.T, h http.Handler, path string, fields url.V
 }
 
 func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
-	h := newTestHandlerWithBlob(t, nil, true)
+	h := newTestHandlerWithBlob(t, nil)
 	cookies, csrf := resourceSession(t, h)
 	post := func(path string, form url.Values) *httptest.ResponseRecorder {
 		t.Helper()
@@ -334,7 +334,7 @@ func TestResourceDeleteFailureCanRetry(t *testing.T) {
 }
 
 func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
-	h := newTestHandlerWithBlob(t, nil, true)
+	h := newTestHandlerWithBlob(t, nil)
 	owner, csrf := resourceSession(t, h)
 	request(t, h, "POST", "/admin/catalog/categories", url.Values{"csrf_token": {csrf}, "name": {"Viewer catalog"}, "icon_key": {"smartphone"}}, owner)
 	catalogPage := request(t, h, "GET", "/admin/catalog", nil, owner)
@@ -364,7 +364,7 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 	if appearancePage.Code != 200 || !strings.Contains(appearancePage.Body.String(), "Appearance defaults") || strings.Contains(appearancePage.Body.String(), `method="post" action="`+appearancePath) {
 		t.Fatal("viewer appearance page is not localized and read-only")
 	}
-	for _, target := range []string{appearancePath, appearancePath + "/upload", appearancePath + "/legacy/00000000-0000-0000-0000-000000000001/resolve"} {
+	for _, target := range []string{appearancePath, appearancePath + "/upload"} {
 		if response := request(t, h, "POST", target, url.Values{"csrf_token": {csrf}}, viewer); response.Code != 403 {
 			t.Fatalf("viewer appearance mutation %s: %d", target, response.Code)
 		}

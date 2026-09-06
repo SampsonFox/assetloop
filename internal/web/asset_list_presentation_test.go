@@ -10,7 +10,7 @@ import (
 )
 
 func TestAssetListIconControlsAndCardContent(t *testing.T) {
-	server, err := New(nil, nil, nil, nil, Options{})
+	server, err := New(nil, nil, nil, nil, Options{Specifications: application.NewSpecificationService(nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +20,7 @@ func TestAssetListIconControlsAndCardContent(t *testing.T) {
 				Strings: messages[locale], Principal: &application.Principal{TenantName: "Test"},
 				AssetView: "grid", CanManageCatalog: editable, CanManageLifecycle: editable,
 				AssetAdvanced: true, AssetHasFilters: true, AssetQuery: "phone",
-				Assets:         []domain.Asset{{ID: "sample", DisplayName: "Personal phone", Category: "Phone", Model: "Model", Variant: "256GB", SerialNumber: "SERIAL-001"}},
+				Assets:         []domain.Asset{{ID: "sample", DisplayName: "Personal phone", Category: "Phone", Model: "Model", TagSummary: "256GB", SerialNumber: "SERIAL-001"}},
 				AssetSummaries: map[string]domain.AssetSummary{"sample": {BaseCurrency: "CNY", ExpenseMinor: 1010000, NetCashflowMinor: 40000}},
 			}
 			var out bytes.Buffer

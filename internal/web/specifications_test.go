@@ -103,12 +103,12 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 	catalog := application.NewCatalogService(adapter)
 	for _, path := range []string{"/admin/catalog/variants", "/admin/catalog/variants/00000000-0000-0000-0000-000000000001", "/admin/catalog/variants/00000000-0000-0000-0000-000000000001/delete"} {
 		result := request(t, handler, "POST", path, url.Values{"csrf_token": {csrf.Value}, "name": {"Must not create legacy spec"}}, cookies)
-		if result.Code != 303 || result.Header().Get("Location") != "/admin/catalog" {
+		if result.Code != http.StatusNotFound {
 			t.Fatalf("legacy write not retired: %d", result.Code)
 		}
 	}
 	legacySnapshot, err := catalog.Snapshot(ctx, owner)
-	if err != nil || len(legacySnapshot.Variants) != 0 {
+	if err != nil || len(legacySnapshot.Models) != 0 {
 		t.Fatalf("legacy write changed specifications: %+v %v", legacySnapshot, err)
 	}
 	category, err := catalog.CreateCategory(ctx, owner, application.CreateCategory{Name: "Tagged phones"})
@@ -166,7 +166,7 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 	assetURL := response.Header().Get("Location")
 	assetID := strings.TrimPrefix(assetURL, "/assets/")
 	created, err := spec.Asset(ctx, owner, assetID)
-	if err != nil || created.ModelID != model.ID || created.VariantID != "" || len(created.Tags) != 1 || created.Notes != "Preserve notes" {
+	if err != nil || created.ModelID != model.ID || len(created.Tags) != 1 || created.Notes != "Preserve notes" {
 		t.Fatalf("direct item: %+v %v", created, err)
 	}
 	page = request(t, handler, "GET", assetURL+"/edit", nil, cookies)
@@ -241,7 +241,7 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 }
 
 func TestAppearanceConflictNoticeIsEditorOnly(t *testing.T) {
-	s, err := New(nil, nil, nil, nil, Options{})
+	s, err := New(nil, nil, nil, nil, Options{Specifications: application.NewSpecificationService(nil)})
 	if err != nil {
 		t.Fatal(err)
 	}

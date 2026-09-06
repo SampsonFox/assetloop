@@ -45,16 +45,13 @@ func TestEventTypeManagementHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	variant, err := catalog.CreateVariant(ctx, owner, application.CreateVariant{ModelID: model.ID, Name: "Body"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	asset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: variant.ID, DisplayName: "Camera"})
+	spec := application.NewSpecificationService(adapter)
+	asset, err := spec.SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: model.ID, DisplayName: "Camera"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	lifecycle := application.NewLifecycleService(adapter)
-	server, err := New(auth, catalog, lifecycle, db, Options{AuthMode: "local"})
+	server, err := New(auth, catalog, lifecycle, db, Options{AuthMode: "local", Specifications: spec})
 	if err != nil {
 		t.Fatal(err)
 	}

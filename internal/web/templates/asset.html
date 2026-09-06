@@ -25,16 +25,16 @@
   <div class="asset-profile-content">
     <p class="eyebrow">{{.Asset.Category}}</p>
     <h2>{{.Asset.Model}}</h2>
-    <p class="asset-variant-summary">{{.Asset.Variant}}{{if and (not .HasSpecifications) .Asset.Color}} · {{.Asset.Color}}{{end}}</p>
+    <p class="asset-variant-summary">{{.Asset.TagSummary}}</p>
     <dl class="asset-details-grid">
       <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
-      <div class="asset-detail"><dt>{{if .HasSpecifications}}{{t $s "tags.values"}}{{else}}{{t $s "asset.variant"}}{{end}}</dt><dd>{{if .Asset.Variant}}{{.Asset.Variant}}{{else}}—{{end}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "tags.values"}}</dt><dd>{{if .Asset.TagSummary}}{{.Asset.TagSummary}}{{else}}—{{end}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
-      {{if not .HasSpecifications}}<div class="asset-detail"><dt>{{t $s "assets.color"}}</dt><dd>{{if .Asset.Color}}{{.Asset.Color}}{{else}}—{{end}}</dd></div>{{end}}
+      
       <div class="asset-detail"><dt>{{t $s "assets.purchase_channel"}}</dt><dd>{{if .Asset.PurchaseChannel}}{{.Asset.PurchaseChannel}}{{else}}—{{end}}</dd></div>
     </dl>
-    {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "appearance"}}{{t $s "appearance.title"}}{{else if eq .Binding.Source "variant"}}{{t $s "resource.source_variant"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}
+    {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "appearance"}}{{t $s "appearance.title"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}
     {{if and .CanManageCatalog .Binding .Binding.Conflict}}<p class="muted" role="status">{{t $s "appearance.conflict"}} <a href="/admin/catalog/models/{{.Asset.ModelID}}/appearance">{{t $s "appearance.title"}}</a></p>{{end}}
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>

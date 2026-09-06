@@ -20,7 +20,6 @@ const defaultAssetPageSize = 25
 type CatalogSnapshot struct {
 	Categories []domain.ItemCategory
 	Models     []domain.ProductModel
-	Variants   []domain.ProductVariant
 	Assets     []domain.Asset
 }
 
@@ -66,36 +65,6 @@ type UpdateModel struct {
 	ID         string
 	CategoryID string
 	Name       string
-}
-
-type CreateVariant struct {
-	Color   string
-	ModelID string
-	Name    string
-}
-
-type UpdateVariant struct {
-	Color   string
-	ID      string
-	ModelID string
-	Name    string
-}
-
-type CreateCatalogAsset struct {
-	VariantID       string
-	DisplayName     string
-	SerialNumber    string
-	PurchaseChannel string
-	Notes           string
-}
-
-type UpdateCatalogAsset struct {
-	ID              string
-	VariantID       string
-	DisplayName     string
-	SerialNumber    string
-	PurchaseChannel string
-	Notes           string
 }
 
 var allowedAssetListStatuses = map[string]struct{}{
@@ -199,89 +168,6 @@ func (s *CatalogService) UpdateModel(ctx context.Context, actor Principal, cmd U
 	return model, nil
 }
 
-func (s *CatalogService) CreateVariant(ctx context.Context, actor Principal, cmd CreateVariant) (domain.ProductVariant, error) {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
-		return domain.ProductVariant{}, err
-	}
-	if err := validID("model ID", cmd.ModelID); err != nil {
-		return domain.ProductVariant{}, err
-	}
-	name, err := catalogText("variant name", cmd.Name, 160, true)
-	if err != nil {
-		return domain.ProductVariant{}, err
-	}
-	color, err := catalogText("color", cmd.Color, 120, false)
-	if err != nil {
-		return domain.ProductVariant{}, err
-	}
-	variant := domain.ProductVariant{ID: newID(), Color: color, TenantID: actor.TenantID, ModelID: cmd.ModelID, Name: name, CreatedAt: s.now().UTC()}
-	if err := s.store.CreateVariant(ctx, variant); err != nil {
-		return domain.ProductVariant{}, fmt.Errorf("create variant: %w", err)
-	}
-	return variant, nil
-}
-
-func (s *CatalogService) UpdateVariant(ctx context.Context, actor Principal, cmd UpdateVariant) (domain.ProductVariant, error) {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
-		return domain.ProductVariant{}, err
-	}
-	if err := validID("variant ID", cmd.ID); err != nil {
-		return domain.ProductVariant{}, err
-	}
-	if err := validID("model ID", cmd.ModelID); err != nil {
-		return domain.ProductVariant{}, err
-	}
-	name, err := catalogText("variant name", cmd.Name, 160, true)
-	if err != nil {
-		return domain.ProductVariant{}, err
-	}
-	color, err := catalogText("color", cmd.Color, 120, false)
-	if err != nil {
-		return domain.ProductVariant{}, err
-	}
-	variant := domain.ProductVariant{ID: cmd.ID, Color: color, TenantID: actor.TenantID, ModelID: cmd.ModelID, Name: name}
-	if err := s.store.UpdateVariant(ctx, variant); err != nil {
-		return domain.ProductVariant{}, fmt.Errorf("update variant: %w", err)
-	}
-	return variant, nil
-}
-
-func (s *CatalogService) DeleteVariant(ctx context.Context, actor Principal, variantID string) error {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
-		return err
-	}
-	if err := validID("variant ID", variantID); err != nil {
-		return err
-	}
-	deleted, err := s.store.DeleteVariant(ctx, actor.TenantID, variantID)
-	if err != nil {
-		return fmt.Errorf("delete variant: %w", err)
-	}
-	if !deleted {
-		return NewInputError("validation.variant_in_use")
-	}
-	return nil
-}
-
-func (s *CatalogService) CreateAsset(ctx context.Context, actor Principal, cmd CreateCatalogAsset) (domain.Asset, error) {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
-		return domain.Asset{}, err
-	}
-	values, err := validateAssetFields(cmd.VariantID, cmd.DisplayName, cmd.SerialNumber, cmd.PurchaseChannel, cmd.Notes)
-	if err != nil {
-		return domain.Asset{}, err
-	}
-	asset := domain.Asset{
-		ID: newID(), TenantID: actor.TenantID, VariantID: values.VariantID,
-		DisplayName: values.DisplayName, SerialNumber: values.SerialNumber,
-		PurchaseChannel: values.PurchaseChannel, Notes: values.Notes, CreatedAt: s.now().UTC(),
-	}
-	if err := s.store.CreateCatalogAsset(ctx, asset); err != nil {
-		return domain.Asset{}, fmt.Errorf("create asset: %w", err)
-	}
-	return s.GetAsset(ctx, actor, asset.ID)
-}
-
 func categoryIcon(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -293,51 +179,6 @@ func categoryIcon(value string) (string, error) {
 		}
 	}
 	return "", NewInputError("validation.category_icon")
-}
-
-func validateAssetFields(variantID, displayName, serialNumber, purchaseChannel, notes string) (domain.Asset, error) {
-	if err := validID("variant ID", variantID); err != nil {
-		return domain.Asset{}, err
-	}
-	values := domain.Asset{VariantID: strings.TrimSpace(variantID)}
-	fields := []struct {
-		label    string
-		value    string
-		maxRunes int
-		required bool
-		target   *string
-	}{
-		{"display name", displayName, 200, true, &values.DisplayName},
-		{"serial number", serialNumber, 200, false, &values.SerialNumber},
-		{"purchase channel", purchaseChannel, 160, false, &values.PurchaseChannel},
-		{"notes", notes, 2000, false, &values.Notes},
-	}
-	for _, field := range fields {
-		normalized, err := catalogText(field.label, field.value, field.maxRunes, field.required)
-		if err != nil {
-			return domain.Asset{}, err
-		}
-		*field.target = normalized
-	}
-	return values, nil
-}
-
-func (s *CatalogService) UpdateAsset(ctx context.Context, actor Principal, cmd UpdateCatalogAsset) (domain.Asset, error) {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
-		return domain.Asset{}, err
-	}
-	if err := validID("asset ID", cmd.ID); err != nil {
-		return domain.Asset{}, err
-	}
-	values, err := validateAssetFields(cmd.VariantID, cmd.DisplayName, cmd.SerialNumber, cmd.PurchaseChannel, cmd.Notes)
-	if err != nil {
-		return domain.Asset{}, err
-	}
-	asset := domain.Asset{ID: cmd.ID, TenantID: actor.TenantID, VariantID: values.VariantID, DisplayName: values.DisplayName, SerialNumber: values.SerialNumber, PurchaseChannel: values.PurchaseChannel, Notes: values.Notes}
-	if err := s.store.UpdateCatalogAsset(ctx, asset); err != nil {
-		return domain.Asset{}, fmt.Errorf("update asset: %w", err)
-	}
-	return s.GetAsset(ctx, actor, asset.ID)
 }
 
 func (s *CatalogService) Snapshot(ctx context.Context, actor Principal) (CatalogSnapshot, error) {
@@ -352,15 +193,11 @@ func (s *CatalogService) Snapshot(ctx context.Context, actor Principal) (Catalog
 	if err != nil {
 		return CatalogSnapshot{}, fmt.Errorf("list models: %w", err)
 	}
-	variants, err := s.store.ListVariants(ctx, actor.TenantID)
-	if err != nil {
-		return CatalogSnapshot{}, fmt.Errorf("list variants: %w", err)
-	}
 	assets, err := s.store.ListAssets(ctx, actor.TenantID)
 	if err != nil {
 		return CatalogSnapshot{}, fmt.Errorf("list assets: %w", err)
 	}
-	return CatalogSnapshot{Categories: categories, Models: models, Variants: variants, Assets: assets}, nil
+	return CatalogSnapshot{Categories: categories, Models: models, Assets: assets}, nil
 }
 
 func (s *CatalogService) Categories(ctx context.Context, actor Principal) ([]domain.ItemCategory, error) {
@@ -392,7 +229,7 @@ func (s *CatalogService) ListAssetsWithSummary(ctx context.Context, actor Princi
 	return s.store.ListAssetsWithSummary(ctx, actor.TenantID, opts)
 }
 
-func (s *CatalogService) ListModelsWithVariants(ctx context.Context, actor Principal, opts ModelListOptions) (ModelListResult, error) {
+func (s *CatalogService) ListModelsPage(ctx context.Context, actor Principal, opts ModelListOptions) (ModelListResult, error) {
 	if err := actor.Require(CapabilityView); err != nil {
 		return ModelListResult{}, err
 	}
@@ -409,7 +246,7 @@ func (s *CatalogService) ListModelsWithVariants(ctx context.Context, actor Princ
 	if err != nil {
 		return ModelListResult{}, err
 	}
-	return s.store.ListModelsWithVariants(ctx, actor.TenantID, opts)
+	return s.store.ListModelsPage(ctx, actor.TenantID, opts)
 }
 
 func normalizePage(page, pageSize int) (int, int) {

@@ -14,11 +14,9 @@ import (
 type Asset struct {
 	ID                    uuid.UUID
 	TenantID              uuid.UUID
-	VariantID             uuid.NullUUID
 	DisplayName           string
 	CreatedAt             time.Time
 	SerialNumber          string
-	Color                 string
 	PurchaseChannel       string
 	Notes                 string
 	Model3dResourceID     uuid.NullUUID
@@ -105,21 +103,6 @@ type ItemCategory struct {
 	IconKey   string
 }
 
-type LegacyVariantMedium struct {
-	TenantID   uuid.UUID
-	VariantID  uuid.UUID
-	ModelID    uuid.UUID
-	ResourceID uuid.UUID
-	Reason     string
-	Resolved   bool
-}
-
-type LegacyVariantTag struct {
-	TenantID  uuid.UUID
-	VariantID uuid.UUID
-	TagID     uuid.UUID
-}
-
 type LifecycleRequest struct {
 	TenantID    uuid.UUID
 	UserID      uuid.UUID
@@ -188,17 +171,6 @@ type ProductModel struct {
 	Model3dAuthor         sql.NullString
 	Model3dLicense        sql.NullString
 	Model3dUpdatedAt      sql.NullTime
-	Model3dResourceID     uuid.NullUUID
-	Model3dResourceStatus string
-}
-
-type ProductVariant struct {
-	ID                    uuid.UUID
-	TenantID              uuid.UUID
-	ModelID               uuid.UUID
-	Name                  string
-	CreatedAt             time.Time
-	Color                 string
 	Model3dResourceID     uuid.NullUUID
 	Model3dResourceStatus string
 }

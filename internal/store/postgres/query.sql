@@ -2,11 +2,10 @@
 -- name: GetAsset :one
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
-       m.id AS model_id, m.name AS model_name, CAST(COALESCE(CAST(v.id AS TEXT),'') AS TEXT) AS variant_id,
-       COALESCE(v.name,'') AS variant_name, a.display_name, a.serial_number, COALESCE(v.color,'') AS color, a.model_3d_resource_id,
+       m.id AS model_id, m.name AS model_name,
+       a.display_name, a.serial_number, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
-LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
 JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = $1 AND a.id = $2;
@@ -29,36 +28,6 @@ UPDATE product_models
 SET category_id = $1, name = $2
 WHERE tenant_id = $3 AND id = $4;
 
--- name: CreateVariant :exec
-INSERT INTO product_variants (id, tenant_id, model_id, name, created_at, color)
-VALUES ($1, $2, $3, $4, $5, $6);
-
--- name: UpdateVariant :execrows
-UPDATE product_variants
-SET model_id = $1, name = $2, color = $5
-WHERE tenant_id = $3 AND id = $4;
-
--- name: DeleteVariant :execrows
-DELETE FROM product_variants AS variant
-WHERE variant.tenant_id = $1 AND variant.id = $2
-  AND NOT EXISTS (
-    SELECT 1 FROM assets
-    WHERE assets.tenant_id = variant.tenant_id
-      AND assets.variant_id = variant.id
-  );
-
--- name: CreateCatalogAsset :exec
-INSERT INTO assets
-    (id, tenant_id, variant_id, model_id, display_name, serial_number, purchase_channel, notes, created_at)
-VALUES (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.narg(variant_id),
- COALESCE(sqlc.narg(model_id)::uuid, (SELECT model_id FROM product_variants WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.narg(variant_id))),
- sqlc.arg(display_name), sqlc.arg(serial_number), sqlc.arg(purchase_channel), sqlc.arg(notes), sqlc.arg(created_at));
-
--- name: UpdateCatalogAsset :execrows
-UPDATE assets
-SET variant_id = $1, display_name = $2, serial_number = $3, purchase_channel = $4, notes = $5
-WHERE tenant_id = $6 AND id = $7;
-
 -- name: ListCategories :many
 SELECT id, tenant_id, name, icon_key, created_at
 FROM item_categories
@@ -75,7 +44,7 @@ JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1
 ORDER BY c.name, m.name, m.id;
 
--- name: ListModelsWithVariants :many
+-- name: ListModelsPage :many
 WITH filtered_models AS (
     SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name,
            c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
@@ -105,11 +74,9 @@ SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
        pm.name, pm.created_at, pm.model_3d_resource_id,
        pm.model_3d_store_id, pm.model_3d_object_key, pm.model_3d_sha256, pm.model_3d_size_bytes,
        pm.model_3d_source_url, pm.model_3d_author, pm.model_3d_license, pm.model_3d_updated_at,
-       pm.total_count, pm.page_order,
-       v.id AS variant_id, v.name AS variant_name, v.color AS variant_color, v.model_3d_resource_id AS variant_model_3d_resource_id, v.created_at AS variant_created_at
+       pm.total_count, pm.page_order
 FROM paged_models pm
-LEFT JOIN product_variants v ON v.tenant_id = pm.tenant_id AND v.model_id = pm.id
-ORDER BY pm.page_order, LOWER(v.name), v.id;
+ORDER BY pm.page_order;
 -- name: GetProductModel :one
 SELECT m.id, m.tenant_id, m.category_id, c.name AS category_name, c.icon_key AS category_icon, m.name, m.created_at, m.model_3d_resource_id,
        r.store_id AS model_3d_store_id, r.object_key AS model_3d_object_key, r.sha256 AS model_3d_sha256, r.size_bytes AS model_3d_size_bytes,
@@ -119,28 +86,13 @@ LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_re
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE m.tenant_id = $1 AND m.id = $2;
 
--- name: UpdateProductModel3D :execrows
-UPDATE product_models SET model_3d_store_id = $1, model_3d_object_key = $2, model_3d_sha256 = $3,
- model_3d_size_bytes = $4, model_3d_source_url = $5, model_3d_author = $6, model_3d_license = $7, model_3d_updated_at = $8
-WHERE tenant_id = $9 AND id = $10;
-
--- name: ListVariants :many
-SELECT v.id, v.tenant_id, m.category_id, c.name AS category_name,
-       c.icon_key AS category_icon, v.model_id, m.name AS model_name, v.name, v.color, v.model_3d_resource_id, v.created_at
-FROM product_variants v
-JOIN product_models m ON m.tenant_id = v.tenant_id AND m.id = v.model_id
-JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
-WHERE v.tenant_id = $1
-ORDER BY c.name, m.name, v.name, v.id;
-
 -- name: ListAssets :many
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
-       m.id AS model_id, m.name AS model_name, CAST(COALESCE(CAST(v.id AS TEXT),'') AS TEXT) AS variant_id,
-       COALESCE(v.name,'') AS variant_name, a.display_name, a.serial_number, COALESCE(v.color,'') AS color, a.model_3d_resource_id,
+       m.id AS model_id, m.name AS model_name,
+       a.display_name, a.serial_number, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
-LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
 JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = $1
@@ -177,8 +129,8 @@ WHERE event_type IN ('purchase', 'repair', 'sale')
 asset_rows AS (
 SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
-       m.id AS model_id, m.name AS model_name, CAST(COALESCE(CAST(v.id AS TEXT),'') AS TEXT) AS variant_id,
-       COALESCE(v.name,'') AS variant_name, a.display_name, a.serial_number, COALESCE(v.color,'') AS color, a.model_3d_resource_id,
+       m.id AS model_id, m.name AS model_name,
+       a.display_name, a.serial_number, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at,
        COALESCE(er.expense_minor, 0)::bigint AS expense_minor,
        COALESCE(er.income_minor, 0)::bigint AS income_minor,
@@ -194,7 +146,6 @@ SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        END::text AS status,
        t.base_currency::text AS base_currency
 FROM assets a
-LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
 JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 JOIN tenants t ON t.id = a.tenant_id
@@ -217,7 +168,7 @@ WHERE a.tenant_id = sqlc.arg(tenant_id)
   ))
 )
 SELECT id, tenant_id, category_id, category_name, category_icon, model_id, model_name,
-       variant_id, variant_name, display_name, serial_number, color, model_3d_resource_id, purchase_channel, notes, created_at,
+       display_name, serial_number, model_3d_resource_id, purchase_channel, notes, created_at,
        expense_minor, income_minor, net_minor,
        status,
        base_currency
@@ -230,8 +181,8 @@ WHERE sqlc.arg(status_filter)::text IN ('', 'all')
 ORDER BY
   CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(display_name) END ASC,
   CASE WHEN sqlc.arg(sort_key)::text = 'name' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(display_name) END DESC,
-  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(model_name || ' ' || variant_name) END ASC,
-  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(model_name || ' ' || variant_name) END DESC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'asc' THEN LOWER(model_name) END ASC,
+  CASE WHEN sqlc.arg(sort_key)::text = 'model' AND sqlc.arg(sort_direction)::text = 'desc' THEN LOWER(model_name) END DESC,
   CASE WHEN sqlc.arg(sort_key)::text = 'status' AND sqlc.arg(sort_direction)::text = 'asc' THEN status END ASC,
   CASE WHEN sqlc.arg(sort_key)::text = 'status' AND sqlc.arg(sort_direction)::text = 'desc' THEN status END DESC,
   CASE WHEN sqlc.arg(sort_key)::text = 'net' AND sqlc.arg(sort_direction)::text = 'asc' THEN net_minor END ASC,
@@ -274,7 +225,6 @@ SELECT a.id,
        COALESCE(er.has_sale, FALSE) AS has_sale,
        COALESCE(re.event_type, '') AS latest_event_type
 FROM assets a
-LEFT JOIN product_variants v ON v.tenant_id = a.tenant_id AND v.id = a.variant_id
 JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 LEFT JOIN event_rollup er ON er.asset_id = a.id
@@ -566,7 +516,6 @@ SELECT * FROM model_3d_resources WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc
 SELECT r.*,
  (SELECT COUNT(*) FROM product_models m WHERE m.tenant_id=r.tenant_id AND m.model_3d_resource_id=r.id)
  +(SELECT COUNT(*) FROM model_appearance_defaults d WHERE d.tenant_id=r.tenant_id AND d.resource_id=r.id)
- +(SELECT COUNT(*) FROM legacy_variant_media l WHERE l.tenant_id=r.tenant_id AND l.resource_id=r.id AND NOT l.resolved)
  +(SELECT COUNT(*) FROM assets a WHERE a.tenant_id=r.tenant_id AND a.model_3d_resource_id=r.id) AS reference_count
 FROM model_3d_resources r WHERE r.tenant_id=sqlc.arg(tenant_id)
  AND (CAST(sqlc.arg(search_query) AS TEXT)='' OR LOWER(name || ' ' || author || ' ' || license) LIKE '%' || LOWER(CAST(sqlc.arg(search_query) AS TEXT)) || '%')
@@ -585,7 +534,6 @@ UPDATE model_3d_resources SET status='pending-delete'
 WHERE model_3d_resources.tenant_id=sqlc.arg(tenant_id) AND model_3d_resources.id=sqlc.arg(id)
  AND NOT EXISTS(SELECT 1 FROM product_models WHERE product_models.tenant_id=sqlc.arg(tenant_id) AND product_models.model_3d_resource_id=sqlc.arg(id))
  AND NOT EXISTS(SELECT 1 FROM model_appearance_defaults WHERE model_appearance_defaults.tenant_id=sqlc.arg(tenant_id) AND model_appearance_defaults.resource_id=sqlc.arg(id))
- AND NOT EXISTS(SELECT 1 FROM legacy_variant_media WHERE legacy_variant_media.tenant_id=sqlc.arg(tenant_id) AND legacy_variant_media.resource_id=sqlc.arg(id) AND NOT legacy_variant_media.resolved)
  AND NOT EXISTS(SELECT 1 FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id));
 
 -- name: FinishModel3DResourceDelete :execrows
@@ -596,15 +544,10 @@ SELECT CAST('model' AS TEXT) AS kind,id,name FROM product_models WHERE product_m
 UNION ALL
 SELECT CAST('appearance' AS TEXT),d.id,m.name FROM model_appearance_defaults d JOIN product_models m ON m.tenant_id=d.tenant_id AND m.id=d.model_id WHERE d.tenant_id=sqlc.arg(tenant_id) AND d.resource_id=sqlc.arg(id)
 UNION ALL
-SELECT CAST('legacy' AS TEXT),l.variant_id,v.name FROM legacy_variant_media l JOIN product_variants v ON v.tenant_id=l.tenant_id AND v.id=l.variant_id WHERE l.tenant_id=sqlc.arg(tenant_id) AND l.resource_id=sqlc.arg(id) AND NOT l.resolved
-UNION ALL
 SELECT CAST('asset' AS TEXT),id,display_name FROM assets WHERE assets.tenant_id=sqlc.arg(tenant_id) AND assets.model_3d_resource_id=sqlc.arg(id);
 
 -- name: BindModel3D :execrows
 UPDATE product_models SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
-
--- name: BindVariant3D :execrows
-UPDATE product_variants SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
 
 -- name: BindAsset3D :execrows
 UPDATE assets SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sqlc.arg(tenant_id) AND id=sqlc.arg(id);
@@ -614,20 +557,8 @@ UPDATE assets SET model_3d_resource_id=sqlc.narg(resource_id) WHERE tenant_id=sq
 SELECT m.name, COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS resource_id,
  COALESCE(CAST(m.model_3d_resource_id AS TEXT),'') AS effective_resource_id,
  CASE WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END AS source
-FROM product_models m WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='model'
-UNION ALL
-SELECT v.name || CASE WHEN v.color<>'' THEN ' (' || v.color || ')' ELSE '' END, COALESCE(CAST(v.model_3d_resource_id AS TEXT),''),
- COALESCE(CAST(COALESCE(v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
- CASE WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
-FROM product_variants v JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
-WHERE v.tenant_id=sqlc.arg(tenant_id) AND v.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='variant'
-UNION ALL
-SELECT a.display_name, COALESCE(CAST(a.model_3d_resource_id AS TEXT),''),
- COALESCE(CAST(COALESCE(a.model_3d_resource_id,v.model_3d_resource_id,m.model_3d_resource_id) AS TEXT),''),
- CASE WHEN a.model_3d_resource_id IS NOT NULL THEN 'asset' WHEN v.model_3d_resource_id IS NOT NULL THEN 'variant' WHEN m.model_3d_resource_id IS NOT NULL THEN 'model' ELSE '' END
-FROM assets a JOIN product_variants v ON v.tenant_id=a.tenant_id AND v.id=a.variant_id
-JOIN product_models m ON m.tenant_id=v.tenant_id AND m.id=v.model_id
-WHERE a.tenant_id=sqlc.arg(tenant_id) AND a.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='asset';
+FROM product_models m WHERE m.tenant_id=sqlc.arg(tenant_id) AND m.id=sqlc.arg(id) AND CAST(sqlc.arg(kind) AS TEXT)='model';
+
 -- name: UpdateAssetEventType :execrows
 UPDATE asset_event_types
 SET name = sqlc.arg(name), normalized_name = sqlc.arg(normalized_name),

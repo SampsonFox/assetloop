@@ -15,27 +15,6 @@ type tagChoice struct {
 	Selected, Enabled bool
 }
 
-// Old bookmarks and forms lead back to the catalog. They must never maintain a
-// second specification tree once typed selections are enabled.
-func (s *Server) retiredVariantWrite(w http.ResponseWriter, r *http.Request) bool {
-	if s.options.Specifications == nil {
-		return false
-	}
-	actor, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return true
-	}
-	if !actor.Can(application.CapabilityManageCatalog) {
-		s.renderForbidden(w, actor, "error.forbidden_catalog")
-		return true
-	}
-	if !s.verifyCSRF(w, r) {
-		return true
-	}
-	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
-	return true
-}
-
 func (s *Server) saveAppearance(w http.ResponseWriter, r *http.Request) {
 	if !s.verifyCSRF(w, r) {
 		return
@@ -99,10 +78,9 @@ type tagDimension struct {
 	Choices              []tagChoice
 }
 type modelTagEditor struct {
-	ModelID     string
-	Dimensions  []tagDimension
-	Summary     []string
-	LegacyCount int
+	ModelID    string
+	Dimensions []tagDimension
+	Summary    []string
 }
 
 func modelTagEditors(state application.SpecificationSnapshot, tenant string, models []domain.ProductModel) []modelTagEditor {
@@ -115,11 +93,6 @@ func modelTagEditors(state application.SpecificationSnapshot, tenant string, mod
 }
 func modelTagEditorFor(state application.SpecificationSnapshot, tenant, modelID string, ids []string, overrides map[string]bool) modelTagEditor {
 	result := modelTagEditor{ModelID: modelID}
-	for _, mapping := range state.LegacyMedia {
-		if mapping.ModelID == modelID && !mapping.Resolved {
-			result.LegacyCount++
-		}
-	}
 	selected := map[string]bool{}
 	for _, id := range ids {
 		selected[id] = true

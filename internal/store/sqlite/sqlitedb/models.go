@@ -12,10 +12,8 @@ type Asset struct {
 	ID                string
 	TenantID          string
 	ModelID           string
-	VariantID         sql.NullString
 	DisplayName       string
 	SerialNumber      string
-	Color             string
 	PurchaseChannel   string
 	Notes             string
 	CreatedAt         string
@@ -101,21 +99,6 @@ type ItemCategory struct {
 	IconKey   string
 }
 
-type LegacyVariantMedium struct {
-	TenantID   string
-	VariantID  string
-	ModelID    string
-	ResourceID string
-	Reason     string
-	Resolved   int64
-}
-
-type LegacyVariantTag struct {
-	TenantID  string
-	VariantID string
-	TagID     string
-}
-
 type LifecycleRequest struct {
 	TenantID    string
 	UserID      string
@@ -183,16 +166,6 @@ type ProductModel struct {
 	Model3dAuthor     sql.NullString
 	Model3dLicense    sql.NullString
 	Model3dUpdatedAt  sql.NullString
-	Model3dResourceID sql.NullString
-}
-
-type ProductVariant struct {
-	ID                string
-	TenantID          string
-	ModelID           string
-	Name              string
-	CreatedAt         string
-	Color             string
 	Model3dResourceID sql.NullString
 }
 

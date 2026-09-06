@@ -90,13 +90,6 @@ func (s *Store) SpecificationSnapshot(ctx context.Context, tenant string) (appli
 		}
 		result.Defaults = append(result.Defaults, rule)
 	}
-	legacy, err := q.SpecificationLegacyMedia(ctx, tenant)
-	if err != nil {
-		return result, err
-	}
-	for _, r := range legacy {
-		result.LegacyMedia = append(result.LegacyMedia, application.LegacyMediaMapping{VariantID: r.VariantID, ModelID: r.ModelID, ResourceID: r.ResourceID, Reason: r.Reason, Resolved: r.Resolved != 0})
-	}
 	result.CategoryIDs, err = q.SpecificationCategories(ctx, tenant)
 	return result, err
 }
@@ -151,11 +144,6 @@ func (s *Store) AddAppearanceCondition(ctx context.Context, tenant, rule, model,
 
 	return s.queries().AddAppearanceCondition(ctx, sqlitedb.AddAppearanceConditionParams{TenantID: tenant, RuleID: rule, ModelID: model, TagID: tag})
 
-}
-func (s *Store) ResolveLegacyMedia(ctx context.Context, tenant, variant string) error {
-
-	n, err := s.queries().ResolveLegacyMedia(ctx, sqlitedb.ResolveLegacyMediaParams{TenantID: tenant, VariantID: variant})
-	return updatedRow(n, err)
 }
 func (s *Store) ClearAssetSpecificationTags(ctx context.Context, tenant, asset string) error {
 

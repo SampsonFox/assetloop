@@ -70,7 +70,6 @@ type pageData struct {
 	Members             []application.Member
 	Categories          []domain.ItemCategory
 	Models              []domain.ProductModel
-	Variants            []domain.ProductVariant
 	Assets              []domain.Asset
 	AssetSummaries      map[string]domain.AssetSummary
 	Asset               *domain.Asset
@@ -137,7 +136,6 @@ type pageData struct {
 	BindingName         string
 	Binding             *application.Model3DBinding
 	BoundResource       *domain.Model3DResource
-	HasSpecifications   bool
 	Specifications      specificationPageData
 	ModelTagEditors     []modelTagEditor
 	CatalogEditingModel *domain.ProductModel
@@ -170,6 +168,9 @@ type eventTypeFormData struct {
 }
 
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
+	if options.Specifications == nil {
+		return nil, fmt.Errorf("specification service is required")
+	}
 	templates := map[string]*template.Template{}
 	funcs := template.FuncMap{
 		"tagEditor": func(editor modelTagEditor, values map[string]string) any {
@@ -270,15 +271,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/catalog/models", s.createModel)
 	mux.HandleFunc("POST /admin/catalog/models/{id}", s.updateModel)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/3d", s.updateModel3D)
-	mux.HandleFunc("POST /admin/catalog/variants", s.createVariant)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/tags", s.saveModelTags)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance", s.saveAppearance)
 	mux.HandleFunc("GET /admin/catalog/models/{id}/appearance", s.appearancePage)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance/upload", s.uploadAppearance)
-	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance/legacy/{variant}/resolve", s.resolveLegacyAppearance)
 	mux.HandleFunc("POST /admin/catalog/appearance/{id}/delete", s.deleteAppearance)
-	mux.HandleFunc("POST /admin/catalog/variants/{id}", s.updateVariant)
-	mux.HandleFunc("POST /admin/catalog/variants/{id}/delete", s.deleteVariant)
 	mux.HandleFunc("GET /assets/new", s.newAssetForm)
 	mux.HandleFunc("POST /assets", s.createAsset)
 	mux.HandleFunc("GET /assets/{id}/edit", s.editAssetForm)
@@ -444,11 +441,7 @@ func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.FormValue("flow") == "asset" {
-		if s.options.Specifications != nil {
-			http.Redirect(w, r, "/assets/new?model_id="+model.ID, http.StatusSeeOther)
-			return
-		}
-		s.redirectAfterCatalogCreate(w, r, "variant-drawer", "model_id", model.ID)
+		http.Redirect(w, r, "/assets/new?model_id="+model.ID, http.StatusSeeOther)
 		return
 	}
 	s.redirectToModelEditor(w, r, model.ID)
@@ -470,73 +463,6 @@ func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
 	s.redirectToModelEditor(w, r, r.PathValue("id"))
 }
 
-func (s *Server) createVariant(w http.ResponseWriter, r *http.Request) {
-	if s.retiredVariantWrite(w, r) {
-		return
-	}
-	if !s.verifyCSRF(w, r) {
-		return
-	}
-	principal, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return
-	}
-	variant, err := s.catalog.CreateVariant(r.Context(), principal, application.CreateVariant{
-		ModelID: r.FormValue("model_id"), Name: r.FormValue("name"), Color: r.FormValue("color"),
-	})
-	if err != nil {
-		s.renderCatalogMutationError(w, r, principal, err)
-		return
-	}
-	if r.FormValue("flow") == "asset" {
-		query := url.Values{"variant_id": {variant.ID}}
-		http.Redirect(w, r, "/assets/new?"+query.Encode(), http.StatusSeeOther)
-		return
-	}
-	s.redirectToModelEditor(w, r, variant.ModelID)
-}
-
-func (s *Server) updateVariant(w http.ResponseWriter, r *http.Request) {
-	if s.retiredVariantWrite(w, r) {
-		return
-	}
-	if !s.verifyCSRF(w, r) {
-		return
-	}
-	principal, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return
-	}
-	variant, err := s.catalog.UpdateVariant(r.Context(), principal, application.UpdateVariant{ID: r.PathValue("id"), ModelID: r.FormValue("model_id"), Name: r.FormValue("name"), Color: r.FormValue("color")})
-	if err != nil {
-		s.renderCatalogError(w, r, principal, err)
-		return
-	}
-	modelID := r.FormValue("return_model_id")
-	if modelID == "" {
-		modelID = variant.ModelID
-	}
-	s.redirectToModelEditor(w, r, modelID)
-}
-
-func (s *Server) deleteVariant(w http.ResponseWriter, r *http.Request) {
-	if s.retiredVariantWrite(w, r) {
-		return
-	}
-	if !s.verifyCSRF(w, r) {
-		return
-	}
-	principal, ok := s.requirePrincipal(w, r)
-	if !ok {
-		return
-	}
-	if err := s.catalog.DeleteVariant(r.Context(), principal, r.PathValue("id")); err != nil {
-		s.renderCatalogError(w, r, principal, err)
-		return
-	}
-	s.redirectToModelEditor(w, r, r.FormValue("return_model_id"))
-}
-
 func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
 	if !s.verifyCSRF(w, r) {
 		return
@@ -545,20 +471,7 @@ func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.options.Specifications != nil {
-		s.saveTaggedAsset(w, r, principal, "")
-		return
-	}
-	created, err := s.catalog.CreateAsset(r.Context(), principal, application.CreateCatalogAsset{
-		VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
-		SerialNumber:    r.FormValue("serial_number"),
-		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
-	})
-	if err != nil {
-		s.renderAssetMutationError(w, r, principal, assetFromForm(r, ""), err)
-		return
-	}
-	http.Redirect(w, r, "/assets/"+created.ID, http.StatusSeeOther)
+	s.saveTaggedAsset(w, r, principal, "")
 }
 
 func (s *Server) newAssetForm(w http.ResponseWriter, r *http.Request) {
@@ -570,12 +483,12 @@ func (s *Server) newAssetForm(w http.ResponseWriter, r *http.Request) {
 		s.renderForbidden(w, principal, "error.forbidden_asset")
 		return
 	}
-	draft := domain.Asset{ModelID: strings.TrimSpace(r.URL.Query().Get("model_id")), VariantID: strings.TrimSpace(r.URL.Query().Get("variant_id"))}
-	if s.options.Specifications != nil && r.URL.Query().Has("variant_id") {
+	draft := domain.Asset{ModelID: strings.TrimSpace(r.URL.Query().Get("model_id"))}
+	if r.URL.Query().Has("variant_id") {
 		s.renderAssetForm(w, r, http.StatusUnprocessableEntity, principal, draft, s.userError(principal.Locale, application.NewInputError("validation.specification_retired")))
 		return
 	}
-	if s.options.Specifications != nil && (draft.ModelID != "" || r.URL.Query().Has("tag_ids")) {
+	if draft.ModelID != "" || r.URL.Query().Has("tag_ids") {
 		cmd := application.SaveSpecificationAsset{ModelID: draft.ModelID}
 		if r.URL.Query().Has("tag_ids") {
 			cmd.TagIDs = nonemptyTagIDs(r.URL.Query()["tag_ids"])
@@ -615,20 +528,7 @@ func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if s.options.Specifications != nil {
-		s.saveTaggedAsset(w, r, principal, r.PathValue("id"))
-		return
-	}
-	_, err := s.catalog.UpdateAsset(r.Context(), principal, application.UpdateCatalogAsset{
-		ID: r.PathValue("id"), VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
-		SerialNumber:    r.FormValue("serial_number"),
-		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
-	})
-	if err != nil {
-		s.renderAssetMutationError(w, r, principal, assetFromForm(r, r.PathValue("id")), err)
-		return
-	}
-	http.Redirect(w, r, "/assets/"+r.PathValue("id"), http.StatusSeeOther)
+	s.saveTaggedAsset(w, r, principal, r.PathValue("id"))
 }
 
 func (s *Server) assetDetail(w http.ResponseWriter, r *http.Request) {
@@ -1007,7 +907,7 @@ func (s *Server) renderAssetMutationError(w http.ResponseWriter, r *http.Request
 
 func assetFromForm(r *http.Request, id string) domain.Asset {
 	asset := domain.Asset{
-		ID: id, ModelID: r.FormValue("model_id"), VariantID: r.FormValue("variant_id"), DisplayName: r.FormValue("display_name"),
+		ID: id, ModelID: r.FormValue("model_id"), DisplayName: r.FormValue("display_name"),
 		SerialNumber:    r.FormValue("serial_number"),
 		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	}
@@ -1024,15 +924,6 @@ func (s *Server) renderAssetForm(w http.ResponseWriter, r *http.Request, status 
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
-	}
-	for _, variant := range snapshot.Variants {
-		if s.options.Specifications == nil && variant.ID == asset.VariantID {
-			asset.Category = variant.CategoryName
-			asset.CategoryIcon = variant.CategoryIcon
-			asset.Model = variant.ModelName
-			asset.Variant = variant.Name
-			break
-		}
 	}
 	if s.options.Specifications != nil {
 		for _, model := range snapshot.Models {
@@ -1057,7 +948,7 @@ func (s *Server) renderAssetForm(w http.ResponseWriter, r *http.Request, status 
 	}
 	data := pageData{
 		Title: textFor(principal.Locale, titleKey), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: returnTo,
-		Categories: snapshot.Categories, Models: snapshot.Models, Variants: snapshot.Variants, Asset: &asset,
+		Categories: snapshot.Categories, Models: snapshot.Models, Asset: &asset,
 		CanManageCatalog: true, CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
 		AssetFormAction: action, AssetFormEditing: editing,
 	}
@@ -1263,7 +1154,7 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	result, err := s.catalog.ListModelsWithVariants(r.Context(), principal, application.ModelListOptions{
+	result, err := s.catalog.ListModelsPage(r.Context(), principal, application.ModelListOptions{
 		Query: query, CategoryID: categoryID, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
 	})
 	if err != nil {
@@ -1283,7 +1174,7 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 	}
 	data := pageData{
 		Title: textFor(principal.Locale, "title.catalog"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
-		Categories: categories, Models: result.Models, Variants: result.Variants, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+		Categories: categories, Models: result.Models, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CategoryIcons: application.CategoryIconOptions,
 		TableQuery:    query, TableFilter: categoryID, TableSort: sortKey, TableDirection: direction,
 		TableTotal: result.Total, TablePage: page, TableTotalPages: totalPages,
@@ -1647,7 +1538,6 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 		data.Accent = application.AccentEmerald
 	}
 	data.Strings = stringsFor(data.Locale)
-	data.HasSpecifications = s.options.Specifications != nil
 	if data.ReturnTo == "" {
 		data.ReturnTo = "/"
 	}

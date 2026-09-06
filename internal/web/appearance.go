@@ -62,7 +62,6 @@ type appearancePageData struct {
 	Rules              []appearanceRuleRow
 	Candidates         []application.AppearanceCandidate
 	Manual             bool
-	Legacy             []application.LegacyMediaMapping
 }
 
 func (s *Server) appearancePage(w http.ResponseWriter, r *http.Request) {
@@ -71,22 +70,6 @@ func (s *Server) appearancePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderAppearance(w, r, p, http.StatusOK, "")
-}
-
-func (s *Server) resolveLegacyAppearance(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resourcePrincipal(w, r)
-	if !ok || !s.verifyCSRF(w, r) {
-		return
-	}
-	if s.options.Specifications == nil {
-		http.NotFound(w, r)
-		return
-	}
-	if err := s.options.Specifications.ResolveLegacyMapping(r.Context(), p, r.PathValue("id"), r.PathValue("variant")); err != nil {
-		s.renderAppearance(w, r, p, http.StatusUnprocessableEntity, s.userError(p.Locale, err))
-		return
-	}
-	http.Redirect(w, r, "/admin/catalog/models/"+r.PathValue("id")+"/appearance#legacy", http.StatusSeeOther)
 }
 
 func (s *Server) renderAppearance(w http.ResponseWriter, r *http.Request, p application.Principal, status int, message string) {
@@ -109,11 +92,6 @@ func (s *Server) renderAppearance(w http.ResponseWriter, r *http.Request, p appl
 		values = r.PostForm
 	}
 	view := appearancePageData{Model: model, RuleID: values.Get("rule_id"), ResourceID: values.Get("resource_id"), TagIDs: nonemptyTagIDs(values["tag_ids"]), Manual: values.Get("manual") == "1"}
-	for _, mapping := range state.LegacyMedia {
-		if mapping.ModelID == model.ID {
-			view.Legacy = append(view.Legacy, mapping)
-		}
-	}
 	found := view.RuleID == ""
 	for _, rule := range state.Defaults {
 		if rule.ModelID != model.ID {

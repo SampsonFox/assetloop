@@ -77,8 +77,8 @@ func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
 		dialect = goose.DialectSQLite3
 	}
 	provider, err := goose.NewProvider(dialect, db, migrationFS,
-		goose.WithExcludeNames([]string{specificationMigrationName}),
-		goose.WithGoMigrations(specificationMigration(cfg.Driver)))
+		goose.WithExcludeNames([]string{specificationMigrationName, specificationContractMigrationName}),
+		goose.WithGoMigrations(specificationMigration(cfg.Driver), specificationContractMigration(cfg.Driver)))
 	if err != nil {
 		return fmt.Errorf("initialize migrations: %w", err)
 	}
@@ -86,7 +86,7 @@ func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
 		// Rebuild migrations need FK enforcement suspended outside Goose's transaction.
 		// Goose commits the schema and version together and rolls both back on failure.
 		for current < target {
-			if current == 10 || current == 11 || current == 12 {
+			if current == 10 || current == 11 || current == 12 || current == 13 {
 				if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
 					return err
 				}

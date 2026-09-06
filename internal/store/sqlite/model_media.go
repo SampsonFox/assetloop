@@ -125,8 +125,6 @@ func (s *Store) BindModel3DResource(ctx context.Context, tenantID string, c appl
 	switch c.Kind {
 	case "model":
 		n, err = s.queries().BindModel3D(ctx, sqlitedb.BindModel3DParams{ID: id, TenantID: tenant, ResourceID: resource})
-	case "variant":
-		n, err = s.queries().BindVariant3D(ctx, sqlitedb.BindVariant3DParams{ID: id, TenantID: tenant, ResourceID: resource})
 	case "asset":
 		n, err = s.queries().BindAsset3D(ctx, sqlitedb.BindAsset3DParams{ID: id, TenantID: tenant, ResourceID: resource})
 	default:

@@ -111,7 +111,7 @@ Transport adapters contain authentication, parsing, and response formatting, not
 
 The active hierarchy is `ItemCategory -> ProductModel -> Asset`. Product identities
 remain entities; only specification descriptions become reusable typed tags.
-Migration 00013 is deployed to the existing SQLite development preview with a
+Migrations 00013–00014 are deployed to the existing SQLite development preview with a
 verified pre-upgrade backup. Final development acceptance remains in progress;
 PostgreSQL live verification is still a required UAT gate.
 
@@ -136,13 +136,13 @@ PostgreSQL live verification is still a required UAT gate.
   The approved contract phase removes the old specification hierarchy rather than
   retaining a compatibility API. Asset commands accept only direct model/tag
   selections; obsolete HTTP specification parameters are explicitly rejected.
-  Applied migration 00013 remains immutable. A subsequent paired forward migration
-  will remove variant tables, legacy mappings and asset variant/color columns after
-  verifying migrated selections and preserving effective item media bindings.
-  This explicitly authorized retirement must preserve assets, lifecycle history,
-  tag values, resource metadata and GLB bytes; it is not permission to erase them.
-  Until that migration and adapter cleanup land, the schema-13 legacy tables are
-  transitional implementation debt, not a supported second specification model.
+  Applied migration 00013 remains immutable. Paired forward migration 00014 drops
+  product_variants, legacy mappings and asset variant/color columns. SQLite rebuilds
+  the asset table transactionally and checks all foreign keys before committing;
+  an unknown dependent table aborts the retirement and permits a safe retry.
+  Migrated selections, assets, lifecycle history, resource metadata, effective item
+  overrides and GLB bytes are preserved. Runtime adapters and HTTP maintenance no
+  longer support the retired hierarchy.
 - Future market inputs use model identity plus configuration-tag snapshots,
   condition, region and source. This transition adds no market polling or storage.
 
@@ -368,20 +368,18 @@ may share a resource. Resource tags describe visible features; multiple searchab
 categories reuse the existing category dictionary. No applicable-model whitelist or
 automatic binding is inferred from resource tags.
 
-With migration 00013, live application media reads instead resolve asset override,
-confirmed appearance default, then product-model default. Resource reference lists,
-counts and deletion guards include model defaults, asset overrides, appearance rules
-and unresolved legacy mappings. Retained variant resource IDs are compatibility
-evidence, not live references. Resolving a legacy mapping removes its protection,
-but does not erase the mapping or change an existing asset override. Resource tag
-and category edits are descriptive and never rewrite confirmed bindings.
+Live application media reads resolve asset override, confirmed appearance default,
+then product-model default. Resource reference lists, counts and deletion guards
+include only model defaults, asset overrides and appearance rules. Migration 00014
+retires the temporary legacy mappings; existing item overrides produced by migration
+00013 remain explicit bindings. Resource tag and category edits are descriptive and
+never rewrite confirmed bindings.
 
 `ModelMediaService.UploadAppearance` reuses GLB validation and BlobStore verification,
 then creates the resource and confirmed appearance rule under the specification
 write transaction. The ordinary rule editor and upload path call the same in-transaction
 rule validation. An ambiguous commit preserves bytes unless a separate read proves
-the resource did not persist. Legacy acknowledgement is constrained to the actor's
-tenant and specified product model; it preserves the historical mapping and item pins.
+the resource did not persist. There is no legacy acknowledgement endpoint.
 
 Uploads write and verify new resource-specific blobs before transactionally creating metadata and binding the target. Replacing a binding never deletes the previous resource. A referenced resource cannot be deleted: binding and deletion share a transaction isolation protocol, and pending-deletion resources reject new bindings. Unreferenced deletion first persists pending state, then removes the blob and finally the row; failures remain visible and retryable. No distributed transaction or background cleanup service is introduced. Authenticated reads are proxied by Web; source URL, author, and license remain descriptive metadata.
 

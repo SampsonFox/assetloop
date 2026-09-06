@@ -104,7 +104,7 @@ func RunSpecifications(t *testing.T, first, second Store) {
 			t.Fatal(err)
 		}
 		stored, err := second.GetAsset(ctx, actor.TenantID, a.ID)
-		if err != nil || stored.ModelID != model.ID || stored.VariantID != "" {
+		if err != nil || stored.ModelID != model.ID {
 			t.Fatalf("direct model read: %+v %v", stored, err)
 		}
 		return a

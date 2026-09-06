@@ -27,17 +27,11 @@ type CatalogStore interface {
 	UpdateCategory(context.Context, domain.ItemCategory) error
 	CreateModel(context.Context, domain.ProductModel) error
 	UpdateModel(context.Context, domain.ProductModel) error
-	CreateVariant(context.Context, domain.ProductVariant) error
-	UpdateVariant(context.Context, domain.ProductVariant) error
-	DeleteVariant(context.Context, string, string) (bool, error)
-	CreateCatalogAsset(context.Context, domain.Asset) error
-	UpdateCatalogAsset(context.Context, domain.Asset) error
 	ListCategories(context.Context, string) ([]domain.ItemCategory, error)
 	ListModels(context.Context, string) ([]domain.ProductModel, error)
-	ListVariants(context.Context, string) ([]domain.ProductVariant, error)
 	ListAssets(context.Context, string) ([]domain.Asset, error)
 	ListAssetsWithSummary(context.Context, string, AssetListOptions) (AssetListResult, error)
-	ListModelsWithVariants(context.Context, string, ModelListOptions) (ModelListResult, error)
+	ListModelsPage(context.Context, string, ModelListOptions) (ModelListResult, error)
 	GetAsset(context.Context, string, string) (domain.Asset, error)
 }
 
@@ -70,9 +64,8 @@ type ModelListOptions struct {
 }
 
 type ModelListResult struct {
-	Models   []domain.ProductModel
-	Variants []domain.ProductVariant
-	Total    int
+	Models []domain.ProductModel
+	Total  int
 }
 
 type MemberListOptions struct {

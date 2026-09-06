@@ -142,7 +142,7 @@ table { width:100%; border-collapse:collapse; } th,td { padding:12px 10px; borde
 .event-void .badge { background:var(--void-soft); color:var(--void-ink); }
 @media (max-width:760px) { .topbar { flex-wrap:wrap; padding:14px 5vw; } .topbar > nav { order:3; width:100%; } .account-menu { margin-left:auto; } .shell { padding:36px 0; } .grid,.two-column { grid-template-columns:1fr; } .auth-card { padding:25px; } }
 @media (max-width:760px) { .form-grid { grid-template-columns:1fr; } }
-.heading-actions,.drawer-heading,.drawer-actions,.drawer-footer,.field-heading,.timeline-heading,.variant-manager-heading,.variant-manager-toolbar,.variant-manager-row,.variant-actions { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+.heading-actions,.drawer-heading,.drawer-actions,.drawer-footer,.field-heading,.timeline-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; }
 .heading-actions { align-self:center; }
 .button { display:inline-block; width:auto; padding:10px 15px; border:1px solid var(--accent); border-radius:10px; background:var(--accent); color:var(--accent-contrast); font-weight:800; }
 button.auto { width:auto; }
@@ -262,14 +262,6 @@ button.secondary { border-color:var(--line); background:var(--field); color:var(
 .variant-tags { display:flex; flex-wrap:wrap; gap:6px; min-width:120px; }
 .variant-tag { display:inline-flex; align-items:center; min-height:26px; padding:2px 9px; border:1px solid var(--line); border-radius:6px; background:var(--paper); color:var(--ink); font-size:13px; white-space:nowrap; }
 .model-drawer-panel { display:flex; flex-direction:column; gap:24px; }
-.variant-manager { padding-top:22px; border-top:1px solid var(--line); }
-.variant-manager-heading h3,.variant-manager-heading p { margin:0; }
-.variant-manager-heading h3 { font-size:17px; }
-.variant-manager-group { margin-top:16px; }
-.variant-manager-list { display:grid; margin-top:10px; border-top:1px solid var(--line); }
-.variant-manager-row { min-height:48px; padding:9px 0; border-bottom:1px solid var(--line); }
-.variant-actions { gap:12px; }
-.variant-actions form { margin:0; }
 .danger-link { color:var(--danger); }
 .link-button { width:auto; cursor:pointer; }
 .form-field { display:grid; gap:7px; }

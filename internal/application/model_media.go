@@ -216,7 +216,7 @@ func (s *ModelMediaService) Binding(ctx context.Context, actor Principal, kind, 
 	if err := actor.Require(CapabilityView); err != nil {
 		return Model3DBinding{}, err
 	}
-	if kind != "model" && kind != "variant" && kind != "asset" {
+	if kind != "model" && kind != "asset" {
 		return Model3DBinding{}, NewInputError("validation.filter_invalid")
 	}
 	if err := validID("target ID", targetID); err != nil {
@@ -313,7 +313,7 @@ func (s *ModelMediaService) Bind(ctx context.Context, actor Principal, cmd BindM
 	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return err
 	}
-	if cmd.Kind != "model" && cmd.Kind != "variant" && cmd.Kind != "asset" {
+	if cmd.Kind != "model" && cmd.Kind != "asset" {
 		return NewInputError("validation.filter_invalid")
 	}
 	if err := validID("target ID", cmd.TargetID); err != nil {

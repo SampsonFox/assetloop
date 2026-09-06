@@ -14,7 +14,7 @@
 <label>{{t $s "catalog.model_3d_license"}}<input name="model_3d_license" maxlength="200" value="{{.Resource.License}}"></label><p class="muted">{{t $s "resource.edit_help"}}</p><button class="auto" type="submit">{{t $s "common.save"}}</button>
 </form>{{else}}<dl class="asset-profile-content"><dt>{{t $s "catalog.model_3d_author"}}</dt><dd>{{.Resource.Author}}</dd><dt>{{t $s "catalog.model_3d_license"}}</dt><dd>{{.Resource.License}}</dd><dt>{{t $s "catalog.model_3d_source"}}</dt><dd>{{if .Resource.SourceURL}}<a href="{{.Resource.SourceURL}}" rel="noreferrer">{{.Resource.SourceURL}}</a>{{else}}{{t $s "common.none"}}{{end}}</dd></dl>{{end}}</section><script type="module" src="/static/asset-model-viewer.js"></script>
 {{else}}<p role="status">{{t $s "resource.pending_help"}}</p>{{end}}
-{{if .HasSpecifications}}
+
 <section id="resource-tags" class="resource-references"><h2>{{t $s "tags.resource_description"}}</h2><p class="muted">{{t $s "tags.resource_help"}}</p>
 {{if and .CanManageCatalog (eq .Resource.Status "ready")}}
 <form class="stack" method="post" action="/admin/3d/{{.Resource.ID}}/tags" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
@@ -27,7 +27,7 @@
 <div class="drawer-actions"><a href="/admin/tags">{{t $s "tags.title"}}</a><button class="auto" type="submit">{{t $s "tags.save_resource"}}</button></div>
 </form>
 {{else}}<dl><dt>{{t $s "tags.resource_categories"}}</dt><dd>{{range .ResourceCategories}}{{if .Selected}}<span class="variant-tag">{{.Name}}</span> {{end}}{{end}}</dd><dt>{{t $s "tags.values"}}</dt><dd>{{range .ResourceTags.Summary}}<span class="variant-tag">{{.}}</span> {{else}}{{t $s "common.none"}}{{end}}</dd></dl>{{end}}
-</section>{{end}}
-<section class="resource-references" id="references"><h2>{{t $s "resource.references"}}</h2>{{if .References}}<ul>{{range .References}}<li><a href="{{index $.ReferenceURLs .ID}}">{{.Name}}</a> · {{if eq .Kind "model"}}{{t $s "catalog.model_name"}}{{else if eq .Kind "appearance"}}{{t $s "tags.ref.appearance"}}{{else if eq .Kind "legacy"}}{{t $s "tags.ref.legacy"}}{{else if eq .Kind "variant"}}{{t $s "catalog.variant"}}{{else}}{{t $s "assets.item"}}{{end}}</li>{{end}}</ul><p class="muted">{{t $s "resource.referenced_help"}}</p>{{else}}<p class="muted">{{t $s "resource.no_references"}}</p>{{end}}
+</section>
+<section class="resource-references" id="references"><h2>{{t $s "resource.references"}}</h2>{{if .References}}<ul>{{range .References}}<li><a href="{{index $.ReferenceURLs .ID}}">{{.Name}}</a> · {{if eq .Kind "model"}}{{t $s "catalog.model_name"}}{{else if eq .Kind "appearance"}}{{t $s "tags.ref.appearance"}}{{else}}{{t $s "assets.item"}}{{end}}</li>{{end}}</ul><p class="muted">{{t $s "resource.referenced_help"}}</p>{{else}}<p class="muted">{{t $s "resource.no_references"}}</p>{{end}}
 {{if .CanManageCatalog}}<form method="post" action="/admin/3d/{{.Resource.ID}}/delete" data-confirm="{{t $s "resource.delete_confirm"}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}"><button class="secondary auto" type="submit" {{if .References}}disabled{{end}}>{{if eq .Resource.Status "ready"}}{{t $s "common.delete"}}{{else}}{{t $s "resource.retry_delete"}}{{end}}</button></form>{{end}}</section>
 {{end}}

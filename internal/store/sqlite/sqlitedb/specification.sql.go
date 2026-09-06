@@ -257,7 +257,7 @@ func (q *Queries) DeleteAppearanceDefault(ctx context.Context, arg DeleteAppeara
 
 const listSpecificationTags = `-- name: ListSpecificationTags :many
 SELECT CAST(t.id AS TEXT) AS id,CAST(t.type_id AS TEXT) AS type_id,t.name,t.normalized_name,t.enabled,t.created_at,t.updated_at,k.name AS type_name,
-(SELECT COUNT(*) FROM model_allowed_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM legacy_variant_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id) AS reference_count
+(SELECT COUNT(*) FROM model_allowed_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r WHERE r.tenant_id=t.tenant_id AND r.tag_id=t.id) AS reference_count
 FROM specification_tags t JOIN specification_tag_types k ON k.tenant_id=t.tenant_id AND k.id=t.type_id WHERE t.tenant_id=?1
 AND (?2='' OR CAST(t.type_id AS TEXT)=?2)
 AND (?3='' OR ?3='all' OR t.enabled=(?3='enabled'))
@@ -328,7 +328,7 @@ func (q *Queries) ListSpecificationTags(ctx context.Context, arg ListSpecificati
 
 const listSpecificationTypes = `-- name: ListSpecificationTypes :many
 SELECT CAST(t.id AS TEXT) AS id,t.name,t.normalized_name,t.multiple,t.affects_appearance,t.enabled,t.system_code,t.created_at,t.updated_at,
-(SELECT COUNT(*) FROM model_allowed_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM legacy_variant_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id) AS reference_count
+(SELECT COUNT(*) FROM model_allowed_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM asset_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM resource_specification_tags r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id)+(SELECT COUNT(*) FROM model_appearance_conditions r JOIN specification_tags v ON v.tenant_id=r.tenant_id AND v.id=r.tag_id WHERE r.tenant_id=t.tenant_id AND v.type_id=t.id) AS reference_count
 FROM specification_tag_types t WHERE t.tenant_id=?1
 AND (?2='' OR ?2='all' OR t.enabled=(?2='enabled'))
 AND instr(t.normalized_name, ?3) > 0
@@ -525,23 +525,6 @@ func (q *Queries) RemoveModelAllowedTag(ctx context.Context, arg RemoveModelAllo
 	return err
 }
 
-const resolveLegacyMedia = `-- name: ResolveLegacyMedia :execrows
-UPDATE legacy_variant_media SET resolved=1 WHERE tenant_id=?1 AND variant_id=?2
-`
-
-type ResolveLegacyMediaParams struct {
-	TenantID  string
-	VariantID string
-}
-
-func (q *Queries) ResolveLegacyMedia(ctx context.Context, arg ResolveLegacyMediaParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, resolveLegacyMedia, arg.TenantID, arg.VariantID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const specificationCategories = `-- name: SpecificationCategories :many
 SELECT CAST(id AS TEXT) AS id FROM item_categories WHERE tenant_id=?1
 `
@@ -635,54 +618,12 @@ func (q *Queries) SpecificationDimensions(ctx context.Context, tenantID string) 
 	return items, nil
 }
 
-const specificationLegacyMedia = `-- name: SpecificationLegacyMedia :many
-SELECT CAST(variant_id AS TEXT) AS variant_id,CAST(model_id AS TEXT) AS model_id,CAST(resource_id AS TEXT) AS resource_id,reason,resolved FROM legacy_variant_media WHERE tenant_id=?1
-`
-
-type SpecificationLegacyMediaRow struct {
-	VariantID  string
-	ModelID    string
-	ResourceID string
-	Reason     string
-	Resolved   int64
-}
-
-func (q *Queries) SpecificationLegacyMedia(ctx context.Context, tenantID string) ([]SpecificationLegacyMediaRow, error) {
-	rows, err := q.db.QueryContext(ctx, specificationLegacyMedia, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SpecificationLegacyMediaRow
-	for rows.Next() {
-		var i SpecificationLegacyMediaRow
-		if err := rows.Scan(
-			&i.VariantID,
-			&i.ModelID,
-			&i.ResourceID,
-			&i.Reason,
-			&i.Resolved,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const specificationLinks = `-- name: SpecificationLinks :many
 SELECT CAST('model' AS TEXT) AS kind,CAST(mt.model_id AS TEXT) AS target_id,CAST(mt.model_id AS TEXT) AS model_id,CAST(mt.tag_id AS TEXT) AS tag_id FROM model_allowed_tags mt WHERE mt.tenant_id=?1
 UNION ALL SELECT 'asset',CAST(at.asset_id AS TEXT),CAST(at.model_id AS TEXT),CAST(at.tag_id AS TEXT) FROM asset_specification_tags at WHERE at.tenant_id=?1
 UNION ALL SELECT 'resource',CAST(rt.resource_id AS TEXT),'',CAST(rt.tag_id AS TEXT) FROM resource_specification_tags rt WHERE rt.tenant_id=?1
 UNION ALL SELECT 'resource-category',CAST(rc.resource_id AS TEXT),'',CAST(rc.category_id AS TEXT) FROM resource_categories rc WHERE rc.tenant_id=?1
 UNION ALL SELECT 'appearance',CAST(ac.rule_id AS TEXT),CAST(ac.model_id AS TEXT),CAST(ac.tag_id AS TEXT) FROM model_appearance_conditions ac WHERE ac.tenant_id=?1
-UNION ALL SELECT 'legacy',CAST(l.variant_id AS TEXT),CAST(v.model_id AS TEXT),CAST(l.tag_id AS TEXT) FROM legacy_variant_tags l JOIN product_variants v ON v.tenant_id=l.tenant_id AND v.id=l.variant_id WHERE l.tenant_id=?1
 `
 
 type SpecificationLinksRow struct {

@@ -376,17 +376,6 @@ func (s *SpecificationService) DeleteAppearance(ctx context.Context, actor Princ
 	})
 }
 
-func (s *SpecificationService) ResolveLegacyMapping(ctx context.Context, actor Principal, modelID, variantID string) error {
-	return s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
-		for _, mapping := range state.LegacyMedia {
-			if mapping.VariantID == variantID && mapping.ModelID == modelID {
-				return store.ResolveLegacyMedia(ctx, actor.TenantID, variantID)
-			}
-		}
-		return NewInputError("validation.specification_missing")
-	})
-}
-
 func (s *SpecificationService) SaveResource(ctx context.Context, actor Principal, cmd SaveResourceSpecification) error {
 	return s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
 		if err := validID("resource ID", cmd.ResourceID); err != nil {
@@ -519,23 +508,15 @@ func (state SpecificationSnapshot) ValidateExisting() error {
 }
 func (state SpecificationSnapshot) HydrateSelection(asset *domain.Asset, ids []string) {
 	asset.Tags = nil
-	asset.Color = ""
 	var labels []string
 	selected := specIDSet(ids)
 	for _, tag := range state.Tags {
 		if selected[tag.ID] {
 			asset.Tags = append(asset.Tags, tag)
 			labels = append(labels, tag.Name)
-			kind, _ := state.Type(tag.TypeID)
-			if kind.SystemCode == "color" {
-				if asset.Color != "" {
-					asset.Color += " · "
-				}
-				asset.Color += tag.Name
-			}
 		}
 	}
-	asset.Variant = strings.Join(labels, " · ")
+	asset.TagSummary = strings.Join(labels, " · ")
 }
 func specificationInputError(err error) error {
 	switch {

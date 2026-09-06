@@ -53,17 +53,39 @@ func TestSpecificationMigration(t *testing.T) {
 			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 12)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM assets", 5)
 			mustSpecificationExec(t, db, "DROP TABLE specification_tags")
+			idType := "TEXT"
+			if driver == "postgres" {
+				idType = "UUID"
+			}
+			// An unknown remaining dependency must abort contract migration 14,
+			// not erase it or leave the rebuilt database partially committed.
+			mustSpecificationExec(t, db, "CREATE TABLE retirement_guard (variant_id "+idType+" REFERENCES product_variants(id))")
+			mustSpecificationExec(t, db, "INSERT INTO retirement_guard SELECT id FROM product_variants ORDER BY id LIMIT 1")
+			if err := basestore.Migrate(context.Background(), db, cfg); err == nil {
+				t.Fatal("retirement silently discarded an unknown dependency")
+			}
+			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 13)
+			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM assets", 5)
+			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM legacy_variant_media", 3)
+			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM retirement_guard", 1)
+			mustSpecificationExec(t, db, "DROP TABLE retirement_guard")
 			if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
 				t.Fatal(err)
 			}
-			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 13)
+			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 14)
+			if driver == "sqlite" {
+				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('product_variants','legacy_variant_tags','legacy_variant_media')", 0)
+				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM pragma_table_info('assets') WHERE name IN ('variant_id','color')", 0)
+			} else {
+				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('product_variants','legacy_variant_tags','legacy_variant_media')", 0)
+				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='assets' AND column_name IN ('variant_id','color')", 0)
+			}
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM assets WHERE model_id='"+resourceUpgradeModel+"'", 5)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM specification_tag_types", 2)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM specification_tags", 4)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM specification_tags WHERE name='Δ 256' AND normalized_name='δ 256'", 1)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM specification_tag_types WHERE name='储存'", 0)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM model_appearance_defaults", 1)
-			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM legacy_variant_media", 3)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM assets WHERE id='"+resourceUpgradeAsset+"' AND model_3d_resource_id='"+secondResource+"'", 1)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM assets WHERE id<>'"+resourceUpgradeAsset+"' AND model_3d_resource_id='"+resourceUpgradeModel+"'", 3)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM resource_categories", 2)
@@ -79,54 +101,33 @@ func TestSpecificationMigration(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM specification_tags", 4)
-			// Retained variant columns are audit data, not live references. Only
-			// unresolved legacy mappings and current bindings protect the GLB.
+			// Only live model, appearance and item bindings protect resources now.
 			var media application.ModelMediaStore = sqlite.New(db)
-			var specificationStore application.SpecificationStore = sqlite.New(db)
 			if driver == "postgres" {
 				media = postgres.New(db)
-				specificationStore = postgres.New(db)
 			}
 			refs, err := media.Model3DReferences(context.Background(), resourceUpgradeTenant, secondResource)
-			if err != nil || len(refs) != 2 {
+			if err != nil || len(refs) != 1 {
 				t.Fatalf("migrated references: %+v %v", refs, err)
 			}
 			seen := map[string]bool{}
 			for _, ref := range refs {
 				seen[ref.Kind] = true
 			}
-			if !seen["legacy"] || !seen["asset"] || seen["variant"] {
+			if seen["legacy"] || !seen["asset"] || seen["variant"] {
 				t.Fatalf("wrong active reference kinds: %+v", refs)
 			}
 			page, err := media.ListModel3DResources(context.Background(), resourceUpgradeTenant, application.Model3DResourceListOptions{Query: "Other body", Page: 1, PageSize: 10})
-			if err != nil || len(page.Resources) != 1 || page.Resources[0].ReferenceCount != 2 {
-				t.Fatalf("legacy reference count: %+v %v", page, err)
+			if err != nil || len(page.Resources) != 1 || page.Resources[0].ReferenceCount != 1 {
+				t.Fatalf("live reference count: %+v %v", page, err)
 			}
 			mustSpecificationExec(t, db, "UPDATE assets SET model_3d_resource_id=NULL WHERE model_3d_resource_id='"+secondResource+"'")
-			if err := media.MarkModel3DResourcePendingDelete(context.Background(), resourceUpgradeTenant, secondResource); err == nil {
-				t.Fatal("unresolved legacy mapping did not protect resource")
-			}
-			specifications := application.NewSpecificationService(specificationStore)
-			actor := application.Principal{TenantID: resourceUpgradeTenant, UserID: resourceUpgradeAsset, Role: application.RoleOwner}
-			if err := specifications.ResolveLegacyMapping(context.Background(), actor, secondVariant, secondVariant); err == nil {
-				t.Fatal("wrong model resolved legacy mapping")
-			}
-			viewer := actor
-			viewer.Role = application.RoleViewer
-			if err := specifications.ResolveLegacyMapping(context.Background(), viewer, resourceUpgradeModel, secondVariant); err == nil {
-				t.Fatal("viewer resolved legacy mapping")
-			}
-			if err := specifications.ResolveLegacyMapping(context.Background(), actor, resourceUpgradeModel, secondVariant); err != nil {
-				t.Fatal(err)
-			}
 			if err := media.MarkModel3DResourcePendingDelete(context.Background(), resourceUpgradeTenant, secondResource); err != nil {
-				t.Fatalf("resolved legacy mapping blocked deletion: %v", err)
+				t.Fatalf("obsolete references blocked deletion: %v", err)
 			}
 			if err := media.FinishModel3DResourceDelete(context.Background(), resourceUpgradeTenant, secondResource); err != nil {
 				t.Fatal(err)
 			}
-			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM product_variants WHERE model_3d_resource_id='"+secondResource+"'", 1)
-			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM legacy_variant_media WHERE resource_id='"+secondResource+"' AND resolved=TRUE", 1)
 		})
 	}
 }

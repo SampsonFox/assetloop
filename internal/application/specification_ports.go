@@ -13,17 +13,12 @@ type AppearanceDimension struct {
 	ModelID, TypeID   string
 	AffectsAppearance bool
 }
-type LegacyMediaMapping struct {
-	VariantID, ModelID, ResourceID, Reason string
-	Resolved                               bool
-}
 type SpecificationSnapshot struct {
 	Types       []domain.SpecificationTagType
 	Tags        []domain.SpecificationTag
 	Links       []SpecificationLink
 	Dimensions  []AppearanceDimension
 	Defaults    []domain.AppearanceDefault
-	LegacyMedia []LegacyMediaMapping
 	CategoryIDs []string
 }
 
@@ -43,7 +38,6 @@ type SpecificationStore interface {
 	DeleteAppearanceDefault(context.Context, string, string) error
 	AddAppearanceCondition(context.Context, string, string, string, string) error
 	ClearAppearanceConditions(context.Context, string, string) error
-	ResolveLegacyMedia(context.Context, string, string) error
 	ClearAssetSpecificationTags(context.Context, string, string) error
 	AddAssetSpecificationTag(context.Context, string, string, string, string) error
 	WriteSelectedAsset(context.Context, domain.Asset, bool) error

@@ -59,7 +59,7 @@ func TestCatalogServiceNormalizesAssetListOptions(t *testing.T) {
 	if _, err := service.ListAssetsWithSummary(context.Background(), viewer, AssetListOptions{Sort: "sql", Direction: "sideways"}); err == nil {
 		t.Fatal("unknown asset sort should fail")
 	}
-	if _, err := service.ListModelsWithVariants(context.Background(), viewer, ModelListOptions{Query: " Phone ", Sort: "name", Direction: "desc", PageSize: 500}); err != nil {
+	if _, err := service.ListModelsPage(context.Background(), viewer, ModelListOptions{Query: " Phone ", Sort: "name", Direction: "desc", PageSize: 500}); err != nil {
 		t.Fatal(err)
 	}
 	if store.modelListOptions.Query != "Phone" || store.modelListOptions.Sort != "name" || store.modelListOptions.Direction != "desc" || store.modelListOptions.Page != 1 || store.modelListOptions.PageSize != 200 {
@@ -78,23 +78,16 @@ func (s *catalogSpy) CreateCategory(_ context.Context, value domain.ItemCategory
 	s.createdCategory = value
 	return nil
 }
-func (*catalogSpy) UpdateCategory(context.Context, domain.ItemCategory) error  { return nil }
-func (*catalogSpy) CreateModel(context.Context, domain.ProductModel) error     { return nil }
-func (*catalogSpy) UpdateModel(context.Context, domain.ProductModel) error     { return nil }
-func (*catalogSpy) CreateVariant(context.Context, domain.ProductVariant) error { return nil }
-func (*catalogSpy) UpdateVariant(context.Context, domain.ProductVariant) error { return nil }
+func (*catalogSpy) UpdateCategory(context.Context, domain.ItemCategory) error { return nil }
+func (*catalogSpy) CreateModel(context.Context, domain.ProductModel) error    { return nil }
+func (*catalogSpy) UpdateModel(context.Context, domain.ProductModel) error    { return nil }
 func (s *catalogSpy) DeleteVariant(context.Context, string, string) (bool, error) {
 	return s.deleteAllowed, nil
 }
-func (*catalogSpy) CreateCatalogAsset(context.Context, domain.Asset) error { return nil }
-func (*catalogSpy) UpdateCatalogAsset(context.Context, domain.Asset) error { return nil }
 func (*catalogSpy) ListCategories(context.Context, string) ([]domain.ItemCategory, error) {
 	return nil, nil
 }
 func (*catalogSpy) ListModels(context.Context, string) ([]domain.ProductModel, error) {
-	return nil, nil
-}
-func (*catalogSpy) ListVariants(context.Context, string) ([]domain.ProductVariant, error) {
 	return nil, nil
 }
 func (*catalogSpy) ListAssets(context.Context, string) ([]domain.Asset, error) { return nil, nil }
@@ -102,7 +95,7 @@ func (s *catalogSpy) ListAssetsWithSummary(_ context.Context, _ string, opts Ass
 	s.listOptions = opts
 	return AssetListResult{}, nil
 }
-func (s *catalogSpy) ListModelsWithVariants(_ context.Context, _ string, opts ModelListOptions) (ModelListResult, error) {
+func (s *catalogSpy) ListModelsPage(_ context.Context, _ string, opts ModelListOptions) (ModelListResult, error) {
 	s.modelListOptions = opts
 	return ModelListResult{}, nil
 }

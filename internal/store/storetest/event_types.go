@@ -23,7 +23,7 @@ func RunEventTypeManagement(t *testing.T, first, second Store, db *sql.DB, drive
 	if err != nil {
 		t.Fatal(err)
 	}
-	asset, err := catalog.CreateAsset(ctx, owner, application.CreateCatalogAsset{VariantID: snapshot.Variants[0].ID, DisplayName: "Type management"})
+	asset, err := application.NewSpecificationService(first).SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: snapshot.Models[0].ID, DisplayName: "Type management"})
 	if err != nil {
 		t.Fatal(err)
 	}

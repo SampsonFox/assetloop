@@ -37,9 +37,8 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 		ID: row.ID, TenantID: row.TenantID,
 		CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 		ModelID: row.ModelID, Model: row.ModelName,
-		VariantID: row.VariantID, Variant: row.VariantName,
 		Model3DResourceID: row.Model3dResourceID.String,
-		DisplayName:       row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+		DisplayName:       row.DisplayName, SerialNumber: row.SerialNumber,
 		PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
 	}, nil
 }

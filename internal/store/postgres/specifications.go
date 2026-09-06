@@ -83,13 +83,6 @@ func (s *Store) SpecificationSnapshot(ctx context.Context, tenant string) (appli
 		}
 		result.Defaults = append(result.Defaults, rule)
 	}
-	legacy, err := q.SpecificationLegacyMedia(ctx, tenantID)
-	if err != nil {
-		return result, err
-	}
-	for _, r := range legacy {
-		result.LegacyMedia = append(result.LegacyMedia, application.LegacyMediaMapping{VariantID: r.VariantID, ModelID: r.ModelID, ResourceID: r.ResourceID, Reason: r.Reason, Resolved: r.Resolved})
-	}
 	result.CategoryIDs, err = q.SpecificationCategories(ctx, tenantID)
 	return result, err
 }
@@ -246,18 +239,6 @@ func (s *Store) AddAppearanceCondition(ctx context.Context, tenant, rule, model,
 	}
 	return s.queries().AddAppearanceCondition(ctx, postgresdb.AddAppearanceConditionParams{TenantID: tenantID, RuleID: ruleID, ModelID: modelID, TagID: tagID})
 
-}
-func (s *Store) ResolveLegacyMedia(ctx context.Context, tenant, variant string) error {
-	tenantID, err := uuid.Parse(tenant)
-	if err != nil {
-		return err
-	}
-	variantID, err := uuid.Parse(variant)
-	if err != nil {
-		return err
-	}
-	n, err := s.queries().ResolveLegacyMedia(ctx, postgresdb.ResolveLegacyMediaParams{TenantID: tenantID, VariantID: variantID})
-	return updatedRow(n, err)
 }
 func (s *Store) ClearAssetSpecificationTags(ctx context.Context, tenant, asset string) error {
 	tenantID, err := uuid.Parse(tenant)

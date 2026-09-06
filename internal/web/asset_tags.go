@@ -9,10 +9,7 @@ import (
 )
 
 func (s *Server) getAsset(ctx context.Context, actor application.Principal, id string) (domain.Asset, error) {
-	if s.options.Specifications != nil {
-		return s.options.Specifications.Asset(ctx, actor, id)
-	}
-	return s.catalog.GetAsset(ctx, actor, id)
+	return s.options.Specifications.Asset(ctx, actor, id)
 }
 
 func (s *Server) saveTaggedAsset(w http.ResponseWriter, r *http.Request, actor application.Principal, id string) {

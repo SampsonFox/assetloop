@@ -34,39 +34,6 @@ func (s *Store) UpdateModel(ctx context.Context, model domain.ProductModel) erro
 	return updatedRow(count, err)
 }
 
-func (s *Store) CreateVariant(ctx context.Context, variant domain.ProductVariant) error {
-	return sqlitedb.New(s.db).CreateVariant(ctx, sqlitedb.CreateVariantParams{
-		ID: variant.ID, TenantID: variant.TenantID, ModelID: variant.ModelID, Name: variant.Name, Color: variant.Color, CreatedAt: sqliteTime(variant.CreatedAt),
-	})
-}
-
-func (s *Store) UpdateVariant(ctx context.Context, variant domain.ProductVariant) error {
-	count, err := sqlitedb.New(s.db).UpdateVariant(ctx, sqlitedb.UpdateVariantParams{ModelID: variant.ModelID, Name: variant.Name, Color: variant.Color, TenantID: variant.TenantID, ID: variant.ID})
-	return updatedRow(count, err)
-}
-
-func (s *Store) DeleteVariant(ctx context.Context, tenantID, variantID string) (bool, error) {
-	count, err := sqlitedb.New(s.db).DeleteVariant(ctx, sqlitedb.DeleteVariantParams{TenantID: tenantID, ID: variantID})
-	return count > 0, err
-}
-
-func (s *Store) CreateCatalogAsset(ctx context.Context, asset domain.Asset) error {
-	return sqlitedb.New(s.db).CreateCatalogAsset(ctx, sqlitedb.CreateCatalogAssetParams{
-		ID: asset.ID, TenantID: asset.TenantID, VariantID: sql.NullString{String: asset.VariantID, Valid: asset.VariantID != ""},
-		DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
-		PurchaseChannel: asset.PurchaseChannel, Notes: asset.Notes, CreatedAt: sqliteTime(asset.CreatedAt),
-	})
-}
-
-func (s *Store) UpdateCatalogAsset(ctx context.Context, asset domain.Asset) error {
-	count, err := sqlitedb.New(s.db).UpdateCatalogAsset(ctx, sqlitedb.UpdateCatalogAssetParams{
-		VariantID: sql.NullString{String: asset.VariantID, Valid: asset.VariantID != ""}, DisplayName: asset.DisplayName, SerialNumber: asset.SerialNumber,
-		PurchaseChannel: asset.PurchaseChannel, Notes: asset.Notes,
-		TenantID: asset.TenantID, ID: asset.ID,
-	})
-	return updatedRow(count, err)
-}
-
 func (s *Store) ListCategories(ctx context.Context, tenantID string) ([]domain.ItemCategory, error) {
 	rows, err := sqlitedb.New(s.db).ListCategories(ctx, tenantID)
 	if err != nil {
@@ -149,25 +116,6 @@ func nullString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: value != ""}
 }
 
-func (s *Store) ListVariants(ctx context.Context, tenantID string) ([]domain.ProductVariant, error) {
-	rows, err := sqlitedb.New(s.db).ListVariants(ctx, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]domain.ProductVariant, 0, len(rows))
-	for _, row := range rows {
-		createdAt, err := parseCatalogTime(row.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, domain.ProductVariant{Color: row.Color, Model3DResourceID: row.Model3dResourceID.String,
-			ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID, CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon,
-			ModelID: row.ModelID, ModelName: row.ModelName, Name: row.Name, CreatedAt: createdAt,
-		})
-	}
-	return result, nil
-}
-
 func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset, error) {
 	rows, err := sqlitedb.New(s.db).ListAssets(ctx, tenantID)
 	if err != nil {
@@ -181,8 +129,8 @@ func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset
 		}
 		result = append(result, domain.Asset{Model3DResourceID: row.Model3dResourceID.String,
 			ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
-			ModelID: row.ModelID, Model: row.ModelName, VariantID: row.VariantID, Variant: row.VariantName,
-			DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+			ModelID: row.ModelID, Model: row.ModelName,
+			DisplayName: row.DisplayName, SerialNumber: row.SerialNumber,
 			PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
 		})
 	}
@@ -213,8 +161,8 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 		result.Assets = append(result.Assets, application.AssetWithSummary{
 			Asset: domain.Asset{Model3DResourceID: row.Model3dResourceID.String,
 				ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID, Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
-				ModelID: row.ModelID, Model: row.ModelName, VariantID: row.VariantID, Variant: row.VariantName,
-				DisplayName: row.DisplayName, SerialNumber: row.SerialNumber, Color: row.Color,
+				ModelID: row.ModelID, Model: row.ModelName,
+				DisplayName: row.DisplayName, SerialNumber: row.SerialNumber,
 				PurchaseChannel: row.PurchaseChannel, Notes: row.Notes, CreatedAt: createdAt,
 			},
 			Summary: domain.AssetSummary{
@@ -226,8 +174,8 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 	return result, nil
 }
 
-func (s *Store) ListModelsWithVariants(ctx context.Context, tenantID string, opts application.ModelListOptions) (application.ModelListResult, error) {
-	rows, err := sqlitedb.New(s.db).ListModelsWithVariants(ctx, sqlitedb.ListModelsWithVariantsParams{
+func (s *Store) ListModelsPage(ctx context.Context, tenantID string, opts application.ModelListOptions) (application.ModelListResult, error) {
+	rows, err := sqlitedb.New(s.db).ListModelsPage(ctx, sqlitedb.ListModelsPageParams{
 		TenantID: tenantID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID,
 		SortKey: opts.Sort, SortDirection: opts.Direction,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
@@ -235,39 +183,24 @@ func (s *Store) ListModelsWithVariants(ctx context.Context, tenantID string, opt
 	if err != nil {
 		return application.ModelListResult{}, err
 	}
-	result := application.ModelListResult{Models: []domain.ProductModel{}, Variants: []domain.ProductVariant{}}
-	seen := make(map[string]struct{}, len(rows))
+	result := application.ModelListResult{Models: []domain.ProductModel{}}
 	for _, row := range rows {
 		if result.Total == 0 {
 			result.Total = int(row.TotalCount)
 		}
-		if _, ok := seen[row.ID]; !ok {
-			createdAt, err := parseCatalogTime(row.CreatedAt)
-			if err != nil {
-				return application.ModelListResult{}, err
-			}
-			model := domain.ProductModel{Model3DResourceID: row.Model3dResourceID.String,
-				ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID,
-				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: createdAt,
-			}
-			model.Model3D, err = sqliteModel3D(row.Model3dResourceID, row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
-			if err != nil {
-				return application.ModelListResult{}, err
-			}
-			result.Models = append(result.Models, model)
-			seen[row.ID] = struct{}{}
+		createdAt, err := parseCatalogTime(row.CreatedAt)
+		if err != nil {
+			return application.ModelListResult{}, err
 		}
-		if row.VariantID.Valid {
-			createdAt, err := parseCatalogTime(row.VariantCreatedAt.String)
-			if err != nil {
-				return application.ModelListResult{}, err
-			}
-			result.Variants = append(result.Variants, domain.ProductVariant{Color: row.VariantColor.String, Model3DResourceID: row.VariantModel3dResourceID.String,
-				ID: row.VariantID.String, TenantID: row.TenantID, CategoryID: row.CategoryID,
-				CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon,
-				ModelID: row.ID, ModelName: row.Name, Name: row.VariantName.String, CreatedAt: createdAt,
-			})
+		model := domain.ProductModel{Model3DResourceID: row.Model3dResourceID.String,
+			ID: row.ID, TenantID: row.TenantID, CategoryID: row.CategoryID,
+			CategoryName: row.CategoryName, CategoryIcon: row.CategoryIcon, Name: row.Name, CreatedAt: createdAt,
 		}
+		model.Model3D, err = sqliteModel3D(row.Model3dResourceID, row.Model3dStoreID, row.Model3dObjectKey, row.Model3dSha256, row.Model3dSizeBytes, row.Model3dSourceUrl, row.Model3dAuthor, row.Model3dLicense, row.Model3dUpdatedAt)
+		if err != nil {
+			return application.ModelListResult{}, err
+		}
+		result.Models = append(result.Models, model)
 	}
 	return result, nil
 }

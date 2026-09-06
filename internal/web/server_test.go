@@ -267,7 +267,7 @@ func TestFrontendQualityGuardrails(t *testing.T) {
 func TestCatalogManagementListUsesTagsAndContainedDrawer(t *testing.T) {
 	handler := newTestHandler(t)
 	stylesheet := request(t, handler, http.MethodGet, "/static/app.css", nil, nil)
-	for _, want := range []string{`.catalog-table-card { padding:0; }`, `.variant-tags { display:flex; flex-wrap:wrap;`, `.variant-manager { padding-top:22px; border-top:1px solid var(--line); }`} {
+	for _, want := range []string{`.catalog-table-card { padding:0; }`, `.variant-tags { display:flex; flex-wrap:wrap;`} {
 		if stylesheet.Code != http.StatusOK || !strings.Contains(stylesheet.Body.String(), want) {
 			t.Fatalf("catalog management styles missing %q: status=%d body=%s", want, stylesheet.Code, stylesheet.Body.String())
 		}
@@ -344,7 +344,7 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 		}
 	}
 	newPage := request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{`class="card asset-profile asset-editor-profile"`, `data-dialog-open="variant-drawer"`, `href="/"`} {
+	for _, want := range []string{`class="card asset-profile asset-editor-profile"`, `data-dialog-open="model-drawer"`, `href="/"`} {
 		if newPage.Code != http.StatusOK || !strings.Contains(newPage.Body.String(), want) {
 			t.Fatalf("dedicated asset create page missing %q: status=%d body=%s", want, newPage.Code, newPage.Body.String())
 		}
@@ -400,7 +400,7 @@ func TestAssetEditorCreatesMissingTypeWithoutLeavingEditor(t *testing.T) {
 	session := responseCookie(t, setup, sessionCookie)
 
 	home := request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{`data-dialog-open="variant-drawer"`, `data-title="新增物品类型"`, `id="category-form"`, `id="model-form"`, `id="variant-form"`, `name="flow" value="asset"`} {
+	for _, want := range []string{`data-dialog-open="model-drawer"`, `data-title="新增型号"`, `id="category-form"`, `id="model-form"`, `name="flow" value="asset"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset drawer shared type component missing %q: status=%d body=%s", want, home.Code, home.Body.String())
 		}
@@ -432,28 +432,13 @@ func TestAssetEditorCreatesMissingTypeWithoutLeavingEditor(t *testing.T) {
 	model := request(t, handler, http.MethodPost, "/admin/catalog/models", url.Values{
 		"csrf_token": {csrf.Value}, "flow": {"asset"}, "category_id": {categoryID}, "name": {"iPhone 17 Pro"},
 	}, []*http.Cookie{session, csrf})
-	modelID := redirect(model, "variant-drawer", "model_id")
+	modelID := redirect(model, "", "model_id")
 
-	variant := request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{
-		"csrf_token": {csrf.Value}, "flow": {"asset"}, "model_id": {modelID}, "name": {"256GB"},
-	}, []*http.Cookie{session, csrf})
-	if variant.Code != http.StatusSeeOther {
-		t.Fatalf("inline type final step: status=%d body=%s", variant.Code, variant.Body.String())
-	}
-	variantLocation, err := url.Parse(variant.Header().Get("Location"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	variantID := variantLocation.Query().Get("variant_id")
-	if variantLocation.Path != "/assets/new" || variantLocation.Query().Get("dialog") != "" || variantID == "" {
-		t.Fatalf("inline type final redirect: location=%q", variantLocation.String())
-	}
-
-	reopened := request(t, handler, http.MethodGet, variant.Header().Get("Location"), nil, []*http.Cookie{session, csrf})
-	if reopened.Code != http.StatusOK || !strings.Contains(reopened.Body.String(), `>手机 / iPhone 17 Pro / 256GB</option>`) {
+	reopened := request(t, handler, http.MethodGet, model.Header().Get("Location"), nil, []*http.Cookie{session, csrf})
+	if reopened.Code != http.StatusOK || !strings.Contains(reopened.Body.String(), `>手机 / iPhone 17 Pro</option>`) {
 		t.Fatalf("new type was not available to the reopened asset form: status=%d body=%s", reopened.Code, reopened.Body.String())
 	}
-	if !strings.Contains(reopened.Body.String(), `<option value="`+variantID+`" selected>`) {
+	if !strings.Contains(reopened.Body.String(), `<option value="`+modelID+`" selected>`) {
 		t.Fatalf("new specification was not selected in the asset editor: %s", reopened.Body.String())
 	}
 }
@@ -497,29 +482,40 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if created.Code != http.StatusSeeOther {
 		t.Fatalf("create model: status=%d body=%s", created.Code, created.Body.String())
 	}
-	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	catalog = request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{ownerSession, csrf})
 	modelID := optionID(t, catalog.Body.String(), "手机 / iPhone 17 Pro")
 
-	created = request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{
-		"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"256GB"},
-	}, []*http.Cookie{ownerSession, csrf})
-	if created.Code != http.StatusSeeOther {
-		t.Fatalf("create variant: status=%d body=%s", created.Code, created.Body.String())
+	postTag := func(path string, form url.Values) {
+		t.Helper()
+		form.Set("csrf_token", csrf.Value)
+		response := request(t, handler, http.MethodPost, path, form, []*http.Cookie{ownerSession, csrf})
+		if response.Code != http.StatusSeeOther {
+			t.Fatalf("tag setup %s: %d %s", path, response.Code, response.Body.String())
+		}
 	}
-	created = request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{
-		"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"512GB"},
-	}, []*http.Cookie{ownerSession, csrf})
-	if created.Code != http.StatusSeeOther {
-		t.Fatalf("create second variant: status=%d body=%s", created.Code, created.Body.String())
+	postTag("/admin/tags/types", url.Values{"name": {"Storage"}, "enabled": {"1"}})
+	tagPage := request(t, handler, http.MethodGet, "/admin/tags", nil, []*http.Cookie{ownerSession, csrf})
+	typeID := optionID(t, tagPage.Body.String(), "Storage")
+	createTag := func(name string) string {
+		t.Helper()
+		postTag("/admin/tags/values", url.Values{"type_id": {typeID}, "name": {name}, "enabled": {"1"}})
+		page := request(t, handler, http.MethodGet, "/admin/tags?q="+name, nil, []*http.Cookie{ownerSession, csrf})
+		id := regexp.MustCompile(`/admin/tags\?edit=([a-f0-9-]+)`).FindStringSubmatch(page.Body.String())
+		if len(id) != 2 {
+			t.Fatal("tag edit link missing")
+		}
+		return id[1]
 	}
+	small, large := createTag("256GB"), createTag("512GB")
+	postTag("/admin/catalog/models/"+modelID+"/tags", url.Values{"tag_ids": {small, large}})
 	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"物品类型配置", `class="catalog-table"`, `class="catalog-category"`, `class="variant-tags"`, `class="variant-tag">256GB`, `class="variant-tag">512GB`, `data-model-variants`, "新增型号", "新增类别", "新增规格", `name="q"`, `name="category"`, `name="sort"`, `aria-sort="ascending"`} {
+	for _, want := range []string{"物品类型配置", `class="catalog-table"`, `class="catalog-category"`, `class="variant-tags"`, "256GB", "512GB", "新增型号", "新增类别", `name="q"`, `name="category"`, `name="sort"`, `aria-sort="ascending"`} {
 		if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), want) {
 			t.Fatalf("model-first type configuration missing %q: status=%d body=%s", want, catalog.Code, catalog.Body.String())
 		}
 	}
 	filteredCatalog := request(t, handler, http.MethodGet, "/admin/catalog?q=iPhone&category="+categoryID+"&sort=name&direction=desc", nil, []*http.Cookie{ownerSession, csrf})
-	if filteredCatalog.Code != http.StatusOK || !strings.Contains(filteredCatalog.Body.String(), "iPhone 17 Pro") || !strings.Contains(filteredCatalog.Body.String(), `class="variant-tag">256GB`) {
+	if filteredCatalog.Code != http.StatusOK || !strings.Contains(filteredCatalog.Body.String(), "iPhone 17 Pro") || !strings.Contains(filteredCatalog.Body.String(), "256GB") {
 		t.Fatalf("server-filtered catalog page must retain bulk-loaded specifications: status=%d body=%s", filteredCatalog.Code, filteredCatalog.Body.String())
 	}
 	if strings.Contains(catalog.Body.String(), "价格规格") {
@@ -537,27 +533,16 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if strings.Count(listMarkup, `data-title="编辑型号"`) != 1 || strings.Contains(listMarkup, `data-title="编辑规格"`) || strings.Contains(listMarkup, `data-title="新增规格"`) {
 		t.Fatalf("catalog row must expose only model editing; specification actions belong in the drawer: %s", listMarkup)
 	}
-	variant512Match := regexp.MustCompile(`data-action="/admin/catalog/variants/([0-9a-f-]{36})"[^>]+data-name="512GB"`).FindStringSubmatch(catalog.Body.String())
-	if len(variant512Match) != 2 {
-		t.Fatalf("512GB edit action not found: %s", catalog.Body.String())
-	}
-	variant512ID := variant512Match[1]
-	deleted := request(t, handler, http.MethodPost, "/admin/catalog/variants/"+variant512ID+"/delete", url.Values{
-		"csrf_token": {csrf.Value}, "return_model_id": {modelID},
-	}, []*http.Cookie{ownerSession, csrf})
-	if deleted.Code != http.StatusSeeOther || deleted.Header().Get("Location") != "/admin/catalog?dialog=model-drawer&edit_model_id="+modelID {
-		t.Fatalf("delete unused specification: status=%d location=%q body=%s", deleted.Code, deleted.Header().Get("Location"), deleted.Body.String())
-	}
-	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
+	// Unused allowance may be removed, then restored without duplicating the tag.
+	postTag("/admin/catalog/models/"+modelID+"/tags", url.Values{"tag_ids": {small}})
+	catalog = request(t, handler, http.MethodGet, "/assets/new?model_id="+modelID, nil, []*http.Cookie{ownerSession, csrf})
 	if strings.Contains(catalog.Body.String(), "512GB") {
-		t.Fatalf("deleted specification remained in catalog: %s", catalog.Body.String())
+		t.Fatal("removed allowance remained selectable")
 	}
-	catalog = request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{ownerSession, csrf})
-	variantID := optionID(t, catalog.Body.String(), "手机 / iPhone 17 Pro / 256GB")
-
+	postTag("/admin/catalog/models/"+modelID+"/tags", url.Values{"tag_ids": {small, large}})
 	created = request(t, handler, http.MethodPost, "/assets", url.Values{
-		"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"我的主力手机"},
-		"serial_number": {"WEB-SERIAL-001"}, "color": {"黑色"}, "purchase_channel": {"官方商城"},
+		"csrf_token": {csrf.Value}, "model_id": {modelID}, "tag_ids": {small}, "display_name": {"我的主力手机"},
+		"serial_number": {"WEB-SERIAL-001"}, "purchase_channel": {"官方商城"},
 		"notes": {"Web 全要素目录记录"},
 	}, []*http.Cookie{ownerSession, csrf})
 	if created.Code != http.StatusSeeOther {
@@ -566,11 +551,11 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if !regexp.MustCompile(`^/assets/[0-9a-f-]{36}$`).MatchString(created.Header().Get("Location")) {
 		t.Fatalf("created asset must open its detail page: location=%q", created.Header().Get("Location"))
 	}
-	blockedDelete := request(t, handler, http.MethodPost, "/admin/catalog/variants/"+variantID+"/delete", url.Values{
-		"csrf_token": {csrf.Value}, "return_model_id": {modelID},
+	blockedDelete := request(t, handler, http.MethodPost, "/admin/catalog/models/"+modelID+"/tags", url.Values{
+		"csrf_token": {csrf.Value}, "tag_ids": {large},
 	}, []*http.Cookie{ownerSession, csrf})
-	if blockedDelete.Code != http.StatusUnprocessableEntity || !strings.Contains(blockedDelete.Body.String(), "该规格已被具体物品使用，不能删除。") {
-		t.Fatalf("used specification deletion must be blocked: status=%d body=%s", blockedDelete.Code, blockedDelete.Body.String())
+	if blockedDelete.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("used allowance removal: %d", blockedDelete.Code)
 	}
 	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
 	if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), "我的主力手机") || !strings.Contains(catalog.Body.String(), "WEB-SERIAL-001") {
@@ -622,8 +607,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}{
 		{"/admin/catalog/categories/" + categoryID, url.Values{"csrf_token": {csrf.Value}, "name": {"移动设备"}, "icon_key": {"tablet"}}, "移动设备"},
 		{"/admin/catalog/models/" + modelID, url.Values{"csrf_token": {csrf.Value}, "category_id": {categoryID}, "name": {"iPhone 17 Pro Max"}}, "iPhone 17 Pro Max"},
-		{"/admin/catalog/variants/" + variantID, url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"512GB"}}, "512GB"},
-		{"/assets/" + match[1], url.Values{"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"备用手机"}, "serial_number": {"WEB-SERIAL-EDITED"}, "color": {"白色"}}, "备用手机"},
+		{"/assets/" + match[1], url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "tag_ids": {large}, "display_name": {"备用手机"}, "serial_number": {"WEB-SERIAL-EDITED"}}, "备用手机"},
 	}
 	for _, update := range updates {
 		response := request(t, handler, http.MethodPost, update.path, update.form, []*http.Cookie{ownerSession, csrf})
@@ -646,8 +630,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	}{
 		{"/admin/catalog/categories/" + categoryID, url.Values{"csrf_token": {csrf.Value}, "name": {"手机"}, "icon_key": {"smartphone"}}},
 		{"/admin/catalog/models/" + modelID, url.Values{"csrf_token": {csrf.Value}, "category_id": {categoryID}, "name": {"iPhone 17 Pro"}}},
-		{"/admin/catalog/variants/" + variantID, url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"256GB"}}},
-		{"/assets/" + match[1], url.Values{"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"我的主力手机"}, "serial_number": {"WEB-SERIAL-001"}, "color": {"黑色"}, "purchase_channel": {"官方商城"}, "notes": {"Web 全要素目录记录"}}},
+		{"/assets/" + match[1], url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "tag_ids": {small}, "display_name": {"我的主力手机"}, "serial_number": {"WEB-SERIAL-001"}, "purchase_channel": {"官方商城"}, "notes": {"Web 全要素目录记录"}}},
 	} {
 		response := request(t, handler, http.MethodPost, restore.path, restore.form, []*http.Cookie{ownerSession, csrf})
 		if response.Code != http.StatusSeeOther {
@@ -924,12 +907,9 @@ func TestProductModel3DUploadViewerAndETag(t *testing.T) {
 	page := request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{session, csrf})
 	categoryID := optionID(t, page.Body.String(), "手机")
 	request(t, handler, http.MethodPost, "/admin/catalog/models", url.Values{"csrf_token": {csrf.Value}, "category_id": {categoryID}, "name": {"Model 3D"}}, []*http.Cookie{session, csrf})
-	page = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{session, csrf})
-	modelID := optionID(t, page.Body.String(), "手机 / Model 3D")
-	request(t, handler, http.MethodPost, "/admin/catalog/variants", url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "name": {"Standard"}}, []*http.Cookie{session, csrf})
 	page = request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
-	variantID := optionID(t, page.Body.String(), "手机 / Model 3D / Standard")
-	request(t, handler, http.MethodPost, "/assets", url.Values{"csrf_token": {csrf.Value}, "variant_id": {variantID}, "display_name": {"3D Device"}}, []*http.Cookie{session, csrf})
+	modelID := optionID(t, page.Body.String(), "手机 / Model 3D")
+	request(t, handler, http.MethodPost, "/assets", url.Values{"csrf_token": {csrf.Value}, "model_id": {modelID}, "display_name": {"3D Device"}}, []*http.Cookie{session, csrf})
 	page = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{session, csrf})
 	match := regexp.MustCompile(`/assets/([0-9a-f-]{36})`).FindStringSubmatch(page.Body.String())
 	if len(match) != 2 {
@@ -1015,7 +995,7 @@ func newTestHandler(t *testing.T) http.Handler {
 	return newTestHandlerWithBlob(t, nil)
 }
 
-func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) application.BlobStore, tagged ...bool) http.Handler {
+func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) application.BlobStore) http.Handler {
 	t.Helper()
 	cfg := config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "web.db")}
 	db, err := basestore.Open(cfg)
@@ -1039,10 +1019,7 @@ func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) appli
 		testBlob = wrap(testBlob)
 	}
 	modelMedia := application.NewModelMediaService(adapter, blob.Registry{"local": testBlob}, blob.ObjectKeyMapper{}, "local")
-	options := Options{AuthMode: "local", ModelMedia: modelMedia}
-	if len(tagged) > 0 && tagged[0] {
-		options.Specifications = application.NewSpecificationService(adapter)
-	}
+	options := Options{AuthMode: "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(adapter)}
 	server, err := New(auth, catalog, lifecycle, db, options)
 	if err != nil {
 		t.Fatal(err)
@@ -1052,7 +1029,7 @@ func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) appli
 
 func optionID(t *testing.T, body, label string) string {
 	t.Helper()
-	pattern := `value="([0-9a-f-]{36})">` + regexp.QuoteMeta(label) + `</option>`
+	pattern := `value="([0-9a-f-]{36})"\s*>` + regexp.QuoteMeta(label) + `</option>`
 	match := regexp.MustCompile(pattern).FindStringSubmatch(body)
 	if len(match) != 2 {
 		t.Fatalf("option %q not found in body: %s", label, body)

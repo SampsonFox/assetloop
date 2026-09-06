@@ -82,12 +82,6 @@ func (s *Server) resourceTagData(r *http.Request, p application.Principal, data 
 					modelID = rule.ModelID
 				}
 			}
-		} else if ref.Kind == "legacy" {
-			for _, mapping := range state.LegacyMedia {
-				if mapping.VariantID == ref.ID {
-					modelID = mapping.ModelID
-				}
-			}
 		}
 		if modelID != "" {
 			data.ReferenceURLs[ref.ID] = "/admin/catalog?" + url.Values{"dialog": {"model-drawer"}, "edit_model_id": {modelID}}.Encode()

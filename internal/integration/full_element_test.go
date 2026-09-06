@@ -144,11 +144,11 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		t.Fatalf("create catalog asset: %v", err)
 	}
 	got, err := spec.Asset(ctx, owner, asset.ID)
-	if err != nil || got.DisplayName != "全要素测试手机" || got.SerialNumber != "FULL-ELEMENT-001" || got.ModelID != model.ID || got.VariantID != "" || len(got.Tags) != 2 || !strings.Contains(got.Variant, "256GB") || !strings.Contains(got.Variant, "钛金属") {
+	if err != nil || got.DisplayName != "全要素测试手机" || got.SerialNumber != "FULL-ELEMENT-001" || got.ModelID != model.ID || len(got.Tags) != 2 || !strings.Contains(got.TagSummary, "256GB") || !strings.Contains(got.TagSummary, "钛金属") {
 		t.Fatalf("get catalog asset: got=%+v err=%v", got, err)
 	}
 	snapshot, err := catalog.Snapshot(ctx, viewerSession.Principal)
-	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Variants) != 0 || len(snapshot.Assets) != 1 {
+	if err != nil || len(snapshot.Categories) != 1 || len(snapshot.Models) != 1 || len(snapshot.Assets) != 1 {
 		t.Fatalf("viewer catalog snapshot: %+v err=%v", snapshot, err)
 	}
 	if _, err := catalog.CreateCategory(ctx, viewerSession.Principal, application.CreateCategory{Name: "禁止写入"}); !errors.Is(err, application.ErrForbidden) {
