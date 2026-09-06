@@ -28,6 +28,14 @@ func TestAssetListIconControlsAndCardContent(t *testing.T) {
 				t.Fatal(err)
 			}
 			body := out.String()
+			formStart := strings.Index(body, `<form class="asset-filters asset-search-shell"`)
+			viewStart := strings.Index(body, `class="asset-view-actions"`)
+			searchStart := strings.Index(body, `class="asset-search"`)
+			filterStart := strings.Index(body, `class="asset-filter-actions"`)
+			formEnd := strings.Index(body, "</form>")
+			if !(formStart < viewStart && viewStart < searchStart && searchStart < filterStart && filterStart < formEnd) {
+				t.Fatal("view controls and search/filter controls must share one toolbar in reading order")
+			}
 			for _, want := range []string{`class="asset-card-footer"`, "Personal phone", "Phone · Model · 256GB", "SERIAL-001", "10100.00 CNY", "400.00 CNY", `name="q" value="phone"`, `name="status"`, `name="sort"`, `name="direction"`, `class="filter-active-dot"`} {
 				if !strings.Contains(body, want) {
 					t.Errorf("missing %q", want)

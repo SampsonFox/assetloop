@@ -1,14 +1,15 @@
 {{define "content"}}{{$s := .Strings}}
 <div class="page-heading asset-list-heading">
   <div><h1>{{t $s "title.assets"}}</h1><p class="muted">{{.AssetTotal}} {{t $s "assets.count_suffix"}} · {{.Principal.TenantName}}</p></div>
-  <div class="heading-actions">
-    <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="{{.AssetListURL}}" class="{{if eq .AssetView "list"}}is-active{{end}}" {{if eq .AssetView "list"}}aria-current="page"{{end}} aria-label="{{t $s "assets.list"}}" title="{{t $s "assets.list"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></a><a href="{{.AssetGridURL}}" class="{{if eq .AssetView "grid"}}is-active{{end}}" {{if eq .AssetView "grid"}}aria-current="page"{{end}} aria-label="{{t $s "assets.grid"}}" title="{{t $s "assets.grid"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></a></div>
-    {{if .CanManageCatalog}}<a class="icon-button" href="/assets/new" aria-label="{{t $s "assets.create"}}" title="{{t $s "assets.create"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></a>{{end}}
-  </div>
+
 </div>
 {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
 
 <form class="asset-filters asset-search-shell" method="get" action="/">
+  <div class="asset-view-actions">
+    <div class="view-switcher" aria-label="{{t $s "assets.view_label"}}"><a href="{{.AssetListURL}}" class="{{if eq .AssetView "list"}}is-active{{end}}" {{if eq .AssetView "list"}}aria-current="page"{{end}} aria-label="{{t $s "assets.list"}}" title="{{t $s "assets.list"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></svg></a><a href="{{.AssetGridURL}}" class="{{if eq .AssetView "grid"}}is-active{{end}}" {{if eq .AssetView "grid"}}aria-current="page"{{end}} aria-label="{{t $s "assets.grid"}}" title="{{t $s "assets.grid"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></a></div>
+    {{if .CanManageCatalog}}<a class="icon-button" href="/assets/new" aria-label="{{t $s "assets.create"}}" title="{{t $s "assets.create"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></a>{{end}}
+  </div>
   {{if eq .AssetView "grid"}}<input type="hidden" name="view" value="grid">{{end}}
   <label class="asset-search"><input type="search" aria-label="{{t $s "assets.search"}}" name="q" value="{{.AssetQuery}}" placeholder="{{t $s "assets.search_placeholder"}}"></label>
   <div class="asset-filter-actions">
