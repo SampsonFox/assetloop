@@ -29,6 +29,14 @@ test('event type actions retain status confirmation and management permissions',
  assert.match(html, /aria-label="{{if .Enabled}}{{t \$s "types.stop"}}{{else}}{{t \$s "types.restore"}}/);
  assert.match(read('./static/app.css'), /\.event-type-actions[^}]*gap:8px;[^}]*white-space:nowrap/);
 });
+test('built-in types have a noninteractive lock and compact row actions', () => {
+ const html = read('./templates/event_types.html');
+ assert.match(html, /else if .BuiltIn}}<span class="event-type-lock" role="img"/);
+ assert.match(html, /aria-label="{{t \$s "validation.event_type_builtin"}}"/);
+ const css = read('./static/app.css');
+ assert.match(css, /\.event-type-actions \.icon-button \{[^}]*width:30px;[^}]*height:30px/);
+ assert.match(css, /@media \(pointer:coarse\)[^{]*\{[^}]*event-type-actions \.icon-button[^}]*44px/);
+});
 test('resource layout combines file metadata and preserves full attribution on demand', () => {
   const html = read('./templates/resources.html');
   assert.match(html, /GLB · {{resourceSize .SizeBytes}}/);
