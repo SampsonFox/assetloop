@@ -28,7 +28,11 @@ function button(label, action) {
 function transfer(title, titles, items, move, reset) {
   const root=node('section','tag-transfer'); root.setAttribute('aria-label',title); root.dataset.transferUi='';
   const heading=node('div','field-heading transfer-heading');heading.append(node('h4','',title));
-  if(reset)heading.append(button(text.reset,()=>reset()));
+  if(reset){
+    const restore=button('',()=>reset());restore.className='icon-button';restore.title=text.reset;restore.setAttribute('aria-label',text.reset);
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');path.setAttribute('d','M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6');svg.append(path);restore.append(svg);heading.append(restore);
+  }
   root.append(heading);
   const tabs=node('div','transfer-mobile-tabs'), grid=node('div','transfer-grid'), arrows=node('div','transfer-arrows');
   const selections=[new Set(),new Set()], anchors=[null,null], lists=[], searches=[], counters=[], movers=[];

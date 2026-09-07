@@ -25,6 +25,6 @@
 <label>{{t $s "catalog.model_3d_source"}}<input type="url" name="model_3d_source_url" maxlength="2000" {{if .Resource}}value="{{.Resource.SourceURL}}"{{end}}></label>
 <label>{{t $s "catalog.model_3d_author"}}<input name="model_3d_author" maxlength="200" {{if .Resource}}value="{{.Resource.Author}}"{{end}}></label>
 <label>{{t $s "catalog.model_3d_license"}}<input name="model_3d_license" maxlength="200" {{if .Resource}}value="{{.Resource.License}}"{{end}}></label>
-<p class="muted">{{t $s "resource.upload_help"}}</p><button class="icon-button management-primary" type="submit" aria-label="{{if .BindingKind}}{{t $s "resource.upload_bind"}}{{else}}{{t $s "resource.upload"}}{{end}}" title="{{if .BindingKind}}{{t $s "resource.upload_bind"}}{{else}}{{t $s "resource.upload"}}{{end}}">{{template "ui-icon" "upload"}}</button>
+<p class="muted">{{t $s "resource.upload_help"}}</p><footer class="drawer-footer"><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.cancel"}}" title="{{t $s "common.cancel"}}">{{template "ui-icon" "close"}}</button><button class="icon-button management-primary" type="submit" aria-label="{{if .BindingKind}}{{t $s "resource.upload_bind"}}{{else}}{{t $s "resource.upload"}}{{end}}" title="{{if .BindingKind}}{{t $s "resource.upload_bind"}}{{else}}{{t $s "resource.upload"}}{{end}}">{{template "ui-icon" "upload"}}</button></footer>
 </form></dialog>{{end}}
 {{end}}

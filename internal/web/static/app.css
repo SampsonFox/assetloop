@@ -566,12 +566,20 @@ button[aria-busy="true"]::after { content:" …"; }
 .resource-actions form { margin:0; }
 .event-type-actions { display:flex; justify-content:flex-end; gap:8px; white-space:nowrap; }
 .event-type-actions form { margin:0; }
+.catalog-table td .icon-button,.resource-table td .icon-button,.appearance-rules .icon-button,
 .event-type-actions .icon-button { width:30px; height:30px; min-height:30px; border-color:transparent; border-radius:6px; background:transparent; color:var(--muted); }
-.event-type-actions .icon-button svg,.event-type-lock svg { width:16px; height:16px; }
+.catalog-table td .icon-button svg,.resource-table td .icon-button svg,.appearance-rules .icon-button svg,.event-type-lock svg { width:16px; height:16px; }
+.catalog-table td.row-actions,.resource-table td.row-actions { display:table-cell; vertical-align:middle; text-align:right; }
+.resource-table td.row-actions form { display:inline-block; margin:0 0 0 8px; }
+.resource-actions { justify-content:flex-end; gap:8px; }
+.catalog-table th:last-child,.catalog-table td:last-child,.resource-table th:last-child,.resource-table td:last-child { text-align:right; }
+.drawer-footer { justify-content:flex-end; }
+.drawer-heading > .icon-button { border-color:transparent; background:transparent; color:var(--muted); }
 .event-type-lock { display:inline-grid; width:30px; height:30px; place-items:center; vertical-align:middle; color:var(--muted); }
 .event-type-lock svg { fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
-@media (hover:hover) { .event-type-actions .icon-button:hover { color:var(--accent); background:var(--accent-soft); } }
-@media (pointer:coarse) { .event-type-actions .icon-button,.event-type-lock { width:44px; height:44px; min-height:44px; } }
+@media (hover:hover) { :is(.catalog-table td,.resource-table td,.appearance-rules) .icon-button:not(:disabled):hover { color:var(--accent); background:var(--accent-soft); } }
+@media (pointer:coarse) { .catalog-table td .icon-button,.resource-table td .icon-button,.appearance-rules .icon-button,.event-type-actions .icon-button,.event-type-lock { width:44px; height:44px; min-height:44px; } }
+@media (max-width:700px) { .catalog-table td.row-actions,.resource-table td.row-actions { display:flex; justify-content:flex-end; gap:8px; } }
 .event-type-table th:last-child,.event-type-table td:last-child { width:120px; text-align:right; }
 @media (max-width:600px) { .event-type-table th:last-child,.event-type-table td:last-child { width:auto; } }
 @media (max-width:700px) {

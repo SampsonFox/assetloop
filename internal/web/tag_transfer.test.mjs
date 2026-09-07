@@ -91,7 +91,8 @@ test('reset all appearance overrides preserves tag allowances and follows each t
 });
 test('one reset action belongs to the dimension heading; only default-affecting types carry a marker',()=>{
  const js=readFileSync(new URL('./static/tag-transfer.js',import.meta.url),'utf8');
- assert.match(js,/if\(reset\)heading.append\(button\(text.reset/);
+ assert.match(js,/if\(reset\)\{[\s\S]*?heading.append\(restore\)/);
+ assert.match(js,/restore.title=text.reset;restore.setAttribute\('aria-label',text.reset\)/);
  assert.doesNotMatch(js,/row.append\(button\(text.reset/);
  assert.match(js,/note:d.appearance\?text.inherited:''/);
  assert.match(js,/state.resetAllAppearance\(\)/);

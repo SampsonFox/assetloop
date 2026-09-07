@@ -8,7 +8,7 @@ test('appearance reset has separation from transfer panels', () => {
   assert.match(read('./static/app.css'), /\.transfer-heading \{[^}]*margin-bottom:16px/);
 });
 test('icon actions retain accessible names and tooltips while tabs retain text', () => {
-  for (const name of ['specifications', 'resources', 'resource', 'event_types']) {
+  for (const name of ['specifications', 'resources', 'resource', 'event_types', 'catalog_drawers', 'appearance']) {
     const html = read(`./templates/${name}.html`);
     const actions = [...html.matchAll(/<(?:a|button)\b([^>]+)>{{template "ui-icon" "[^"]+"}}/g)];
     assert.ok(actions.length >= 3);
@@ -19,6 +19,17 @@ test('icon actions retain accessible names and tooltips while tabs retain text',
   }
   assert.match(read('./templates/specifications.html'), />{{t \$s "tags.values"}}<\/a>/);
   assert.match(read('./templates/specifications.html'), />{{t \$s "tags.types"}}<\/a>/);
+});
+test('management tables share compact actions and drawer footers share alignment', () => {
+  const css = read('./static/app.css');
+  assert.match(css, /\.catalog-table td \.icon-button,\.resource-table td \.icon-button,\.appearance-rules \.icon-button,\s*\.event-type-actions \.icon-button \{[^}]*width:30px/);
+  assert.match(css, /\.drawer-footer \{ justify-content:flex-end/);
+  for (const name of ['catalog_drawers', 'appearance']) {
+    assert.doesNotMatch(read(`./templates/${name}.html`), /<button[^>]*>{{t \$s "(?:common.save|common.cancel|appearance.confirm|tags.save_allowed)"}}/);
+  }
+  for (const name of ['catalog_drawers', 'specifications', 'resources', 'event_types']) {
+    assert.match(read(`./templates/${name}.html`), /data-dialog-close aria-label="{{t \$s "common.close"}}" title="{{t \$s "common.close"}}">{{template "ui-icon" "close"}}/);
+  }
 });
 test('event type actions retain status confirmation and management permissions', () => {
  const html = read('./templates/event_types.html');
