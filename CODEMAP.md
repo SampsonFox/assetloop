@@ -25,6 +25,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons; consistent compact catalog/tag/resource/event-type row actions and drawer controls; accessible-label/layout regression checks |
 | `internal/web/model_configuration.go`, `model_configuration.test.mjs`, `templates/catalog_drawers.html` | Unified model metadata/tag/appearance submission and transactional save; management drawers share `data-management-drawer` fixed heading actions and independent scrolling, covered by `management_ui.test.mjs` |
 | `internal/mcp/` | Streamable HTTP semantic query adapter calling application services; SDK HTTP regression tests; not mounted until OAuth wiring is complete |
+| `internal/mcp/oauth.go`, `oauth_test.go` | OAuth discovery/token/revocation HTTP formatting, configured-origin/Host guard and bearer resolver; real SQLite HTTP exchange/revocation tests; consent UI and runtime mounting pending |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
 | `internal/application/oauth.go`, `oauth_test.go` | OAuth application policy and persistence port: registered callbacks, S256 PKCE, audience/scopes, code exchange, rotating refresh, replay revocation and current-role authorization; HTTP wiring pending |

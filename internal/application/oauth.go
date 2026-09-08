@@ -77,6 +77,8 @@ type OAuthService struct {
 	now      func() time.Time
 }
 
+func (s *OAuthService) Resource() string { return s.resource }
+
 func NewOAuthService(store OAuthStore, resource string, clients []OAuthClient) (*OAuthService, error) {
 	u, err := url.Parse(resource)
 	if err != nil || !validOAuthRedirect(resource) || u.RawQuery != "" || u.ForceQuery {

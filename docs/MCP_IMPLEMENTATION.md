@@ -83,3 +83,11 @@ PostgreSQL compiles but its live test is skipped because no TEST_POSTGRES_DSN is
 configured; the dual-database checklist item is deliberately still open. HTTP
 consent/token endpoints remain incomplete. These policy and SQLite tests are not
 a substitute for PostgreSQL execution.
+
+HTTP protocol adapters now provide authorization/resource metadata, code exchange,
+refresh, revocation, bearer resolution and discovery challenges. Their guard
+rejects unconfigured Host/cross-origin requests; form parsing rejects duplicate
+parameters, oversized payloads, query credentials and unsupported client secrets.
+Real SQLite tests cover exchange through HTTP, bearer identity and revocation.
+`go test ./internal/mcp ./internal/application -count=1` passes. Consent UI,
+runtime mounting, configuration and actual Codex acceptance remain pending.
