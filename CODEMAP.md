@@ -124,6 +124,7 @@ covers atomic rollback; Web transport retains ordinary form and drawer save path
 | Change product 3D media | `internal/application/model_media.go` | resource library, model/appearance/asset bindings, Blob adapters, both Store mappings, Web asset/catalog/resource templates |
 | Add market provider | market port | provider adapter plus shared normalization pipeline |
 | Change MCP tool | `internal/mcp/` | called application service; never inspect Store unless service contract changes |
+| Configure/use MCP | `docs/MCP.md` | `docs/MCP_IMPLEMENTATION.md` for current verification evidence and remaining acceptance |
 | Change Web screen | `internal/web/server.go` | affected template under `templates/`, then `static/app.css` or local `static/app.js`; called application service only when behavior changes |
 | Change locale or theme | `internal/web/i18n.go` | affected templates, semantic variables in `static/app.css`, then Web locale/theme tests |
 | Change deployment config | `internal/config/` | `.env.example`, README deployment section |

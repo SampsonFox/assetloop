@@ -11,6 +11,7 @@ The repository contains the v0.1 foundation plus authentication/RBAC, tenant-iso
 - [System architecture](docs/ARCHITECTURE.md)
 - [Project plan](docs/PROJECT_PLAN.md)
 - [Development and release workflow](docs/DEVELOPMENT_WORKFLOW.md)
+- [MCP setup and tool contract](docs/MCP.md)
 
 ## Confirmed baseline
 
