@@ -91,3 +91,11 @@ parameters, oversized payloads, query credentials and unsupported client secrets
 Real SQLite tests cover exchange through HTTP, bearer identity and revocation.
 `go test ./internal/mcp ./internal/application -count=1` passes. Consent UI,
 runtime mounting, configuration and actual Codex acceptance remain pending.
+
+Configuration parsing is now covered by `internal/config/mcp_test.go`:
+`MCP_ENABLED` defaults to false; enabling requires `AUTH_MODE=local`, an explicit
+`MCP_ISSUER` origin (HTTPS or HTTP loopback IP), a nonempty `MCP_CLIENT_ID` and a
+valid `MCP_REDIRECT_URI`. Default client is `codex-local` with loopback `/callback`.
+No live environment has been changed. The fields are parsed but not yet wired
+into server startup, pending the consent UI. Login currently returns to `/`;
+consent integration must preserve a validated local return target across login.
