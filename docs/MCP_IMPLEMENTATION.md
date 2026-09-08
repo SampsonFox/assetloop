@@ -76,7 +76,11 @@ resource metadata, binding, reference reads and deletion are checked against
 their persisted results. Foreign purchase/correction retains the original
 economic evidence and exact cost; authenticated Web visibility and revocation
 remain part of the scenario. An uncalled discovered tool fails the scenario.
-SQLite passed locally; the new PostgreSQL run is pending CI. Temporary databases,
+SQLite passed locally. Commit `f295493` passed the same walkthrough with both
+SQLite and PostgreSQL 17 in [CI run 34238352252](https://github.com/SampsonFox/assetloop/actions/runs/34238352252),
+with `REQUIRE_POSTGRES_TEST=true`. Full Go tests, the separately executed named
+full-element scenario, all 133 Web tests, sqlc cleanliness, vet and secret-scan
+passed. No UAT packaging or promotion was requested or run. Temporary databases,
 blob directories and HTTP servers are cleaned up by the test harness. GLB upload
 is a fixture because MCP intentionally has no upload tool. This is direct SDK
 HTTP tool acceptance, not proof of the Codex desktop browser login.
