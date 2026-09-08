@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"sort"
 
 	"github.com/SampsonFox/assetloop/internal/domain"
 )
@@ -75,5 +76,18 @@ func (s *SpecificationService) References(ctx context.Context, actor Principal, 
 	if !found {
 		return SpecificationReferenceList{}, NewInputError("validation.specification_missing")
 	}
+	sort.Slice(refs, func(i, j int) bool {
+		a, b := refs[i], refs[j]
+		if a.Kind != b.Kind {
+			return a.Kind < b.Kind
+		}
+		if a.TargetID != b.TargetID {
+			return a.TargetID < b.TargetID
+		}
+		if a.ModelID != b.ModelID {
+			return a.ModelID < b.ModelID
+		}
+		return a.TagID < b.TagID
+	})
 	return SpecificationReferenceList{References: specificationPage(refs, opts.Page, opts.PageSize), Total: len(refs)}, nil
 }

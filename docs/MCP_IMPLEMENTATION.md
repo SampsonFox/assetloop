@@ -60,6 +60,15 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+Management concurrency: two independent connections concurrently submit eight
+same-key creates and observe one persisted category and one shared result ID.
+Different payloads racing for one key produce one success and one conflict;
+eight same-key deletions complete without residual metadata/blob, and a newly
+constructed service replays the durable intent. The narrow SQLite integration
+scenario passes five repeated runs. PostgreSQL executes this same scenario when
+configured but remains an outstanding live gate. Reference query paging also
+uses explicit stable ordering, with first/second/out-of-range page assertions.
+
 Supporting edit queries: `get_model_configuration` returns all allowed tag IDs,
 explicit appearance overrides (including false, distinct from absent), and
 confirmed appearance rules. `get_resource_configuration` returns descriptive

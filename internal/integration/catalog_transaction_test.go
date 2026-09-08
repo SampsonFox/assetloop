@@ -10,6 +10,7 @@ import (
 
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/config"
+	basestore "github.com/SampsonFox/assetloop/internal/store"
 	"github.com/SampsonFox/assetloop/internal/store/postgres"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
 )
@@ -81,6 +82,16 @@ func TestCatalogTransactionRollback(t *testing.T) {
 			}
 			testManagementReplay(t, store.(application.ManagementStore), account.Principal)
 			testManagementBinding(t, store.(application.ManagementStore), account.Principal, original.ID)
+			second, err := basestore.Open(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer second.Close()
+			var other application.ManagementStore = sqlite.New(second)
+			if driver == "postgres" {
+				other = postgres.New(second)
+			}
+			testManagementConcurrentReplay(t, store.(application.ManagementStore), other, account.Principal)
 		})
 	}
 }

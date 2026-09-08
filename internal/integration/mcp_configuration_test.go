@@ -97,6 +97,14 @@ func testConfigurationQueries(t *testing.T, store application.ManagementStore, o
 	if refs.Data.Total != 3 || len(refs.Data.References) != 1 {
 		t.Fatalf("references not paged: %+v", refs.Data)
 	}
+	if refs.Data.References[0].Kind != "appearance" {
+		t.Fatal("reference paging is not stably ordered")
+	}
+	query.Page = 2
+	call("get_specification_references", query, &refs, false)
+	if len(refs.Data.References) != 1 || refs.Data.References[0].Kind != "model" {
+		t.Fatal("second reference page is incorrect")
+	}
 	query.Page = 10
 	call("get_specification_references", query, &refs, false)
 	if refs.Data.Total != 3 || len(refs.Data.References) != 0 {
