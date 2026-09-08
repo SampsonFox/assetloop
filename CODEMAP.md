@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. General attachments, market, MCP, and scheduler paths continue as later slices.
+Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. MCP is in development (see `docs/MCP_IMPLEMENTATION.md`); general attachments, market and scheduler remain later slices.
 
 ## Authority map
 
@@ -24,7 +24,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `internal/web/shared_rename.test.mjs` | Conditional shared-name confirmation, no-JS confirmation fallback and unified resource editor form coverage |
 | `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons; consistent compact catalog/tag/resource/event-type row actions and drawer controls; accessible-label/layout regression checks |
 | `internal/web/model_configuration.go`, `model_configuration.test.mjs`, `templates/catalog_drawers.html` | Unified model metadata/tag/appearance submission and transactional save; management drawers share `data-management-drawer` fixed heading actions and independent scrolling, covered by `management_ui.test.mjs` |
-| `internal/mcp/` | Semantic MCP tool transport |
+| `internal/mcp/` | Streamable HTTP semantic query adapter calling application services; SDK HTTP regression tests; not mounted until OAuth wiring is complete |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
 | `internal/domain/` | Pure catalog/lifecycle types plus the versioned ISO 4217 catalog, exact minor-unit money, and fixed-point FX logic |

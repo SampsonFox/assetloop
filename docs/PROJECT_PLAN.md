@@ -488,6 +488,12 @@ ONEBOUND_APP_SECRET=
 
 ### 13.2 MCP 工具
 
+当前已批准独立增量：在 `dev-mcp` 实现同进程 Streamable HTTP、现有账户
+OAuth/PKCE 授权、可撤销的客户端权限和现有业务管理工具。直接复用 application
+服务；管理写入补共享幂等，生命周期沿用已有回执。以本地 Codex 实测为验收，
+不含上传、行情、成员管理、stdio 或公网部署。完整范围与未完成清单见
+`docs/MCP_IMPLEMENTATION.md`；以下示例中的附件和行情仍属于后续阶段。
+
 MCP 只暴露语义化工具，例如：
 
 ```text

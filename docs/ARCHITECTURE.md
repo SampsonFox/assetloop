@@ -109,6 +109,17 @@ Web prompts only for referenced names that actually change.
 
 Transport adapters contain authentication, parsing, and response formatting, not economic rules.
 
+The approved MCP increment uses Streamable HTTP in this same Go process and
+calls application services directly, not the application's own Web endpoints.
+It is opt-in and requires independently revocable OAuth client authorization
+against the existing account. Current role capabilities intersect granted read,
+catalog and lifecycle scopes; Web sessions and disabled-auth local principals
+are not MCP credentials. Authorization-code PKCE, discovery and rotating tokens
+are required before mounting the endpoint. Management idempotency belongs in
+application transactions, alongside the existing lifecycle receipts. Detailed
+scope, implementation status and acceptance evidence live in
+`docs/MCP_IMPLEMENTATION.md`.
+
 ### 4.4 Infrastructure adapters
 
 - Stores translate application operations to SQLite or PostgreSQL.
