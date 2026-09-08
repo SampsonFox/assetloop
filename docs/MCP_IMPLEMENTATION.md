@@ -60,6 +60,17 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+The named `TestFullElementScenario` now includes `MCP OAuth lifecycle` on each
+supported Store: actual Web consent with session/CSRF, HTTP PKCE code exchange,
+SDK discovery and authenticated asset creation, separately committed foreign
+purchase, durable retries, append-only correction preserving the original FX,
+authenticated Web visibility and Web client revocation. The rejected MCP token
+does not invalidate the Web session. The SQLite scenario passes locally.
+`[full-test]` opts this development checkpoint into the existing isolated CI
+PostgreSQL test job, not UAT packaging or promotion. CI results must be inspected
+before claiming the PostgreSQL and full-suite gates. This automated SDK scenario
+does not replace actual Codex desktop acceptance.
+
 Public media output audit: model detail/search/create and resource detail/list/
 effective appearance now use explicit transport projections rather than serializing
 storage-bearing domain values. SDK HTTP tests assert resource identity is retained

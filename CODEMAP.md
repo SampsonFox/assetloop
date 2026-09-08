@@ -44,7 +44,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | both Store `oauth.go` / `oauth.sql`, paired `00015_oauth.sql` | Hash-only OAuth credentials, tenant-bound grants and serialized token exchanges; `internal/integration/oauth_test.go` covers cross-connection persistence and replay; `internal/store/oauth_migration_test.go` covers schema-14 upgrade rollback/retry |
 | `internal/domain/` | Pure catalog/lifecycle types plus the versioned ISO 4217 catalog, exact minor-unit money, and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
-| `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation |
+| `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation; `[full-test]` explicitly opts a development checkpoint into tests only |
 | `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |
 
 ## Infrastructure adapters
@@ -104,6 +104,7 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 | `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, GLB upload/read and fallback, progressive FX evidence, correction, totals, and role denial |
 | `internal/web/viewer_mechanics.test.mjs` | Dependency-free Node test harness for viewer framing, keyboard controls, reduced motion, idle rendering and failure fallback |
 | `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → typed model allowances → direct items with different capacity tags sharing an appearance GLB → dedicated override/inheritance → foreign purchase → repair correction → sale scenario on both databases |
+| `internal/integration/mcp_full_element_test.go` | Extends the same full-element scenario with HTTP Web consent/PKCE exchange, authenticated SDK discovery/write/retry/correction, Web visibility and client revocation without ending the Web session |
 
 ## Read paths by task
 

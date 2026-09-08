@@ -433,6 +433,9 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	if auditCount < 4 {
 		t.Fatalf("expected setup, two membership and login audit events, got %d", auditCount)
 	}
+	t.Run("MCP OAuth lifecycle", func(t *testing.T) {
+		runMCPFullElement(t, db, store, ownerSession, model.ID)
+	})
 }
 
 func fullElementGLB() []byte {
