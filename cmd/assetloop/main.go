@@ -55,8 +55,14 @@ func run(args []string) error {
 	if len(args) == 0 {
 		args = []string{"serve"}
 	}
+	if args[0] == "refresh-market" {
+		return refreshMarketCommand(args[1:])
+	}
+	if args[0] == "install-scheduler" {
+		return installMarketScheduler(args[1:])
+	}
 	if len(args) != 1 || (args[0] != "serve" && args[0] != "migrate") {
-		return errors.New("usage: assetloop [serve|migrate] (default: serve)")
+		return errors.New("usage: assetloop [serve|migrate|refresh-market|install-scheduler] (default: serve)")
 	}
 
 	cfg, err := config.Load(".env")
@@ -84,6 +90,7 @@ func run(args []string) error {
 		}
 		var appStore interface {
 			application.AuthStore
+			application.MarketStore
 			application.CatalogStore
 			application.LifecycleStore
 			application.ModelMediaStore
@@ -110,7 +117,8 @@ func run(args []string) error {
 			blobStores["aliyun"] = ossStore
 		}
 		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
-		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore)}
+		marketService := newMarketService(appStore, cfg)
+		options := webtransport.Options{Market: marketService, AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore)}
 		if cfg.AuthMode == "disabled" {
 			_, err := auth.EnsureDisabledPrincipal(context.Background())
 			if err != nil {
@@ -121,13 +129,14 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		return serve(cfg.HTTPAddr, webServer.Handler())
+		return serveWithMarket(cfg.HTTPAddr, webServer.Handler(), marketService)
 	default:
 		return fmt.Errorf("unknown command %q; usage: assetloop <serve|migrate>", args[0])
 	}
 }
 
-func serve(addr string, handler http.Handler) error {
+func serve(addr string, handler http.Handler) error { return serveWithMarket(addr, handler, nil) }
+func serveWithMarket(addr string, handler http.Handler, market *application.MarketService) error {
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler,
@@ -135,6 +144,16 @@ func serve(addr string, handler http.Handler) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if market != nil && market.Configured() && market.UnitsConfirmed() {
+		go func() {
+			n, err := market.RefreshDue(ctx, "", "")
+			if err != nil {
+				slog.Warn("startup market refresh", "status", application.MarketErrorCode(err))
+			} else {
+				slog.Info("startup market refresh", "updated", n)
+			}
+		}()
+	}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
