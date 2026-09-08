@@ -78,9 +78,12 @@ func eventTypesURL(query, state string, page int) string {
 	return "/admin/event-types?" + values.Encode()
 }
 func (s *Server) createManagedEventType(w http.ResponseWriter, r *http.Request, actor application.Principal) {
-	_, err := s.lifecycle.CreateEventType(r.Context(), actor, application.CreateAssetEventType{Name: r.FormValue("name"), Cashflow: domain.AssetEventCashflow(r.FormValue("cashflow"))})
+	item, err := s.lifecycle.CreateEventType(r.Context(), actor, application.CreateAssetEventType{Name: r.FormValue("name"), Cashflow: domain.AssetEventCashflow(r.FormValue("cashflow"))})
 	if err != nil {
 		s.eventTypeError(w, r, actor, err)
+		return
+	}
+	if drawerSaved(w, "event-type", item.ID, item.Name, item.Enabled, map[string]any{"cashflow": item.Cashflow}) {
 		return
 	}
 	http.Redirect(w, r, "/admin/event-types", http.StatusSeeOther)
@@ -93,9 +96,12 @@ func (s *Server) updateAssetEventType(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := s.lifecycle.UpdateEventType(r.Context(), actor, r.PathValue("id"), application.UpdateEventType{Name: r.FormValue("name"), Cashflow: domain.AssetEventCashflow(r.FormValue("cashflow"))})
+	item, err := s.lifecycle.UpdateEventType(r.Context(), actor, r.PathValue("id"), application.UpdateEventType{Name: r.FormValue("name"), Cashflow: domain.AssetEventCashflow(r.FormValue("cashflow"))})
 	if err != nil {
 		s.eventTypeError(w, r, actor, err)
+		return
+	}
+	if drawerSaved(w, "event-type", item.ID, item.Name, item.Enabled, map[string]any{"cashflow": item.Cashflow}) {
 		return
 	}
 	http.Redirect(w, r, "/admin/event-types", http.StatusSeeOther)
@@ -113,9 +119,12 @@ func (s *Server) setAssetEventTypeStatus(w http.ResponseWriter, r *http.Request)
 		s.eventTypeError(w, r, actor, application.NewInputError("validation.filter_invalid"))
 		return
 	}
-	_, err := s.lifecycle.SetEventTypeEnabled(r.Context(), actor, r.PathValue("id"), enabled == "1")
+	item, err := s.lifecycle.SetEventTypeEnabled(r.Context(), actor, r.PathValue("id"), enabled == "1")
 	if err != nil {
 		s.eventTypeError(w, r, actor, err)
+		return
+	}
+	if drawerSaved(w, "event-type", item.ID, item.Name, item.Enabled, map[string]any{"cashflow": item.Cashflow}) {
 		return
 	}
 	http.Redirect(w, r, "/admin/event-types", http.StatusSeeOther)

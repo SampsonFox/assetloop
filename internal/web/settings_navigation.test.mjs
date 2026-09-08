@@ -19,6 +19,7 @@ function harness(initial = 'http://localhost/admin/catalog?q=phone', stored = '{
   const doc={title:'catalog',getElementById:()=>current,querySelector(s){return s==='.settings-tabs'?tabs:s==='[data-settings-feedback]'?feedback:null;},
     addEventListener(k,f){listeners[k]=f;},dispatchEvent(e){events.push(e.type);}};
   const ctx={URL,URLSearchParams,AbortController,Event,console,document:doc,
+    FormData:class extends URLSearchParams {constructor(form){super(form.values || {});}},
     sessionStorage:{getItem:()=>stored,setItem(k,v){writes.push(v);}},
     setTimeout:()=>1,clearTimeout(){},history:{state:{},pushState(s,t,u){location=new URL(u,location);},replaceState(s,t,u){location=new URL(u,location);}},
     window:{confirm:()=>allow,addEventListener(k,f){windows[k]=f;}},
@@ -29,8 +30,10 @@ function harness(initial = 'http://localhost/admin/catalog?q=phone', stored = '{
   return {requests,feedback,retry,login,message,writes,events,tabs,doc,
     get current(){return current;},get replaced(){return replaced;},get location(){return location;},
     set dirty(v){dirty=v;},set submitting(v){submitting=v;},set allow(v){allow=v;},
-    click(path,tab=true,ctrl=false){const link={href:new URL(path,location).href,inside:tab?tabs:current,hasAttribute:k=>k==='data-settings-tab'&&tab};
+    click(path,tab=true,ctrl=false,{drawer=false,insideDialog=false}={}){const link={href:new URL(path,location).href,inside:tab?tabs:current,closest:()=>insideDialog?{}:null,hasAttribute:k=>(k==='data-settings-tab'&&tab)||(k==='data-drawer-target'&&drawer)};
       let prevented=false;listeners.click({button:0,ctrlKey:ctrl,target:{closest:()=>link},preventDefault(){prevented=true;}});return prevented;},
+    submit({insideDialog=false,method='get',values={q:'query'}}={}){const form={method,action:new URL('/admin/tags',location).href,inside:current,values,closest:()=>insideDialog?{}:null};
+      let prevented=false;listeners.submit({target:form,preventDefault(){prevented=true;}});return prevented;},
     input(){listeners.input({target:{inside:current}});},
     pop(path){location=new URL(path,location);windows.popstate();},
     async finish(i=0,status=200,destination=requests[i].url){requests[i].resolve({ok:status===200,status,url:destination,text:async()=>''});await new Promise(setImmediate);}
@@ -81,4 +84,22 @@ test('preview pages and modified clicks use native links; no fetched scripts exe
 test('typing during a pending switch cancels replacement and preserves the input surface',async()=>{
  const h=harness(),old=h.current;h.click('/admin/tags');h.input();await h.finish();
  assert.equal(h.current,old);assert.equal(h.replaced,0);assert.ok(h.requests[0].options.signal.aborted);
+});
+
+test('drawer links and links inside dialogs bypass settings navigation even when targeting a root URL',()=>{
+ const h=harness(),old=h.current;
+ assert.equal(h.click('/admin/tags?edit=tag-1',false,false,{drawer:true}),false);
+ assert.equal(h.click('/admin/tags?q=search',false,false,{insideDialog:true}),false);
+ assert.equal(h.requests.length,0);assert.equal(h.current,old);assert.equal(h.replaced,0);
+ assert.equal(h.click('/admin/tags?q=search',false),true);
+ assert.equal(h.requests.length,1,'ordinary root links remain enhanced');
+});
+
+test('GET inside a drawer stays with its drawer while root GET forms remain enhanced',async()=>{
+ const h=harness(),old=h.current;
+ assert.equal(h.submit({insideDialog:true}),false);assert.equal(h.requests.length,0);
+ assert.equal(h.current,old);assert.equal(h.submit({method:'post'}),false);
+ assert.equal(h.submit({values:{q:'saved query',page:'2'}}),true);
+ assert.equal(h.requests.length,1);assert.equal(new URL(h.requests[0].url).searchParams.get('q'),'saved query');
+ await h.finish();assert.equal(h.replaced,1);
 });

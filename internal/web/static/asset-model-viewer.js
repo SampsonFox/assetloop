@@ -2,7 +2,11 @@ import * as THREE from './vendor/three-0.180.0/three.module.min.js';
 import { GLTFLoader } from './vendor/three-0.180.0/GLTFLoader.js';
 import { OrbitControls } from './vendor/three-0.180.0/OrbitControls.js';
 
-for (const root of document.querySelectorAll('[data-model-viewer]')) {
+const initializedViewers = new WeakSet();
+export function initializeViewers(scope = document) {
+for (const root of scope.querySelectorAll('[data-model-viewer]')) {
+  if (initializedViewers.has(root)) continue;
+  initializedViewers.add(root);
   const canvas = root.querySelector('[data-model-canvas]');
   const status = root.querySelector('[data-model-status]');
   const reset = root.querySelector('[data-model-reset]');
@@ -14,6 +18,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   let failed = false;
   let visibilityObserver;
   let visible = true;
+  let covered = false;
   let interacting = false;
   let paused = false;
   let previousTime = null;
@@ -76,7 +81,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   };
   const render = (time) => {
     frame = 0;
-    if (failed || !visible || document.hidden) { previousTime = null; return; }
+    if (failed || !visible || covered || document.hidden) { previousTime = null; return; }
     const delta = previousTime === null ? 0 : Math.min((time - previousTime) / 1000, 0.05);
     previousTime = time;
     const moving = controls.update(delta);
@@ -84,11 +89,11 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     if (controls.autoRotate || (moving && controls.enableDamping)) requestRender();
     else previousTime = null;
   };
-  const requestRender = () => { if (!frame && !failed && visible && !document.hidden) frame = requestAnimationFrame(render); };
+  const requestRender = () => { if (!frame && !failed && visible && !covered && !document.hidden) frame = requestAnimationFrame(render); };
   controls.addEventListener('change', requestRender);
   const motionChanged = () => {
     controls.enableDamping = !reducedMotion.matches;
-    controls.autoRotate = !!home && !paused && !reducedMotion.matches && !interacting && visible && !document.hidden;
+    controls.autoRotate = !!home && !paused && !reducedMotion.matches && !interacting && visible && !covered && !document.hidden;
     if (rotate) {
       rotate.disabled = reducedMotion.matches;
       rotate.setAttribute('aria-pressed', String(!paused && !reducedMotion.matches));
@@ -119,6 +124,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
   resize();
 
   new GLTFLoader().load(root.dataset.modelUrl, (gltf) => {
+    if (failed) { releaseObject(gltf.scene); return; }
     const object = gltf.scene;
     const box = new THREE.Box3().setFromObject(object);
     if (box.isEmpty()) { fail(root.dataset.modelError); return; }
@@ -167,7 +173,7 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     requestRender();
   });
 
-  window.addEventListener('pagehide', () => {
+  const dispose = () => {
     failed = true;
     cancelAnimationFrame(frame);
     observer.disconnect();
@@ -175,8 +181,14 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     document.removeEventListener('visibilitychange', motionChanged);
     reducedMotion.removeEventListener('change', motionChanged);
     controls.dispose();
+    releaseObject(scene);
     renderer.dispose();
-  }, { once: true });
+    window.removeEventListener('pagehide',dispose);
+  };
+  window.addEventListener('pagehide', dispose, { once: true });
+  const drawer=root.closest('dialog');
+  drawer?.addEventListener('drawer:dispose',dispose,{once:true});
+  drawer?.addEventListener('drawer:visibility',event=>{covered=!event.detail.visible;motionChanged();});
 
   function fail(message) {
     failed = true;
@@ -190,4 +202,18 @@ for (const root of document.querySelectorAll('[data-model-viewer]')) {
     controls?.dispose();
     if (renderer) renderer.dispose();
   }
+}
+}
+initializeViewers();
+
+function releaseObject(object) {
+  const textures=new Set();
+  object.traverse(node=>{
+    node.geometry?.dispose();
+    for(const material of [node.material].flat().filter(Boolean)) {
+      for(const value of Object.values(material)) if(value?.isTexture)textures.add(value);
+      material.dispose();
+    }
+  });
+  for(const texture of textures)texture.dispose();
 }

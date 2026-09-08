@@ -25,10 +25,20 @@ function button(label, action) {
   const b = node('button', 'secondary auto', label);
   b.type = 'button'; b.addEventListener('click', action); return b;
 }
+function detailLink(id,name,type=false) {
+  const link=node('a','transfer-detail', '↗');
+  link.href='/admin/tags?'+new URLSearchParams({view:type?'types':'values',edit:id,dialog:'tag-editor'});
+  link.dataset.drawerTarget='tag-editor';link.title=(en?'Edit ':'编辑 ')+name;link.setAttribute('aria-label',link.title);
+  return link;
+}
 function transfer(title, titles, items, move, reset) {
   const root=node('section','tag-transfer'); root.setAttribute('aria-label',title); root.dataset.transferUi='';
   const heading=node('div','field-heading transfer-heading');heading.append(node('h4','',title));
-  if(reset)heading.append(button(text.reset,()=>reset()));
+  if(reset){
+    const restore=button('',()=>reset());restore.className='icon-button';restore.title=text.reset;restore.setAttribute('aria-label',text.reset);
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');path.setAttribute('d','M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6');svg.append(path);restore.append(svg);heading.append(restore);
+  }
   root.append(heading);
   const tabs=node('div','transfer-mobile-tabs'), grid=node('div','transfer-grid'), arrows=node('div','transfer-arrows');
   const selections=[new Set(),new Set()], anchors=[null,null], lists=[], searches=[], counters=[], movers=[];
@@ -85,7 +95,8 @@ function transfer(title, titles, items, move, reset) {
         let parent=lists[i];
         if(item.group){
           if(!groups.has(item.group)){
-            const group=node('div','transfer-group');group.append(node('p','transfer-group-title',item.group));
+            const group=node('div','transfer-group'),title=node('p','transfer-group-title',item.group);
+            if(item.groupID)title.append(detailLink(item.groupID,item.group,true));group.append(title);
             lists[i].append(group);groups.set(item.group,group);
           }
           parent=groups.get(item.group);
@@ -104,6 +115,7 @@ function transfer(title, titles, items, move, reset) {
           if(event.shiftKey||!event.ctrlKey&&!event.metaKey)choose(i,buttons[next].dataset.choice,event);
         });
         row.append(choice);
+        row.append(detailLink(item.id,item.name,!!item.dimension));
         parent.append(row);
       }
       if(!rows.length)lists[i].append(node('p','transfer-empty muted',text.empty));
@@ -113,9 +125,10 @@ function transfer(title, titles, items, move, reset) {
   render();return {root,render};
 }
 function initialize() {
-  for(const form of document.querySelectorAll('form.model-tag-editor')) {
-    if(initialized.has(form)) continue;
-    const source=form.querySelector('[data-transfer-source]');
+  for(const editor of document.querySelectorAll('.model-tag-editor')) {
+    if(initialized.has(editor)) continue;
+    const form=editor.closest('form');
+    const source=editor.querySelector('[data-transfer-source]');
     if(!source) continue;
     const dimensions=[...source.querySelectorAll('[data-tag-dimension]')].map(group=>({
       id:group.dataset.tagDimension,name:group.querySelector('legend').textContent,
@@ -139,11 +152,11 @@ function initialize() {
       status.textContent=text.done+' · '+text.allowed+' '+state.selected.size+' · '+text.appearance+' '+state.active().length;
     };
     const tags=transfer(text.tags,[text.available,text.allowed],
-      ()=>dimensions.flatMap(d=>d.choices.map(c=>({id:c.id,name:c.name,group:d.name,right:state.selected.has(c.id),
+      ()=>dimensions.flatMap(d=>d.choices.map(c=>({id:c.id,name:c.name,group:d.name,groupID:d.id,right:state.selected.has(c.id),
         disabled:!state.selected.has(c.id)&&!c.enabled&&!c.selected,note:!c.enabled?text.disabled:''}))),
       (ids,right)=>{state.moveTags(ids,right);sync();});
     const appearance=transfer(text.appearance,[text.no,text.yes],
-      ()=>state.active().map(d=>({id:d.id,name:d.name,right:state.affects(d),
+      ()=>state.active().map(d=>({id:d.id,name:d.name,dimension:true,right:state.affects(d),
         note:d.appearance?text.inherited:''})),
       (ids,right)=>{state.moveAppearance(ids,right);sync();},
       ()=>{if(state.overrides.size){state.resetAllAppearance();sync();}});
@@ -154,8 +167,23 @@ function initialize() {
     }));
     source.before(tags.root,help,appearance.root,status);
     source.hidden=true;
-    initialized.add(form);
+    const updated=event=>{
+      const result=event.detail;
+      for(const d of dimensions) {
+        if(result.kind==='tag-type'&&d.id===result.id){d.name=result.name;if(typeof result.appearance==='boolean')d.appearance=result.appearance;d.select.closest('[data-tag-dimension]').querySelector('legend').textContent=result.name;}
+        if(result.kind==='tag'&&result.created&&result.parent===editor.closest('dialog')&&d.id===result.type_id&&!d.choices.some(c=>c.id===result.id)) {
+          const input=node('input');input.type='checkbox';input.name='tag_ids';input.value=result.id;input.checked=true;input.dataset.label=result.name;input.dataset.enabled=String(result.enabled);
+          d.select.closest('[data-tag-dimension]').append(input);d.choices.push({id:result.id,name:result.name,enabled:result.enabled,selected:false,input});state.selected.add(result.id);form.dataset.dirty='true';
+        }
+        for(const c of d.choices)if(result.kind==='tag'&&c.id===result.id){c.name=result.name;c.enabled=result.enabled;c.input.dataset.label=result.name;c.input.dataset.enabled=String(result.enabled);}
+      }
+      tags.render();appearance.render();
+    };
+    document.addEventListener('drawer:saved',updated);
+    editor.closest('dialog')?.addEventListener('drawer:dispose',()=>document.removeEventListener('drawer:saved',updated),{once:true});
+    initialized.add(editor);
   }
 }
 document.addEventListener('settings:loaded',initialize);
+document.addEventListener('drawer:loaded',initialize);
 initialize();

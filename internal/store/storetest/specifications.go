@@ -60,6 +60,55 @@ func RunSpecifications(t *testing.T, first, second Store) {
 	small, large := tagOf(storage, "128GB"), tagOf(storage, "256GB")
 	_ = tagOf(memory, "128GB") // Same label in a different dimension is valid.
 	matte := tagOf(finish, "Matte")
+	t.Run("model drawer commits metadata and tags atomically", func(t *testing.T) {
+		m, err := catalog.CreateModel(ctx, actor, application.CreateModel{CategoryID: category.ID, Name: "Unified drawer"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := application.SaveModelSpecification{ModelID: m.ID, TagIDs: []string{black.ID}, AppearanceOverrides: map[string]bool{color.ID: true}, Details: &application.ModelConfigurationDetails{CategoryID: category.ID, Name: "Unified saved"}}
+		if err := svc.SaveModel(ctx, actor, cmd); err != nil {
+			t.Fatal(err)
+		}
+		assertSaved := func() {
+			t.Helper()
+			got, err := reader.Model(ctx, actor, m.ID)
+			if err != nil || got.Name != "Unified saved" {
+				t.Fatalf("metadata: %+v %v", got, err)
+			}
+			state, err := reader.Snapshot(ctx, actor)
+			definition := state.Model(actor.TenantID, m.ID)
+			if err != nil || !reflect.DeepEqual(definition.AllowedTagIDs, []string{black.ID}) || !definition.AppearanceOverrides[color.ID] {
+				t.Fatalf("tags: %+v %v", definition, err)
+			}
+		}
+		assertSaved()
+		// Metadata validation happens after tag writes: rollback must restore both.
+		cmd.TagIDs = []string{white.ID}
+		cmd.AppearanceOverrides = map[string]bool{color.ID: false}
+		cmd.Details.Name = ""
+		if err := svc.SaveModel(ctx, actor, cmd); err == nil {
+			t.Fatal("invalid name accepted")
+		}
+		assertSaved()
+		cmd.Details.Name = "Should not persist"
+		cmd.TagIDs = []string{uuid.NewString()}
+		if err := svc.SaveModel(ctx, actor, cmd); err == nil {
+			t.Fatal("unknown tag accepted")
+		}
+		assertSaved()
+		cmd.TagIDs = []string{white.ID}
+		cmd.Details.CategoryID = uuid.NewString()
+		if err := svc.SaveModel(ctx, actor, cmd); err == nil {
+			t.Fatal("foreign category accepted")
+		}
+		assertSaved()
+		stranger := actor
+		stranger.TenantID = uuid.NewString()
+		if err := svc.SaveModel(ctx, stranger, cmd); err == nil {
+			t.Fatal("cross-tenant write accepted")
+		}
+		assertSaved()
+	})
 	t.Run("dictionary database filtering and pagination", func(t *testing.T) {
 		literal := tagOf(memory, "Écran %_ test")
 		for _, status := range []string{"", "all", "enabled"} {
@@ -174,6 +223,71 @@ func RunSpecifications(t *testing.T, first, second Store) {
 		return r
 	}
 	base := resource("Generic")
+	t.Run("asset fields and resource selection commit together", func(t *testing.T) {
+		id := base.ID
+		cmd := application.SaveSpecificationAsset{ModelID: model.ID, DisplayName: "Atomic resource", ResourceID: &id}
+		asset, err := svc.SaveAsset(ctx, actor, cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd.ID = asset.ID
+		got, err := reader.Asset(ctx, actor, asset.ID)
+		if err != nil || got.Model3DResourceID != base.ID {
+			t.Fatal("binding not saved", err)
+		}
+		id = uuid.NewString()
+		cmd.DisplayName = "Must roll back"
+		if _, err := svc.SaveAsset(ctx, actor, cmd); err == nil {
+			t.Fatal("missing resource accepted")
+		}
+		got, err = reader.Asset(ctx, actor, asset.ID)
+		if err != nil || got.DisplayName != "Atomic resource" || got.Model3DResourceID != base.ID {
+			t.Fatal("partial save", err)
+		}
+		cmd.ResourceID = nil
+		cmd.DisplayName = "Preserved"
+		if _, err := svc.SaveAsset(ctx, actor, cmd); err != nil {
+			t.Fatal(err)
+		}
+		got, err = reader.Asset(ctx, actor, asset.ID)
+		if err != nil || got.Model3DResourceID != base.ID {
+			t.Fatal("omitted selection reset binding", err)
+		}
+		id = ""
+		cmd.ResourceID = &id
+		if _, err := svc.SaveAsset(ctx, actor, cmd); err != nil {
+			t.Fatal(err)
+		}
+		got, err = reader.Asset(ctx, actor, asset.ID)
+		if err != nil || got.Model3DResourceID != "" {
+			t.Fatal("inheritance not restored", err)
+		}
+	})
+	t.Run("resource drawer metadata and tags save atomically", func(t *testing.T) {
+		cmd := application.SaveResourceSpecification{ResourceID: base.ID, TagIDs: []string{black.ID}, CategoryIDs: []string{category.ID}, Details: &application.UpdateModel3DResource{Name: ""}}
+		if err := svc.SaveResource(ctx, actor, cmd); err == nil {
+			t.Fatal("invalid metadata accepted")
+		}
+		state, err := reader.Snapshot(ctx, actor)
+		if err != nil || len(state.Selected("resource", base.ID)) != 0 {
+			t.Fatal("failed save changed tags", err)
+		}
+		cmd.Details.Name = "Generic updated"
+		if err := svc.SaveResource(ctx, actor, cmd); err != nil {
+			t.Fatal(err)
+		}
+		updated, err := second.GetModel3DResource(ctx, actor.TenantID, base.ID)
+		if err != nil || updated.Name != "Generic updated" || updated.ObjectKey != base.ObjectKey {
+			t.Fatal("metadata or blob identity incorrect", err)
+		}
+		state, err = reader.Snapshot(ctx, actor)
+		if err != nil || !reflect.DeepEqual(state.Selected("resource", base.ID), []string{black.ID}) {
+			t.Fatal("tags missing", err)
+		}
+		if err := svc.SaveResource(ctx, actor, application.SaveResourceSpecification{ResourceID: base.ID}); err != nil {
+			t.Fatal(err)
+		}
+	})
 	blackGLB := resource("Black GLB", black.ID)
 	whiteGLB := resource("White GLB", white.ID)
 	matteGLB := resource("Matte GLB", matte.ID)

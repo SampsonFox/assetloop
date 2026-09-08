@@ -100,8 +100,8 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	if body := get(assetPath).Body.String(); !strings.Contains(body, "Blue") || strings.Contains(body, "Injected independent color") {
 		t.Fatal("asset color must come from specification")
 	}
-	if body := get(assetPath + "/edit").Body.String(); !strings.Contains(body, "kind=asset") {
-		t.Fatal("saved asset binding entry missing")
+	if body := get(assetPath + "/edit").Body.String(); !strings.Contains(body, `name="resource_id" data-resource-choice`) || !strings.Contains(body, `data-resource-preview`) || strings.Contains(body, `/admin/3d/binding/asset/`+asset) {
+		t.Fatal("asset form must contain an integrated resource choice and preview, not a separate binding editor")
 	}
 	ids := []string{}
 	digests := []string{}
@@ -150,13 +150,13 @@ func TestResourceLibraryBindingPrecedenceColorAndReferences(t *testing.T) {
 	descriptionPath := "/admin/3d/" + ids[1] + "/tags"
 	assertStatus(post(descriptionPath, url.Values{"tag_ids": {"", blue}, "category_ids": {category}}), 303)
 	description := get("/admin/3d/" + ids[1]).Body.String()
-	for _, want := range []string{`value="` + blue + `" selected`, `value="` + category + `" checked`, "模型标签与分类", "外观默认", "edit_model_id=" + model} {
+	for _, want := range []string{`value="` + blue + `" selected`, `value="` + category + `" checked`, "模型标签与分类", "外观默认", `data-drawer-target="appearance-editor" href="/admin/catalog/models/` + model + `/appearance?rule_id=` + appearanceRule + `"`} {
 		if !strings.Contains(description, want) {
 			t.Fatalf("resource description missing %s", want)
 		}
 	}
 	if strings.Contains(description, "kind=appearance") {
-		t.Fatal("appearance reference must link to the model editor, not a nonexistent binding picker")
+		t.Fatal("appearance reference must link to the specific model appearance rule, not a nonexistent binding picker")
 	}
 	appearancePath := "/admin/catalog/models/" + model + "/appearance"
 	candidates := get(appearancePath + "?search=1&tag_ids=" + blue)

@@ -100,7 +100,7 @@
   document.addEventListener('click', (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = event.target.closest('a[href]');
-    if (!link || link.target || link.hasAttribute('download') || !(tabs.contains(link) || content().contains(link))) return;
+    if (!link || link.target || link.hasAttribute('download') || link.closest('dialog') || link.hasAttribute('data-drawer-target') || !(tabs.contains(link) || content().contains(link))) return;
     let url = new URL(link.href);
     if (!localRoot(url) || !roots.has(location.pathname)) return;
     if (link.hasAttribute('data-settings-tab') && saved[url.pathname]) {
@@ -117,7 +117,7 @@
   // Capture first: app.js must not mark a locally handled GET form as submitting.
   document.addEventListener('submit', (event) => {
     const form = event.target;
-    if (event.defaultPrevented || form.method !== 'get' || !content().contains(form)) return;
+    if (event.defaultPrevented || form.closest('dialog') || form.method !== 'get' || !content().contains(form)) return;
     const url = new URL(form.action);
     if (!localRoot(url) || !roots.has(location.pathname)) return;
     event.preventDefault();

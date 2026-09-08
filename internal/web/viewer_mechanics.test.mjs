@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import * as math from './static/vendor/three-0.180.0/three.module.min.js';
 
-const source = readFileSync(new URL('./static/asset-model-viewer.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '');
+const source = readFileSync(new URL('./static/asset-model-viewer.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace('export function initializeViewers','function initializeViewers');
 
 test('viewer stage inherits the theme accent surface without an opaque WebGL background', () => {
   const css = readFileSync(new URL('./static/app.css', import.meta.url), 'utf8');
@@ -16,17 +16,38 @@ test('viewer stage inherits the theme accent surface without an opaque WebGL bac
   assert.equal((css.match(/--accent-soft:var\(--accent-dark-soft\)/g) || []).length, 2);
 });
 
-function viewer({ reduced = false, webgl = true, width = 500, height = 300, dimensions = [2, 2, 2] } = {}) {
+function events() {
+  const listeners = new Map();
+  return {
+    addEventListener(name, fn, options = {}) {
+      if (!listeners.has(name)) listeners.set(name, new Map());
+      listeners.get(name).set(fn, options);
+    },
+    removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
+    emit(name, detail) {
+      for (const [fn, options] of [...(listeners.get(name) || [])]) {
+        if (options.once) listeners.get(name).delete(fn);
+        fn({ type: name, detail });
+      }
+    },
+    count(name) { return listeners.get(name)?.size || 0; },
+  };
+}
+
+function viewer({ reduced = false, webgl = true, width = 500, height = 300, dimensions = [2, 2, 2], dynamic = false, inDrawer = false } = {}) {
   const listeners = new Map();
   const frames = new Map();
   const classes = new Set();
-  const state = { loads: 0, draws: 0, disposed: 0 };
+  const state = { loads: 0, draws: 0, disposed: 0, controlsDisposed: 0, resizeDisconnected: 0, intersectionDisconnected: 0 };
+  const drawer = inDrawer ? events() : null;
   const canvas = { hidden: false, addEventListener: (name, callback) => listeners.set(name, callback) };
   const status = { hidden: false, textContent: '' };
   const reset = { addEventListener: (_name, callback) => { state.reset = callback; } };
   const rotate = { addEventListener: (_name, callback) => { state.toggle = callback; }, setAttribute: (_name, value) => { state.pressed = value; } };
-  const motion = { matches: reduced, addEventListener: (_name, fn) => { state.motion = fn; }, removeEventListener() {} };
+  const motionEvents = events();
+  const motion = { ...motionEvents, matches: reduced, addEventListener: (name, fn) => { state.motion = fn; motionEvents.addEventListener(name, fn); } };
   const root = {
+    closest: () => drawer,
     dataset: { modelUrl: '/selected.glb', modelError: 'Localized fallback', modelLoaded: 'Localized ready' },
     querySelector: (selector) => ({ '[data-model-canvas]': canvas, '[data-model-status]': status, '[data-model-reset]': reset, '[data-model-rotate]': rotate })[selector],
     getBoundingClientRect: () => ({ width, height }),
@@ -47,23 +68,26 @@ function viewer({ reduced = false, webgl = true, width = 500, height = 300, dime
     constructor() { this.target = new math.Vector3(); state.controls = this; }
     update(delta) { state.delta = delta; return false; }
     addEventListener(name, fn) { this[name] = fn; }
-    dispose() {}
+    dispose() { state.controlsDisposed++; }
   }
   class Loader {
     load(url, success, _progress, failure) { state.loads++; state.url = url; state.success = success; state.failure = failure; }
   }
   let nextFrame = 0;
   let time = 0;
-  const doc = { hidden: false, querySelectorAll: () => [root], addEventListener: (_name, fn) => { state.visibility = fn; }, removeEventListener() {} };
-  vm.runInNewContext(source, {
+  const docEvents = events();
+  const doc = { ...docEvents, hidden: false, querySelectorAll: () => dynamic ? [] : [root], addEventListener: (name, fn) => { state.visibility = fn; docEvents.addEventListener(name, fn); } };
+  const win = { ...events(), devicePixelRatio: 1, matchMedia: () => motion, setTimeout() {} };
+  const context = vm.createContext({
     THREE: { ...math, WebGLRenderer: Renderer }, OrbitControls: Controls, GLTFLoader: Loader,
     document: doc,
-    window: { devicePixelRatio: 1, matchMedia: () => motion, setTimeout() {}, addEventListener() {} },
-    ResizeObserver: class { constructor(fn) { state.resize = fn; } observe() {} disconnect() {} },
-    IntersectionObserver: class { constructor(fn) { state.intersection = fn; } observe() {} disconnect() {} },
+    window: win,
+    ResizeObserver: class { constructor(fn) { state.resize = fn; } observe() {} disconnect() { state.resizeDisconnected++; } },
+    IntersectionObserver: class { constructor(fn) { state.intersection = fn; } observe() {} disconnect() { state.intersectionDisconnected++; } },
     requestAnimationFrame: (fn) => { frames.set(++nextFrame, fn); return nextFrame; },
     cancelAnimationFrame: (id) => frames.delete(id),
   });
+  vm.runInContext(source, context);
   const flush = () => {
     let iterations = 0;
     while (frames.size) {
@@ -76,9 +100,10 @@ function viewer({ reduced = false, webgl = true, width = 500, height = 300, dime
     }
   };
   return {
-    state, status, canvas, classes, motion, flush, doc, rotate,
+    state, status, canvas, classes, motion, flush, doc, rotate, drawer, win, frames,
+    initialize() { context.initializeViewers({ querySelectorAll: () => [root] }); },
     resize(w, h) { width = w; height = h; state.resize(); flush(); },
-    ready() { state.success({ scene: new math.Mesh(new math.BoxGeometry(...dimensions)) }); flush(); },
+    ready(scene = new math.Mesh(new math.BoxGeometry(...dimensions))) { state.success({ scene }); flush(); },
     key(key) { let prevented = false; listeners.get('keydown')({ key, preventDefault() { prevented = true; } }); flush(); return prevented; },
   };
 }
@@ -129,6 +154,98 @@ test('slow autoplay pauses for user controls, offscreen and hidden pages', () =>
   v.state.intersection([{ isIntersecting: true }]); v.flush(); assert.equal(v.state.controls.autoRotate, true);
   v.doc.hidden = true; v.state.visibility(); v.flush(); assert.equal(v.state.controls.autoRotate, false);
   v.doc.hidden = false; v.state.visibility(); v.flush(); assert.equal(v.state.controls.autoRotate, true);
+});
+
+test('dynamic drawer initialization loads once across repeated initialization', () => {
+  const v = viewer({ dynamic: true, inDrawer: true });
+  assert.equal(v.state.loads, 0, 'A detached drawer is not initialized on page load');
+  v.initialize();
+  assert.equal(v.state.loads, 1);
+  v.ready();
+  const controls = v.state.controls;
+  v.initialize(); v.initialize();
+  assert.equal(v.state.loads, 1, 'Reinitializing the same node must not fetch again');
+  assert.equal(v.state.controls, controls, 'Controls must not be duplicated');
+  assert.equal(v.drawer.count('drawer:dispose'), 1);
+  assert.equal(v.doc.count('visibilitychange'), 1);
+  assert.equal(v.classes.has('is-ready'), true);
+});
+
+test('covered drawer stops drawing and resumes without losing the user pause preference', () => {
+  const v = viewer({ inDrawer: true }); v.ready();
+  assert.equal(v.state.controls.autoRotate, true);
+  v.drawer.emit('drawer:visibility', { visible: false });
+  const before = v.state.draws;
+  v.flush();
+  assert.equal(v.state.controls.autoRotate, false);
+  assert.equal(v.state.draws, before, 'A queued frame cannot draw a covered viewer');
+  assert.equal(v.frames.size, 0);
+  v.drawer.emit('drawer:visibility', { visible: true }); v.flush();
+  assert.equal(v.state.controls.autoRotate, true);
+  assert.ok(v.state.draws > before);
+  v.state.toggle(); v.flush();
+  assert.equal(v.state.pressed, 'false');
+  v.drawer.emit('drawer:visibility', { visible: false }); v.flush();
+  v.drawer.emit('drawer:visibility', { visible: true }); v.flush();
+  assert.equal(v.state.controls.autoRotate, false, 'Uncovering must retain manual pause');
+  assert.equal(v.state.pressed, 'false');
+  const paused = v.state.draws; v.flush(); assert.equal(v.state.draws, paused);
+});
+
+test('a model loaded while covered waits for uncovering before rendering', () => {
+  const v = viewer({ inDrawer: true });
+  v.drawer.emit('drawer:visibility', { visible: false });
+  v.ready();
+  assert.equal(v.state.draws, 0);
+  assert.equal(v.state.controls.autoRotate, false);
+  v.drawer.emit('drawer:visibility', { visible: true }); v.flush();
+  assert.ok(v.state.draws > 0);
+  assert.equal(v.state.loads, 1);
+});
+
+function trackedModel() {
+  const released = { geometry: 0, materials: 0, textures: 0 };
+  const geometry = new math.BoxGeometry(2, 2, 2);
+  geometry.addEventListener('dispose', () => released.geometry++);
+  const texture = new math.Texture();
+  texture.addEventListener('dispose', () => released.textures++);
+  const materials = [new math.MeshBasicMaterial({ map: texture }), new math.MeshBasicMaterial({ map: texture })];
+  for (const material of materials) material.addEventListener('dispose', () => released.materials++);
+  return { scene: new math.Mesh(geometry, materials), released };
+}
+
+test('drawer disposal releases GPU resources, observers and global listeners and cancels rendering', () => {
+  const v = viewer({ inDrawer: true });
+  const model = trackedModel(); v.ready(model.scene);
+  assert.ok(v.frames.size > 0);
+  v.drawer.emit('drawer:dispose');
+  const draws = v.state.draws; v.flush();
+  assert.equal(v.state.draws, draws);
+  assert.equal(v.frames.size, 0);
+  assert.equal(v.state.disposed, 1);
+  assert.equal(v.state.controlsDisposed, 1);
+  assert.equal(v.state.resizeDisconnected, 1);
+  assert.equal(v.state.intersectionDisconnected, 1);
+  assert.equal(v.doc.count('visibilitychange'), 0);
+  assert.equal(v.motion.count('change'), 0);
+  assert.equal(v.win.count('pagehide'), 0);
+  assert.deepEqual(model.released, { geometry: 1, materials: 2, textures: 1 });
+  v.drawer.emit('drawer:dispose'); v.win.emit('pagehide');
+  assert.equal(v.state.disposed, 1, 'Removed/once listeners must not dispose twice');
+  v.drawer.emit('drawer:visibility', { visible: true }); v.flush();
+  assert.equal(v.state.draws, draws, 'A stale visibility event cannot restart drawing');
+});
+
+test('late GLB arrival after drawer disposal is released without rendering or revealing the model', () => {
+  const v = viewer({ inDrawer: true });
+  v.drawer.emit('drawer:dispose');
+  const model = trackedModel(); v.ready(model.scene);
+  assert.deepEqual(model.released, { geometry: 1, materials: 2, textures: 1 });
+  assert.equal(v.state.draws, 0);
+  assert.equal(v.frames.size, 0);
+  assert.equal(v.classes.has('is-ready'), false);
+  assert.equal(v.status.textContent, '');
+  assert.equal(v.state.disposed, 1);
 });
 
 test('both viewer surfaces expose a keyboard-accessible autoplay toggle', () => {

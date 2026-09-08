@@ -12,13 +12,13 @@ import (
 )
 
 type specificationPageData struct {
-	Values                                       bool
-	TypeID, FilterTypeID, EditingID, Name        string
-	Enabled, Multiple, Appearance, ConfirmRename bool
-	Types                                        []application.SpecificationTypeSummary
-	Tags                                         []application.SpecificationTagSummary
-	AllTypes                                     []domain.SpecificationTagType
-	References                                   []application.SpecificationLink
+	Values                                              bool
+	TypeID, FilterTypeID, EditingID, Name, OriginalName string
+	Enabled, Multiple, Appearance, ConfirmRename        bool
+	Types                                               []application.SpecificationTypeSummary
+	Tags                                                []application.SpecificationTagSummary
+	AllTypes                                            []domain.SpecificationTagType
+	References                                          []application.SpecificationLink
 }
 
 func (s *Server) specificationsPage(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +65,7 @@ func (s *Server) renderSpecifications(w http.ResponseWriter, r *http.Request, ac
 			data.References = state.TypeReferences(kind.ID)
 		}
 	}
+	data.OriginalName = data.Name
 	if r.Method == http.MethodPost && message != "" {
 		data.Name, data.TypeID = r.FormValue("name"), r.FormValue("type_id")
 		data.Enabled, data.Multiple, data.Appearance, data.ConfirmRename = r.FormValue("enabled") == "1", r.FormValue("multiple") == "1", r.FormValue("appearance") == "1", r.FormValue("confirm_rename") == "1"
@@ -105,9 +106,12 @@ func (s *Server) saveSpecificationType(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	_, err := s.options.Specifications.SaveType(r.Context(), actor, application.SaveSpecificationType{ID: r.PathValue("id"), Name: r.FormValue("name"), Enabled: r.FormValue("enabled") == "1", Multiple: r.FormValue("multiple") == "1", AffectsAppearance: r.FormValue("appearance") == "1", ConfirmSharedRename: r.FormValue("confirm_rename") == "1"})
+	saved, err := s.options.Specifications.SaveType(r.Context(), actor, application.SaveSpecificationType{ID: r.PathValue("id"), Name: r.FormValue("name"), Enabled: r.FormValue("enabled") == "1", Multiple: r.FormValue("multiple") == "1", AffectsAppearance: r.FormValue("appearance") == "1", ConfirmSharedRename: r.FormValue("confirm_rename") == "1"})
 	if err != nil {
 		s.specificationError(w, r, actor, err)
+		return
+	}
+	if drawerSaved(w, "tag-type", saved.ID, saved.Name, saved.Enabled, map[string]any{"appearance": saved.AffectsAppearance, "multiple": saved.Multiple}) {
 		return
 	}
 	http.Redirect(w, r, "/admin/tags?view=types", http.StatusSeeOther)
@@ -125,9 +129,12 @@ func (s *Server) saveSpecificationTag(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	_, err := s.options.Specifications.SaveTag(r.Context(), actor, application.SaveSpecificationTag{ID: r.PathValue("id"), TypeID: r.FormValue("type_id"), Name: r.FormValue("name"), Enabled: r.FormValue("enabled") == "1", ConfirmSharedRename: r.FormValue("confirm_rename") == "1"})
+	saved, err := s.options.Specifications.SaveTag(r.Context(), actor, application.SaveSpecificationTag{ID: r.PathValue("id"), TypeID: r.FormValue("type_id"), Name: r.FormValue("name"), Enabled: r.FormValue("enabled") == "1", ConfirmSharedRename: r.FormValue("confirm_rename") == "1"})
 	if err != nil {
 		s.specificationError(w, r, actor, err)
+		return
+	}
+	if drawerSaved(w, "tag", saved.ID, saved.Name, saved.Enabled, map[string]any{"type_id": saved.TypeID}) {
 		return
 	}
 	http.Redirect(w, r, "/admin/tags?type_id="+url.QueryEscape(r.FormValue("type_id")), http.StatusSeeOther)

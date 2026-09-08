@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
+test('model identity aligns fields and keeps category add beside its select',()=>{
+ const html=read('./templates/catalog_drawers.html');
+ assert.match(html, /class="model-category-control"><select[\s\S]*?<\/select><button[^>]*data-dialog-open="category-drawer"/);
+ assert.match(html,/class="model-identity-fields"/);
+ const css=read('./static/app.css');
+ assert.match(css,/\.model-identity-fields \{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+ assert.match(css,/@container model-drawer \(min-width:600px\)/);
+});
+test('model drawer heading is a compact single line',()=>{
+ const drawer=read('./templates/catalog_drawers.html').split('id="model-drawer"')[1].split('</dialog>')[0];
+ const header=drawer.split('</header>')[0];
+ assert.doesNotMatch(header,/eyebrow/);
+ assert.match(header,/id="model-drawer-title" data-dialog-title/);
+ assert.match(header,/data-dialog-close>{{t \$s "common.cancel"}}<\/button>{{if \.CanManageCatalog}}<button[^>]*type="submit"[^>]*>{{t \$s "common.save"}}/);
+ assert.doesNotMatch(header,/template "ui-icon"/);
+ const css=read('./static/app.css');
+ assert.ok(css.includes('dialog[data-management-drawer] .drawer-heading { flex:none; margin:0; padding:14px 24px; }'));
+ assert.match(css,/\.drawer-heading-actions button \{[^}]*min-height:36px/);
+ assert.match(css,/@media \(pointer:coarse\) \{ \.drawer-heading-actions button \{ min-height:44px/);
+ assert.match(css,/dialog\[data-management-drawer\] \.drawer-heading h2 \{[^}]*font-size:20px;[^}]*font-weight:600/);
+});
+test('model pilot has one form and one always-reachable save, with inactive models excluded',()=>{
+ const html=read('./templates/catalog_drawers.html');
+ const drawer=html.split('id="model-drawer"')[1].split('</dialog>')[0];
+ assert.equal((drawer.match(/<form /g)||[]).length,1);
+ assert.equal((drawer.match(/type="submit"/g)||[]).length,1);
+ assert.equal((drawer.match(/data-dialog-close/g)||[]).length,1);
+ assert.doesNotMatch(drawer,/<footer/);
+ assert.match(drawer.split('</header>')[0],/type="submit" form="model-form"/);
+ assert.match(drawer,/form="model-form"/);
+ assert.match(html,/\{\{\$active := and \$\.CatalogEditingModel \(eq \$\.CatalogEditingModel.ID \.ModelID\)\}\}/);
+ assert.match(html,/<fieldset class="stack model-tag-editor"[^>]*\{\{if not \$active\}\} hidden disabled\{\{else if not \$\.CanManageCatalog\}\} disabled\{\{end\}\}>/);
+ assert.match(read('./static/app.js'),/group.tagName === "FIELDSET"\) group.disabled = group.hidden/);
+ const css=read('./static/app.css');
+ assert.match(css,/dialog\[data-management-drawer\] > \.drawer-panel \{[^}]*overflow:hidden/);
+ assert.match(css,/\.model-drawer-body \{[^}]*flex:1;[^}]*min-height:0;[^}]*overflow:auto/);
+ assert.match(css,/dialog\[data-management-drawer\] \.drawer-heading \{[^}]*flex:none/);
+ assert.ok(css.includes('html:has(dialog[data-management-drawer][open]) { overflow:hidden; }'));
+});

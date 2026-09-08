@@ -40,11 +40,14 @@ func (s *Server) uploadAppearance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	draft := resourceDraft(r)
-	_, err = s.modelMedia.UploadAppearance(r.Context(), p,
+	resource, err := s.modelMedia.UploadAppearance(r.Context(), p,
 		application.UploadModel3DResource{Name: draft.Name, File: data, SourceURL: draft.SourceURL, Author: draft.Author, License: draft.License},
 		application.SaveAppearanceDefault{ID: r.PostForm.Get("rule_id"), ModelID: r.PathValue("id"), TagIDs: nonemptyTagIDs(r.PostForm["tag_ids"])})
 	if err != nil {
 		s.renderAppearance(w, r, p, 422, s.resourceError(p.Locale, err))
+		return
+	}
+	if drawerSaved(w, "resource", resource.ID, resource.Name, true) {
 		return
 	}
 	http.Redirect(w, r, "/admin/catalog/models/"+r.PathValue("id")+"/appearance", http.StatusSeeOther)

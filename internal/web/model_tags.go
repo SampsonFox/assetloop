@@ -37,6 +37,9 @@ func (s *Server) saveAppearance(w http.ResponseWriter, r *http.Request) {
 		s.renderAppearance(w, r, actor, 422, s.userError(actor.Locale, err))
 		return
 	}
+	if drawerSaved(w, "appearance", rule.ID, rule.ModelID, true) {
+		return
+	}
 	if r.PostForm.Get("return_appearance") == "1" {
 		http.Redirect(w, r, "/admin/catalog/models/"+rule.ModelID+"/appearance?rule_id="+rule.ID, http.StatusSeeOther)
 		return
@@ -63,6 +66,9 @@ func (s *Server) deleteAppearance(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalog(w, r, 422, actor, s.userError(actor.Locale, err))
 		return
 	}
+	if drawerSaved(w, "appearance", r.PathValue("id"), r.PostForm.Get("return_model_id"), false) {
+		return
+	}
 	if modelID := r.PostForm.Get("return_model_id"); modelID != "" {
 		if _, err := s.options.Specifications.Model(r.Context(), actor, modelID); err == nil {
 			http.Redirect(w, r, "/admin/catalog/models/"+modelID+"/appearance", http.StatusSeeOther)
@@ -81,6 +87,25 @@ type modelTagEditor struct {
 	ModelID    string
 	Dimensions []tagDimension
 	Summary    []string
+}
+
+type catalogTagFilterGroup struct {
+	Name string
+	Tags []domain.SpecificationTag
+}
+
+func catalogTagFilterGroups(state application.SpecificationSnapshot) []catalogTagFilterGroup {
+	tagsByType := make(map[string][]domain.SpecificationTag, len(state.Types))
+	for _, tag := range state.Tags {
+		tagsByType[tag.TypeID] = append(tagsByType[tag.TypeID], tag)
+	}
+	groups := make([]catalogTagFilterGroup, 0, len(state.Types))
+	for _, typ := range state.Types {
+		if tags := tagsByType[typ.ID]; len(tags) > 0 {
+			groups = append(groups, catalogTagFilterGroup{Name: typ.Name, Tags: tags})
+		}
+	}
+	return groups
 }
 
 func modelTagEditors(state application.SpecificationSnapshot, tenant string, models []domain.ProductModel) []modelTagEditor {

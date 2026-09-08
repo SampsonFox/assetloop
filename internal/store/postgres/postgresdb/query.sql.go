@@ -1939,19 +1939,23 @@ LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_re
     WHERE m.tenant_id = $1
       AND ($2::text = '' OR m.name ILIKE '%' || $2::text || '%' OR c.name ILIKE '%' || $2::text || '%')
       AND ($3::text = '' OR m.category_id::text = $3::text)
+      AND ($4::text = '' OR EXISTS (
+           SELECT 1 FROM model_allowed_tags mat
+           WHERE mat.tenant_id = m.tenant_id AND mat.model_id = m.id
+             AND mat.tag_id::text = $4::text))
 ),
 paged_models AS (
     SELECT id, tenant_id, category_id, category_name, category_icon, name, created_at, model_3d_resource_id, model_3d_store_id, model_3d_object_key, model_3d_sha256, model_3d_size_bytes, model_3d_source_url, model_3d_author, model_3d_license, model_3d_updated_at, COUNT(*) OVER () AS total_count,
            ROW_NUMBER() OVER (ORDER BY
-             CASE WHEN $4::text = 'category' AND $5::text = 'asc' THEN LOWER(category_name) END ASC,
-             CASE WHEN $4::text = 'category' AND $5::text = 'desc' THEN LOWER(category_name) END DESC,
-             CASE WHEN $4::text = 'name' AND $5::text = 'asc' THEN LOWER(name) END ASC,
-             CASE WHEN $4::text = 'name' AND $5::text = 'desc' THEN LOWER(name) END DESC,
-             CASE WHEN $4::text = 'created' AND $5::text = 'asc' THEN created_at END ASC,
-             CASE WHEN $4::text = 'created' AND $5::text = 'desc' THEN created_at END DESC,
+             CASE WHEN $5::text = 'category' AND $6::text = 'asc' THEN LOWER(category_name) END ASC,
+             CASE WHEN $5::text = 'category' AND $6::text = 'desc' THEN LOWER(category_name) END DESC,
+             CASE WHEN $5::text = 'name' AND $6::text = 'asc' THEN LOWER(name) END ASC,
+             CASE WHEN $5::text = 'name' AND $6::text = 'desc' THEN LOWER(name) END DESC,
+             CASE WHEN $5::text = 'created' AND $6::text = 'asc' THEN created_at END ASC,
+             CASE WHEN $5::text = 'created' AND $6::text = 'desc' THEN created_at END DESC,
              LOWER(category_name), LOWER(name), id) AS page_order
     FROM filtered_models
-    LIMIT $7::bigint OFFSET $6::bigint
+    LIMIT $8::bigint OFFSET $7::bigint
 )
 SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
        pm.name, pm.created_at, pm.model_3d_resource_id,
@@ -1966,6 +1970,7 @@ type ListModelsPageParams struct {
 	TenantID       uuid.UUID
 	SearchQuery    string
 	CategoryFilter string
+	TagFilter      string
 	SortKey        string
 	SortDirection  string
 	PageOffset     int64
@@ -1998,6 +2003,7 @@ func (q *Queries) ListModelsPage(ctx context.Context, arg ListModelsPageParams) 
 		arg.TenantID,
 		arg.SearchQuery,
 		arg.CategoryFilter,
+		arg.TagFilter,
 		arg.SortKey,
 		arg.SortDirection,
 		arg.PageOffset,

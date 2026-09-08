@@ -89,6 +89,17 @@ Owns use cases and ports:
 
 Application services are the only supported write path.
 
+The model editor submits metadata, allowed tags and appearance overrides together.
+`SpecificationService.SaveModel` applies optional model details under the same
+tenant-scoped specification transaction; Store model updates use that transaction's
+query handle. A rejected selection or metadata write rolls back the entire edit.
+
+Resource editor submissions similarly save metadata and resource tag/category
+associations through `SpecificationService.SaveResource` in one transaction,
+reusing model-media metadata validation. Blob identity and confirmed bindings do
+not change. Shared tag/type renames retain application-layer confirmation;
+Web prompts only for referenced names that actually change.
+
 ### 4.3 Transport adapters
 
 - Web translates HTTP requests and renders server-side HTML.
@@ -323,6 +334,43 @@ HTTP request
 Every Store query remains tenant-scoped even after authorization. Hiding a Web control is never
 treated as authorization. State-changing Web requests require CSRF validation, and membership or
 authentication changes produce security audit events.
+
+### Associated-detail drawers
+
+The Web transport may negotiate a single detail fragment with
+`X-Assetloop-Drawer`. Normal GET/POST routes remain available without JavaScript;
+fragment requests do not bypass application services, tenant scope, capability
+checks, CSRF, shared-name confirmation or transaction validation. Enhanced saves
+return entity kind, stable ID, display name and narrowly scoped update metadata.
+No persistence schema or business transaction is introduced for the drawer stack.
+
+Each layer commits independently. A child save is durable even when the parent
+draft is subsequently discarded. Asset resource selection is a parent field: its
+explicit override or empty inheritance selection commits in the same specification
+transaction as asset metadata and tags; an omitted field preserves the binding. Resource
+preview remains a child detail and does not itself change the selected asset binding. The parent
+browser retains parent DOM, file inputs and
+scroll position, updates only associated labels/options by ID, and preserves
+invalid selections with feedback until existing server validation resolves them.
+Drafts stay in memory, never in URLs or browser storage. Associated navigation
+does not change the root URL or create browser-history entries. A detail opens
+another specific detail/create form, not a management-list page.
+
+Only the top modal is interactive. Cancellation applies to that layer and uses
+the existing unsaved-change guard; submitting layers cannot be dismissed.
+Fragment loading is cancellable, sequence checked and never executes returned
+scripts. DOM IDs and form/label/ARIA references are instance-scoped. Parent
+panels translate left by 64px (200ms gentle easing, cumulative maximum 128px), with
+at most 24px displacement on narrow screens and no animation in reduced-motion
+mode. Drawer entry uses a restrained 20px translation rather than a full-width slide;
+exit fades over 120ms with 8px travel and waits for actual panel animations, not a
+fixed timer. Discard resets run after hiding the drawer to avoid visible form flashes.
+Returning ancestors use the same 120ms duration; exit flags clear only after close.
+The root reserves its scrollbar gutter so unlocking page scroll does not shift layout.
+Drawer widths belong to their purpose, not their parent: simple dictionary editors
+use 480px, asset editors 720px, model/appearance/binding editors 820px, and 3D preview editors 920px,
+all capped by the available viewport. Loading shells use the same target sizing.
+Covered 3D viewers suspend rendering; removed instances release resources.
 
 User interface preferences belong to the global user identity. `users.locale` selects a registered
 code-defined language pack, `users.theme` selects `system`, `light`, or `dark`, and `users.accent`

@@ -26,6 +26,14 @@ func (s *Server) saveResourceTags(w http.ResponseWriter, r *http.Request) {
 		s.renderResource(w, r, p, http.StatusUnprocessableEntity, s.userError(p.Locale, err), nil)
 		return
 	}
+	resource, err := s.modelMedia.GetResource(r.Context(), p, r.PathValue("id"))
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if drawerSaved(w, "resource", resource.ID, resource.Name, true) {
+		return
+	}
 	http.Redirect(w, r, "/admin/3d/"+r.PathValue("id")+"#resource-tags", http.StatusSeeOther)
 }
 
@@ -44,8 +52,8 @@ func (s *Server) resourceTagData(r *http.Request, p application.Principal, data 
 	for _, ref := range data.References {
 		if ref.Kind == "asset" {
 			data.ReferenceURLs[ref.ID] = "/assets/" + ref.ID
-		} else {
-			data.ReferenceURLs[ref.ID] = resourceLibraryURL("", ref.Kind, ref.ID, ref.Name, 1)
+		} else if ref.Kind == "model" {
+			data.ReferenceURLs[ref.ID] = "/admin/catalog?" + url.Values{"dialog": {"model-drawer"}, "edit_model_id": {ref.ID}}.Encode()
 		}
 	}
 	if s.options.Specifications == nil {
@@ -57,7 +65,7 @@ func (s *Server) resourceTagData(r *http.Request, p application.Principal, data 
 	}
 	ids := state.Selected("resource", data.Resource.ID)
 	categoryIDs := state.Selected("resource-category", data.Resource.ID)
-	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/tags") && data.Error != "" {
+	if r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/tags") || r.FormValue("resource_configuration") == "1") && data.Error != "" {
 		ids, categoryIDs = nonemptyTagIDs(r.PostForm["tag_ids"]), r.PostForm["category_ids"]
 	}
 	data.ResourceTags = modelTagEditorFor(state, p.TenantID, "", ids, nil)
@@ -79,7 +87,7 @@ func (s *Server) resourceTagData(r *http.Request, p application.Principal, data 
 		} else if ref.Kind == "appearance" {
 			for _, rule := range state.Defaults {
 				if rule.ID == ref.ID {
-					modelID = rule.ModelID
+					data.ReferenceURLs[ref.ID] = "/admin/catalog/models/" + rule.ModelID + "/appearance?" + url.Values{"rule_id": {rule.ID}}.Encode()
 				}
 			}
 		}

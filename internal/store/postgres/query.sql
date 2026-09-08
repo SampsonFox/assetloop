@@ -56,6 +56,10 @@ LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_re
     WHERE m.tenant_id = sqlc.arg(tenant_id)
       AND (sqlc.arg(search_query)::text = '' OR m.name ILIKE '%' || sqlc.arg(search_query)::text || '%' OR c.name ILIKE '%' || sqlc.arg(search_query)::text || '%')
       AND (sqlc.arg(category_filter)::text = '' OR m.category_id::text = sqlc.arg(category_filter)::text)
+      AND (sqlc.arg(tag_filter)::text = '' OR EXISTS (
+           SELECT 1 FROM model_allowed_tags mat
+           WHERE mat.tenant_id = m.tenant_id AND mat.model_id = m.id
+             AND mat.tag_id::text = sqlc.arg(tag_filter)::text))
 ),
 paged_models AS (
     SELECT *, COUNT(*) OVER () AS total_count,

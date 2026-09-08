@@ -59,10 +59,10 @@ func TestCatalogServiceNormalizesAssetListOptions(t *testing.T) {
 	if _, err := service.ListAssetsWithSummary(context.Background(), viewer, AssetListOptions{Sort: "sql", Direction: "sideways"}); err == nil {
 		t.Fatal("unknown asset sort should fail")
 	}
-	if _, err := service.ListModelsPage(context.Background(), viewer, ModelListOptions{Query: " Phone ", Sort: "name", Direction: "desc", PageSize: 500}); err != nil {
+	if _, err := service.ListModelsPage(context.Background(), viewer, ModelListOptions{Query: " Phone ", TagID: "33333333-3333-4333-8333-333333333333", Sort: "name", Direction: "desc", PageSize: 500}); err != nil {
 		t.Fatal(err)
 	}
-	if store.modelListOptions.Query != "Phone" || store.modelListOptions.Sort != "name" || store.modelListOptions.Direction != "desc" || store.modelListOptions.Page != 1 || store.modelListOptions.PageSize != 200 {
+	if store.modelListOptions.Query != "Phone" || store.modelListOptions.TagID != "33333333-3333-4333-8333-333333333333" || store.modelListOptions.Sort != "name" || store.modelListOptions.Direction != "desc" || store.modelListOptions.Page != 1 || store.modelListOptions.PageSize != 200 {
 		t.Fatalf("model list options were not normalized: %+v", store.modelListOptions)
 	}
 }

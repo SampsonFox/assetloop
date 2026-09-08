@@ -236,8 +236,14 @@ func (s *CatalogService) ListModelsPage(ctx context.Context, actor Principal, op
 	opts.Page, opts.PageSize = normalizePage(opts.Page, opts.PageSize)
 	opts.Query = strings.TrimSpace(opts.Query)
 	opts.CategoryID = strings.TrimSpace(opts.CategoryID)
+	opts.TagID = strings.TrimSpace(opts.TagID)
 	if opts.CategoryID != "" {
 		if err := validID("category ID", opts.CategoryID); err != nil {
+			return ModelListResult{}, NewInputError("validation.filter_invalid")
+		}
+	}
+	if opts.TagID != "" {
+		if err := validID("tag ID", opts.TagID); err != nil {
 			return ModelListResult{}, NewInputError("validation.filter_invalid")
 		}
 	}

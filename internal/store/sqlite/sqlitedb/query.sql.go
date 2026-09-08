@@ -1951,6 +1951,10 @@ LEFT JOIN model_3d_resources r ON r.tenant_id=m.tenant_id AND r.id=m.model_3d_re
            LOWER(m.name) LIKE '%' || LOWER(CAST(?4 AS TEXT)) || '%' OR
            LOWER(c.name) LIKE '%' || LOWER(CAST(?4 AS TEXT)) || '%')
       AND (CAST(?5 AS TEXT) = '' OR m.category_id = CAST(?5 AS TEXT))
+      AND (CAST(?6 AS TEXT) = '' OR EXISTS (
+           SELECT 1 FROM model_allowed_tags mat
+           WHERE mat.tenant_id = m.tenant_id AND mat.model_id = m.id
+             AND CAST(mat.tag_id AS TEXT) = CAST(?6 AS TEXT)))
 ),
 paged_models AS (
     SELECT id, tenant_id, category_id, category_name, category_icon, name, created_at, model_3d_resource_id, model_3d_store_id, model_3d_object_key, model_3d_sha256, model_3d_size_bytes, model_3d_source_url, model_3d_author, model_3d_license, model_3d_updated_at, sort_key, sort_direction, COUNT(*) OVER () AS total_count,
@@ -1963,7 +1967,7 @@ paged_models AS (
              CASE WHEN sort_key = 'created' AND sort_direction = 'desc' THEN created_at END DESC,
              LOWER(category_name), LOWER(name), id) AS page_order
     FROM filtered_models
-    LIMIT ?7 OFFSET ?6
+    LIMIT ?8 OFFSET ?7
 )
 SELECT pm.id, pm.tenant_id, pm.category_id, pm.category_name, pm.category_icon,
        pm.name, pm.created_at, pm.model_3d_resource_id,
@@ -1980,6 +1984,7 @@ type ListModelsPageParams struct {
 	TenantID       string
 	SearchQuery    string
 	CategoryFilter string
+	TagFilter      string
 	PageOffset     int64
 	PageSize       int64
 }
@@ -2012,6 +2017,7 @@ func (q *Queries) ListModelsPage(ctx context.Context, arg ListModelsPageParams) 
 		arg.TenantID,
 		arg.SearchQuery,
 		arg.CategoryFilter,
+		arg.TagFilter,
 		arg.PageOffset,
 		arg.PageSize,
 	)
