@@ -80,6 +80,7 @@ func TestHTTPQueries(t *testing.T) {
 				if strings.Contains(string(schema), "tenant_id") || strings.Contains(string(schema), "user_id") {
 					t.Errorf("%s accepts identity", tool.Name)
 				}
+				assertToolSchema(t, tool, write)
 			}
 			result, err := session.CallTool(ctx, &sdk.CallToolParams{Name: "list_categories", Arguments: map[string]any{}})
 			if err != nil {

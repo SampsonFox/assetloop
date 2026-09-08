@@ -12,22 +12,22 @@ part of this worktree's development runtime.
   tenant isolation with the SDK client and migrated SQLite.
 - [x] Add application-owned OAuth grants, authorization codes and hashed tokens,
   with paired SQLite/PostgreSQL migrations, sqlc adapters and upgrade tests.
-- [ ] Implement same-account consent, authorization-code PKCE, metadata discovery,
+- [x] Implement same-account consent, authorization-code PKCE, metadata discovery,
   exact registered loopback callback matching (variable port), rotating refresh,
   revocation and authorized-client management in Web. Web cookies are not MCP
   bearer credentials. Recheck current roles and grant state on every request.
-- [ ] Wire the optional HTTP endpoint into the existing server. Default off;
+- [x] Wire the optional HTTP endpoint into the existing server. Default off;
   disabled Web authentication must not imply MCP Owner access. Validate request
   origins/host, token audience/resource and granted scope.
-- [ ] Add shared application-layer durable idempotency for management writes;
+- [x] Add shared application-layer durable idempotency for management writes;
   require `request_key` for every MCP mutation. Reuse lifecycle receipts. Replay
   returns the committed result; conflicting payloads fail, failed transactions
   leave no successful receipt, concurrent requests do not duplicate mutations.
-- [ ] Expose category/model, typed tag, asset, lifecycle event-type, record and
+- [x] Expose category/model, typed tag, asset, lifecycle event-type, record and
   append-only correction management; exact cost queries; existing 3D metadata,
   references, binding, appearance defaults and deletion. Add the supporting
   configuration/reference queries needed to select valid existing IDs.
-- [ ] Verify all input/output schemas, stable safe errors, pagination, permissions,
+- [x] Verify all input/output schemas, stable safe errors, pagination, permissions,
   exact integer money and fixed-point FX. Return only relevant public metadata,
   never credentials or physical storage paths.
 - [x] Extend the cumulative full-element scenario and run both supported stores,
@@ -59,6 +59,21 @@ Completion means the entire checklist is proved, not merely that the read adapte
 compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
+
+Contract audit: `internal/mcp/contract_test.go` checks all discovered input/output
+envelopes, every mutation's required string request key (nested for correction),
+and integer money/FX schema types. Real SDK HTTP error tests cover all mapped
+business error codes, retryability and absence of internal driver/path text.
+The MCP package passes. Together with the payload, exact-money, public-media,
+paging, role/scope and dual-Store scenarios recorded below, this closes the
+automated contract check; it does not close actual desktop acceptance.
+
+Remaining acceptance requires explicit approval to initialize the isolated 8081
+test account and authorize the local Codex client. No account or client grant has
+been created in that instance. After approval, verify actual desktop login,
+discovery, confirmed writes/retries/correction, Web visibility, consent presentation
+and revocation, then record the final evidence in this checklist. The setup/tool
+guide is available in `docs/MCP.md`; final desktop evidence remains outstanding.
 
 Dual-database verification is now executed, not deferred: commit `7328a92` passed
 [CI run 34229709652](https://github.com/SampsonFox/assetloop/actions/runs/34229709652).
