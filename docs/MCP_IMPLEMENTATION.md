@@ -132,3 +132,14 @@ a SQLite connection wait, then passed after the fix: category update/create and
 model creation see their own writes and roll back together. The PostgreSQL test
 is defined but skipped without its DSN. This fixes transaction composition; it
 does not yet provide the management request receipt or management MCP tools.
+
+Management receipt checkpoint: paired migration 00016 and sqlc adapters persist
+tenant/user/key fingerprints and original JSON results. `ManagementService`
+wraps existing category create/update and model-create use cases in the same
+transaction as the receipt. Tests cover replay identity, payload conflict,
+required keys, current-role checks and an injected receipt failure rolling back
+the business mutation. Three new MCP tools call these services; real HTTP tests
+cover category/model creation retries and category updates. There are now 22
+tools (17 reads, 5 writes). Existing schema-14 upgrade tests cross migrations
+15–16 while retaining account data. PostgreSQL runtime validation remains open,
+as do management concurrency coverage and the remaining write families.

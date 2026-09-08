@@ -92,4 +92,17 @@ func testLifecycleTools(t *testing.T, s Services, owner application.Principal, c
 	identity.Scopes = []string{ScopeLifecycle}
 	identity.Principal.Role = application.RoleViewer
 	call("record_event", input, true)
+	identity = Identity{Principal: owner, Scopes: []string{ScopeCatalog}}
+	categoryInput := CategoryInput{RequestKey: "tool-category", Name: "Tool category", IconKey: "camera"}
+	created := call("create_category", categoryInput, false)
+	if created.ID == "" || call("create_category", categoryInput, false).ID != created.ID {
+		t.Fatal("category tool replay failed")
+	}
+	categoryInput.RequestKey, categoryInput.Name = "tool-category-update", "Updated tool category"
+	call("update_category", UpdateCategoryInput{CategoryInput: categoryInput, ID: created.ID}, false)
+	modelInput := CreateModelInput{RequestKey: "tool-model", CategoryID: created.ID, Name: "Tool model"}
+	createdModel := call("create_product_model", modelInput, false)
+	if createdModel.ID == "" || call("create_product_model", modelInput, false).ID != createdModel.ID {
+		t.Fatal("model tool replay failed")
+	}
 }

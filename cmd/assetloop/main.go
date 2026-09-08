@@ -90,6 +90,7 @@ func run(args []string) error {
 			application.ModelMediaStore
 			application.SpecificationStore
 			application.OAuthStore
+			application.ManagementStore
 		}
 		if cfg.Database.Driver == "sqlite" {
 			appStore = sqlitestore.New(db)
@@ -144,7 +145,7 @@ func run(args []string) error {
 			}
 			mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
 			mux.Handle("/oauth/revoke", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Revoke)))
-			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia}, oauthHTTP.Authenticate)))
+			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: application.NewManagementService(appStore)}, oauthHTTP.Authenticate)))
 			handler = mux
 		}
 		return serve(cfg.HTTPAddr, handler)

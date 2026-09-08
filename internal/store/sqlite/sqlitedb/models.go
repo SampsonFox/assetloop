@@ -107,6 +107,14 @@ type LifecycleRequest struct {
 	EventID     string
 }
 
+type ManagementRequest struct {
+	TenantID    string
+	UserID      string
+	RequestKey  string
+	RequestHash string
+	ResultJson  string
+}
+
 type Model3dResource struct {
 	ID        string
 	TenantID  string

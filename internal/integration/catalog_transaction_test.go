@@ -79,6 +79,60 @@ func TestCatalogTransactionRollback(t *testing.T) {
 			if err != nil || len(models) != 0 {
 				t.Fatalf("model escaped transaction: %v / %v", models, err)
 			}
+			testManagementReplay(t, store.(application.ManagementStore), account.Principal)
 		})
+	}
+}
+
+type failedReceiptStore struct{ application.ManagementStore }
+
+func (s failedReceiptStore) WithManagementWrite(ctx context.Context, tenant string, fn func(application.ManagementStore) error) error {
+	return s.ManagementStore.WithManagementWrite(ctx, tenant, func(tx application.ManagementStore) error { return fn(failedReceiptStore{tx}) })
+}
+func (s failedReceiptStore) SaveManagementRequest(context.Context, application.ManagementRequest) error {
+	return errors.New("injected receipt failure")
+}
+
+func testManagementReplay(t *testing.T, store application.ManagementStore, actor application.Principal) {
+	t.Helper()
+	ctx := context.Background()
+	manager := application.NewManagementService(store)
+	cmd := application.CreateCategory{Name: "Idempotent", IconKey: "camera"}
+	first, err := manager.CreateCategory(ctx, actor, "category-key", cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := manager.CreateCategory(ctx, actor, "category-key", cmd)
+	if err != nil || first.ID != again.ID {
+		t.Fatalf("replay changed identity: %v", err)
+	}
+	cmd.Name = "Different"
+	if _, err := manager.CreateCategory(ctx, actor, "category-key", cmd); err == nil {
+		t.Fatal("conflicting payload accepted")
+	}
+	if _, err := manager.CreateCategory(ctx, actor, "", cmd); err == nil {
+		t.Fatal("empty key accepted")
+	}
+	before, err := store.ListCategories(ctx, actor.TenantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := application.NewManagementService(failedReceiptStore{store}).CreateCategory(ctx, actor, "rollback-key", cmd); err == nil {
+		t.Fatal("receipt failure ignored")
+	}
+	after, err := store.ListCategories(ctx, actor.TenantID)
+	if err != nil || len(after) != len(before) {
+		t.Fatal("business mutation survived receipt failure")
+	}
+	if _, found, err := store.FindManagementRequest(ctx, actor.TenantID, actor.UserID, "rollback-key"); err != nil || found {
+		t.Fatal("failed receipt persisted")
+	}
+	if _, err := manager.CreateCategory(ctx, actor, "rollback-key", cmd); err != nil {
+		t.Fatal("retry after rollback failed")
+	}
+	viewer := actor
+	viewer.Role = application.RoleViewer
+	if _, err := manager.CreateCategory(ctx, viewer, "category-key", application.CreateCategory{Name: "Idempotent", IconKey: "camera"}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatal("replay bypassed current permission")
 	}
 }

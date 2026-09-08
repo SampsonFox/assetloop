@@ -6,6 +6,7 @@ sql:
       - internal/store/sqlite/query.sql
       - internal/store/sqlite/specification.sql
       - internal/store/sqlite/oauth.sql
+      - internal/store/sqlite/management.sql
     gen:
       go:
         package: sqlitedb
@@ -17,6 +18,7 @@ sql:
       - internal/store/postgres/query.sql
       - internal/store/postgres/specification.sql
       - internal/store/postgres/oauth.sql
+      - internal/store/postgres/management.sql
     gen:
       go:
         package: postgresdb

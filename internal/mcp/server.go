@@ -28,6 +28,7 @@ type Services struct {
 	Specifications *application.SpecificationService
 	Lifecycle      *application.LifecycleService
 	Media          *application.ModelMediaService
+	Management     *application.ManagementService
 }
 
 type identityKey struct{}
@@ -47,6 +48,7 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	server := sdk.NewServer(&sdk.Implementation{Name: "assetloop", Version: "0.1.0"}, nil)
 	registerQueries(server, services)
 	registerLifecycle(server, services)
+	registerCatalog(server, services)
 	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, &sdk.StreamableHTTPOptions{Stateless: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

@@ -128,6 +128,14 @@ transaction advisory lock). Replay-triggered grant revocation commits before an
 invalid-grant response. Token reads resolve current membership rather than a
 persisted role snapshot. No OAuth endpoint is enabled by adding these tables.
 
+Management command replay uses application-owned `ManagementService`, existing
+catalog services and tenant-locked Store transactions. Migration 00016 stores a
+tenant/user/request-key receipt containing the command fingerprint and original
+JSON result; saving the receipt and business mutation is atomic. Replays check
+current capability before returning the saved result, and different commands
+cannot reuse the key. This is independent of lifecycle event receipts and is
+not a generic SQL or transport-owned mutation API.
+
 ### 4.4 Infrastructure adapters
 
 - Stores translate application operations to SQLite or PostgreSQL.

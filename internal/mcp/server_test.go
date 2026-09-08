@@ -37,7 +37,7 @@ func TestHTTPQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := credential.Principal
-	services := Services{Catalog: application.NewCatalogService(store), Specifications: application.NewSpecificationService(store), Lifecycle: application.NewLifecycleService(store)}
+	services := Services{Catalog: application.NewCatalogService(store), Specifications: application.NewSpecificationService(store), Lifecycle: application.NewLifecycleService(store), Management: application.NewManagementService(store)}
 	category, err := services.Catalog.CreateCategory(ctx, owner, application.CreateCategory{Name: "Private camera", IconKey: "camera"})
 	if err != nil {
 		t.Fatal(err)
@@ -67,11 +67,11 @@ func TestHTTPQueries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(list.Tools) != 19 {
-				t.Fatalf("tools = %d, want 19", len(list.Tools))
+			if len(list.Tools) != 22 {
+				t.Fatalf("tools = %d, want 22", len(list.Tools))
 			}
 			for _, tool := range list.Tools {
-				if tool.Name != "record_event" && tool.Name != "correct_event" && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint) {
+				if tool.Name != "record_event" && tool.Name != "correct_event" && tool.Name != "create_category" && tool.Name != "update_category" && tool.Name != "create_product_model" && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint) {
 					t.Errorf("%s is not annotated read-only", tool.Name)
 				}
 				schema, _ := json.Marshal(tool.InputSchema)
