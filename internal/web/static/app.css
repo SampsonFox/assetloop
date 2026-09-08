@@ -665,3 +665,5 @@ dialog .asset-editor-fields { grid-template-columns:repeat(auto-fit,minmax(min(1
  .tag-transfer[data-side="0"] [data-column="1"], .tag-transfer[data-side="1"] [data-column="0"] { display:none; }
  .transfer-list { height:180px; }
 }
+
+.market-reference{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-block:16px;font-variant-numeric:tabular-nums}.market-reference img{flex:none}.market-reference time{font-size:.85rem;color:var(--muted)}.market-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.market-actions form{margin:0}.market-preview{border-block:1px solid var(--line);padding-block:12px}

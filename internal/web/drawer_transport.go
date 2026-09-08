@@ -17,7 +17,7 @@ func drawerTransport(next http.Handler) http.Handler {
 		w.Header().Add("Vary", "X-Assetloop-Drawer")
 		if target != "" {
 			switch target {
-			case "tag-editor", "model-drawer", "category-drawer", "resource-editor", "resource-upload", "event-type-manage", "asset-editor", "asset-detail", "binding-editor", "appearance-editor":
+			case "tag-editor", "model-drawer", "category-drawer", "resource-editor", "resource-upload", "event-type-manage", "asset-editor", "asset-detail", "binding-editor", "appearance-editor", "market-editor":
 			default:
 				http.Error(w, "Unknown drawer", http.StatusBadRequest)
 				return
