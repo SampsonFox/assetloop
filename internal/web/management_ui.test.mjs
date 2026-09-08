@@ -5,7 +5,7 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 test('drawer actions have breathing room and the shell requests the updated stylesheet', () => {
   assert.match(read('./static/app.css'), /\.drawer-heading-actions \{[^}]*gap:12px/);
-  assert.match(read('./templates/base.html'), /app\.css\?v=asset-resource-choice-1/);
+  assert.match(read('./templates/base.html'), /app\.css\?v=cost-sparse-1/);
 });
 
 test('appearance reset has separation from transfer panels', () => {

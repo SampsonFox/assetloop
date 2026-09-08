@@ -5,12 +5,14 @@ import "github.com/SampsonFox/assetloop/internal/application"
 func init() {
 	for locale, values := range map[application.Locale]map[string]string{
 		application.LocaleZhCN: {
+			"cost.after_event": "此次后净成本",
 			"timeline.loading": "正在更新…", "timeline.updated": "记录已更新", "timeline.failed": "未能更新，原结果已保留。", "timeline.session": "登录已失效，请重新登录。", "timeline.retry": "重试", "timeline.login": "重新登录", "timeline.no_matches": "没有符合条件的记录",
 			"cost.title": "持有成本", "cost.daily": "日均持有成本", "cost.per_day": "/ 天", "cost.net": "净成本", "cost.days": "持有天数", "cost.day_unit": "天",
 			"cost.holding": "截至今日 · 未扣除二手残值", "cost.sold": "已卖出 · 天数截止卖出日", "cost.unknown": "缺少有效日期，暂无法计算日均", "cost.gain": "回收超过支出",
 			"cost.trend": "累计净成本", "cost.trend_help": "支出增加成本，收入降低成本；此图不是二手估值。", "cost.data": "查看明细数据", "cost.breakdown": "支出构成", "cost.share": "占比", "cost.empty": "还没有金额记录", "cost.details": "记录详情",
 		},
 		application.LocaleEn: {
+			"cost.after_event": "Net cost after event",
 			"timeline.loading": "Updating…", "timeline.updated": "Events updated", "timeline.failed": "Could not update. Previous results are retained.", "timeline.session": "Your session expired. Please sign in again.", "timeline.retry": "Retry", "timeline.login": "Sign in", "timeline.no_matches": "No matching events",
 			"cost.title": "Ownership cost", "cost.daily": "Daily ownership cost", "cost.per_day": "/ day", "cost.net": "Net cost", "cost.days": "Days owned", "cost.day_unit": "days",
 			"cost.holding": "To date · resale value not deducted", "cost.sold": "Sold · days stop at sale", "cost.unknown": "Valid dates needed to calculate daily cost", "cost.gain": "Recovery exceeds expenses",
