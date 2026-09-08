@@ -97,5 +97,8 @@ Configuration parsing is now covered by `internal/config/mcp_test.go`:
 `MCP_ISSUER` origin (HTTPS or HTTP loopback IP), a nonempty `MCP_CLIENT_ID` and a
 valid `MCP_REDIRECT_URI`. Default client is `codex-local` with loopback `/callback`.
 No live environment has been changed. The fields are parsed but not yet wired
-into server startup, pending the consent UI. Login currently returns to `/`;
-consent integration must preserve a validated local return target across login.
+into server startup, pending the consent UI. Login now preserves a validated
+local `return_to` through failed attempts, successful login and existing sessions.
+`internal/web/login_return_test.go` first reproduced the lost continuation and
+now covers it plus external/encoded redirect rejection. The hidden field does not
+change the existing login page's visual layout. Consent integration remains open.

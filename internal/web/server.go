@@ -64,6 +64,7 @@ type pageData struct {
 	Accent                 application.Accent
 	Strings                map[string]string
 	ReturnTo               string
+	LoginReturnTo          string
 	CSRFToken              string
 	Error                  string
 	Principal              *application.Principal
@@ -1366,6 +1367,11 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
+	returnTo, valid := safeReturnTo(r.URL.Query().Get("return_to"), "/")
+	if !valid {
+		http.Error(w, "Invalid return target", http.StatusBadRequest)
+		return
+	}
 	needsSetup, err := s.auth.NeedsSetup(r.Context())
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
@@ -1376,15 +1382,20 @@ func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.principal(r); err == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, returnTo, http.StatusSeeOther)
 		return
 	}
 	locale := s.localeForRequest(r, nil)
-	s.render(w, http.StatusOK, "login", pageData{Title: textFor(locale, "title.login"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: r.URL.RequestURI()})
+	s.render(w, http.StatusOK, "login", pageData{Title: textFor(locale, "title.login"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: r.URL.RequestURI(), LoginReturnTo: returnTo})
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if !s.verifyCSRF(w, r) {
+		return
+	}
+	returnTo, valid := safeReturnTo(r.PostForm.Get("return_to"), "/")
+	if !valid {
+		http.Error(w, "Invalid return target", http.StatusBadRequest)
 		return
 	}
 	key := clientIP(r)
@@ -1395,13 +1406,13 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	credential, err := s.auth.Login(r.Context(), application.Login{Username: r.FormValue("username"), Password: r.FormValue("password")})
 	if err != nil {
 		locale := s.localeForRequest(r, nil)
-		s.render(w, http.StatusUnauthorized, "login", pageData{Title: textFor(locale, "title.login"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: "/login", Error: textFor(locale, "error.login")})
+		s.render(w, http.StatusUnauthorized, "login", pageData{Title: textFor(locale, "title.login"), Locale: locale, CSRFToken: s.ensureCSRF(w, r), ReturnTo: "/login?return_to=" + url.QueryEscape(returnTo), LoginReturnTo: returnTo, Error: textFor(locale, "error.login")})
 		return
 	}
 	s.limiter.Reset(key)
 	s.setSessionCookie(w, credential)
 	s.setLocaleCookie(w, credential.Principal.Locale)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, returnTo, http.StatusSeeOther)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
@@ -1709,6 +1720,9 @@ func safeReturnTo(value, fallback string) (string, bool) {
 	}
 	u, err := url.Parse(value)
 	if err != nil || u.IsAbs() || u.Host != "" || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(value, "//") {
+		return fallback, false
+	}
+	if strings.HasPrefix(u.Path, "//") || strings.ContainsAny(u.Path, "\\\r\n") || strings.ContainsAny(value, "\\\r\n") {
 		return fallback, false
 	}
 	return u.RequestURI(), true
