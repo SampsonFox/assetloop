@@ -124,3 +124,11 @@ than accepting fields the use case would ignore. Real SDK HTTP tests prove
 replay identity, payload conflict, append-only three-row correction history and
 scope/role denial. `go test ./internal/mcp -count=1` passes. Catalog/asset/tag/type
 and 3D mutations plus shared management idempotency are still unimplemented.
+
+Management idempotency prerequisite: catalog create/update/read queries previously
+opened the database handle even when called on a transaction-scoped Store. Both
+adapters now use `queries()`. `TestCatalogTransactionRollback` first failed with
+a SQLite connection wait, then passed after the fix: category update/create and
+model creation see their own writes and roll back together. The PostgreSQL test
+is defined but skipped without its DSN. This fixes transaction composition; it
+does not yet provide the management request receipt or management MCP tools.

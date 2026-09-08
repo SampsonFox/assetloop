@@ -13,18 +13,18 @@ import (
 )
 
 func (s *Store) CreateCategory(ctx context.Context, category domain.ItemCategory) error {
-	return sqlitedb.New(s.db).CreateCategory(ctx, sqlitedb.CreateCategoryParams{
+	return s.queries().CreateCategory(ctx, sqlitedb.CreateCategoryParams{
 		ID: category.ID, TenantID: category.TenantID, Name: category.Name, IconKey: category.IconKey, CreatedAt: sqliteTime(category.CreatedAt),
 	})
 }
 
 func (s *Store) UpdateCategory(ctx context.Context, category domain.ItemCategory) error {
-	count, err := sqlitedb.New(s.db).UpdateCategory(ctx, sqlitedb.UpdateCategoryParams{Name: category.Name, IconKey: category.IconKey, TenantID: category.TenantID, ID: category.ID})
+	count, err := s.queries().UpdateCategory(ctx, sqlitedb.UpdateCategoryParams{Name: category.Name, IconKey: category.IconKey, TenantID: category.TenantID, ID: category.ID})
 	return updatedRow(count, err)
 }
 
 func (s *Store) CreateModel(ctx context.Context, model domain.ProductModel) error {
-	return sqlitedb.New(s.db).CreateModel(ctx, sqlitedb.CreateModelParams{
+	return s.queries().CreateModel(ctx, sqlitedb.CreateModelParams{
 		ID: model.ID, TenantID: model.TenantID, CategoryID: model.CategoryID, Name: model.Name, CreatedAt: sqliteTime(model.CreatedAt),
 	})
 }
@@ -35,7 +35,7 @@ func (s *Store) UpdateModel(ctx context.Context, model domain.ProductModel) erro
 }
 
 func (s *Store) ListCategories(ctx context.Context, tenantID string) ([]domain.ItemCategory, error) {
-	rows, err := sqlitedb.New(s.db).ListCategories(ctx, tenantID)
+	rows, err := s.queries().ListCategories(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (s *Store) ListCategories(ctx context.Context, tenantID string) ([]domain.I
 }
 
 func (s *Store) ListModels(ctx context.Context, tenantID string) ([]domain.ProductModel, error) {
-	rows, err := sqlitedb.New(s.db).ListModels(ctx, tenantID)
+	rows, err := s.queries().ListModels(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func nullString(value string) sql.NullString {
 }
 
 func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset, error) {
-	rows, err := sqlitedb.New(s.db).ListAssets(ctx, tenantID)
+	rows, err := s.queries().ListAssets(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset
 }
 
 func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts application.AssetListOptions) (application.AssetListResult, error) {
-	queries := sqlitedb.New(s.db)
+	queries := s.queries()
 	filter := sqlitedb.CountAssetsWithSummaryParams{TenantID: tenantID, SearchQuery: opts.Query, StatusFilter: opts.Status}
 	total, err := queries.CountAssetsWithSummary(ctx, filter)
 	if err != nil || total == 0 {
@@ -175,7 +175,7 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 }
 
 func (s *Store) ListModelsPage(ctx context.Context, tenantID string, opts application.ModelListOptions) (application.ModelListResult, error) {
-	rows, err := sqlitedb.New(s.db).ListModelsPage(ctx, sqlitedb.ListModelsPageParams{
+	rows, err := s.queries().ListModelsPage(ctx, sqlitedb.ListModelsPageParams{
 		TenantID: tenantID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID, TagFilter: opts.TagID,
 		SortKey: opts.Sort, SortDirection: opts.Direction,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),

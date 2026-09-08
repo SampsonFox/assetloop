@@ -16,7 +16,7 @@ func (s *Store) CreateCategory(ctx context.Context, category domain.ItemCategory
 	if err != nil {
 		return err
 	}
-	return postgresdb.New(s.db).CreateCategory(ctx, postgresdb.CreateCategoryParams{
+	return s.queries().CreateCategory(ctx, postgresdb.CreateCategoryParams{
 		ID: id, TenantID: tenantID, Name: category.Name, IconKey: category.IconKey, CreatedAt: category.CreatedAt,
 	})
 }
@@ -26,7 +26,7 @@ func (s *Store) UpdateCategory(ctx context.Context, category domain.ItemCategory
 	if err != nil {
 		return err
 	}
-	count, err := postgresdb.New(s.db).UpdateCategory(ctx, postgresdb.UpdateCategoryParams{Name: category.Name, IconKey: category.IconKey, TenantID: tenantID, ID: id})
+	count, err := s.queries().UpdateCategory(ctx, postgresdb.UpdateCategoryParams{Name: category.Name, IconKey: category.IconKey, TenantID: tenantID, ID: id})
 	return updatedRow(count, err)
 }
 
@@ -39,7 +39,7 @@ func (s *Store) CreateModel(ctx context.Context, model domain.ProductModel) erro
 	if err != nil {
 		return fmt.Errorf("parse category ID: %w", err)
 	}
-	return postgresdb.New(s.db).CreateModel(ctx, postgresdb.CreateModelParams{
+	return s.queries().CreateModel(ctx, postgresdb.CreateModelParams{
 		ID: id, TenantID: tenantID, CategoryID: categoryID, Name: model.Name, CreatedAt: model.CreatedAt,
 	})
 }
@@ -62,7 +62,7 @@ func (s *Store) ListCategories(ctx context.Context, tenantID string) ([]domain.I
 	if err != nil {
 		return nil, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	rows, err := postgresdb.New(s.db).ListCategories(ctx, tenantUUID)
+	rows, err := s.queries().ListCategories(ctx, tenantUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (s *Store) ListModels(ctx context.Context, tenantID string) ([]domain.Produ
 	if err != nil {
 		return nil, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	rows, err := postgresdb.New(s.db).ListModels(ctx, tenantUUID)
+	rows, err := s.queries().ListModels(ctx, tenantUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (s *Store) ListAssets(ctx context.Context, tenantID string) ([]domain.Asset
 	if err != nil {
 		return nil, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	rows, err := postgresdb.New(s.db).ListAssets(ctx, tenantUUID)
+	rows, err := s.queries().ListAssets(ctx, tenantUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 	if err != nil {
 		return application.AssetListResult{}, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	queries := postgresdb.New(s.db)
+	queries := s.queries()
 	filter := postgresdb.CountAssetsWithSummaryParams{TenantID: tenantUUID, SearchQuery: opts.Query, StatusFilter: opts.Status}
 	total, err := queries.CountAssetsWithSummary(ctx, filter)
 	if err != nil || total == 0 {
@@ -191,7 +191,7 @@ func (s *Store) ListModelsPage(ctx context.Context, tenantID string, opts applic
 	if err != nil {
 		return application.ModelListResult{}, fmt.Errorf("parse tenant ID: %w", err)
 	}
-	rows, err := postgresdb.New(s.db).ListModelsPage(ctx, postgresdb.ListModelsPageParams{
+	rows, err := s.queries().ListModelsPage(ctx, postgresdb.ListModelsPageParams{
 		TenantID: tenantUUID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID, TagFilter: opts.TagID,
 		SortKey: opts.Sort, SortDirection: opts.Direction,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
