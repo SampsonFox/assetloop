@@ -125,4 +125,16 @@ func testLifecycleTools(t *testing.T, s Services, owner application.Principal, c
 	assetInput.RequestKey = "http-asset-update"
 	assetInput.DisplayName = "Updated through MCP"
 	call("save_asset", assetInput, false)
+	identity.Scopes = []string{ScopeLifecycle}
+	typeInput := CreateEventTypeInput{RequestKey: "http-event-type", Name: "Cleaning", Cashflow: "expense"}
+	custom := call("create_event_type", typeInput, false)
+	if custom.ID == "" || call("create_event_type", typeInput, false).ID != custom.ID {
+		t.Fatal("event type replay failed")
+	}
+	call("update_event_type", UpdateEventTypeInput{ID: custom.ID, CreateEventTypeInput: CreateEventTypeInput{RequestKey: "http-type-rename", Name: "Cleaning fee", Cashflow: "expense"}}, false)
+	call("record_event", EventInput{AssetID: asset.ID, TypeID: custom.ID, EventFields: EventFields{RequestKey: "http-custom-expense", AmountMinor: 500, Currency: "CNY", OccurredAt: "2026-01-02T12:00:00Z"}}, false)
+	call("update_event_type", UpdateEventTypeInput{ID: custom.ID, CreateEventTypeInput: CreateEventTypeInput{RequestKey: "http-type-direction", Name: "Cleaning fee", Cashflow: "income"}}, true)
+	call("set_event_type_enabled", EnableEventTypeInput{RequestKey: "http-type-disable", ID: custom.ID, Enabled: false}, false)
+	call("set_event_type_enabled", EnableEventTypeInput{RequestKey: "http-type-disable", ID: custom.ID, Enabled: false}, false)
+	call("set_event_type_enabled", EnableEventTypeInput{RequestKey: "http-builtin-disable", ID: purchase, Enabled: false}, true)
 }

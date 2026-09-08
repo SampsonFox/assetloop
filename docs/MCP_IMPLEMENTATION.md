@@ -156,3 +156,11 @@ tenant inside the outer transaction. `go test ./internal/mcp ./internal/integrat
 3D tool happy-path coverage, supporting configuration/reference queries, event-type
 mutations, resource binding/deletion, concurrency and final client acceptance are
 still pending; tool registration alone does not complete those acceptance items.
+
+Event-type management checkpoint: three semantic tools create, update and enable
+custom event types through existing lifecycle use cases and shared management
+receipts. Nested lifecycle writes reuse only the locked management tenant.
+HTTP tests prove replay, rename, cashflow-direction locking after use and built-in
+type protection. Receipt-failure injection proves event-type creation rolls back.
+Discovery now exposes 32 tools. Resource binding/deletion, configuration reads,
+3D happy-path coverage, concurrency, PostgreSQL and Codex acceptance remain open.

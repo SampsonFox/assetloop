@@ -11,6 +11,12 @@ import (
 )
 
 func (s *Store) WithLifecycleWrite(ctx context.Context, tenantID string, fn func(application.LifecycleStore) (domain.AssetEvent, error)) (domain.AssetEvent, error) {
+	if s.tx != nil && s.managementTenant != "" {
+		if tenantID != s.managementTenant {
+			return domain.AssetEvent{}, application.ErrForbidden
+		}
+		return fn(s)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.AssetEvent{}, err

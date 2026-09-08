@@ -130,6 +130,18 @@ func testManagementReplay(t *testing.T, store application.ManagementStore, actor
 	if _, err := manager.CreateCategory(ctx, actor, "rollback-key", cmd); err != nil {
 		t.Fatal("retry after rollback failed")
 	}
+	if _, err := application.NewManagementService(failedReceiptStore{store}).CreateEventType(ctx, actor, "type-rollback", application.CreateAssetEventType{Name: "Rolled back type", Cashflow: "expense"}); err == nil {
+		t.Fatal("event-type receipt failure ignored")
+	}
+	types, err := store.ListAssetEventTypes(ctx, actor.TenantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range types {
+		if kind.Name == "Rolled back type" {
+			t.Fatal("nested event type survived failed receipt")
+		}
+	}
 	viewer := actor
 	testSpecificationReplay(t, manager, store, actor, first.ID)
 	viewer.Role = application.RoleViewer

@@ -14,6 +14,7 @@ type ManagementRequest struct{ TenantID, UserID, Key, Hash, ResultJSON string }
 type ManagementStore interface {
 	CatalogStore
 	SpecificationStore
+	LifecycleStore
 	WithManagementWrite(context.Context, string, func(ManagementStore) error) error
 	FindManagementRequest(context.Context, string, string, string) (ManagementRequest, bool, error)
 	SaveManagementRequest(context.Context, ManagementRequest) error
@@ -25,6 +26,30 @@ type ManagementService struct{ store ManagementStore }
 
 func NewManagementService(store ManagementStore) *ManagementService {
 	return &ManagementService{store: store}
+}
+
+func (s *ManagementService) CreateEventType(ctx context.Context, actor Principal, key string, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {
+	return managementWrite(ctx, s, actor, key, "create_event_type", CapabilityManageLifecycle, cmd, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
+		return NewLifecycleService(store).CreateEventType(ctx, actor, cmd)
+	})
+}
+func (s *ManagementService) UpdateEventType(ctx context.Context, actor Principal, key, id string, cmd UpdateEventType) (domain.AssetEventTypeDefinition, error) {
+	payload := struct {
+		ID      string
+		Command UpdateEventType
+	}{id, cmd}
+	return managementWrite(ctx, s, actor, key, "update_event_type", CapabilityManageLifecycle, payload, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
+		return NewLifecycleService(store).UpdateEventType(ctx, actor, id, cmd)
+	})
+}
+func (s *ManagementService) SetEventTypeEnabled(ctx context.Context, actor Principal, key, id string, enabled bool) (domain.AssetEventTypeDefinition, error) {
+	payload := struct {
+		ID      string
+		Enabled bool
+	}{id, enabled}
+	return managementWrite(ctx, s, actor, key, "set_event_type_enabled", CapabilityManageLifecycle, payload, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
+		return NewLifecycleService(store).SetEventTypeEnabled(ctx, actor, id, enabled)
+	})
 }
 
 func (s *ManagementService) SaveModel(ctx context.Context, actor Principal, key string, cmd SaveModelSpecification) error {
