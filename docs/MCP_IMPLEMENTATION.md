@@ -68,12 +68,31 @@ The MCP package passes. Together with the payload, exact-money, public-media,
 paging, role/scope and dual-Store scenarios recorded below, this closes the
 automated contract check; it does not close actual desktop acceptance.
 
-Remaining acceptance requires explicit approval to initialize the isolated 8081
-test account and authorize the local Codex client. No account or client grant has
-been created in that instance. After approval, verify actual desktop login,
-discovery, confirmed writes/retries/correction, Web visibility, consent presentation
-and revocation, then record the final evidence in this checklist. The setup/tool
-guide is available in `docs/MCP.md`; final desktop evidence remains outstanding.
+Direct tool walkthrough: the full-element OAuth HTTP connection now successfully
+calls all 39 discovered tools, not just tools/list. Every mutation is replayed
+with its original request key; returned identities/results remain unchanged.
+Catalog, typed configuration, assets, custom event types, appearance rules,
+resource metadata, binding, reference reads and deletion are checked against
+their persisted results. Foreign purchase/correction retains the original
+economic evidence and exact cost; authenticated Web visibility and revocation
+remain part of the scenario. An uncalled discovered tool fails the scenario.
+SQLite passed locally; the new PostgreSQL run is pending CI. Temporary databases,
+blob directories and HTTP servers are cleaned up by the test harness. GLB upload
+is a fixture because MCP intentionally has no upload tool. This is direct SDK
+HTTP tool acceptance, not proof of the Codex desktop browser login.
+
+User-approved 8081 browser acceptance found repeated identical resource indicators
+from Codex and native submitter values being lost when the submit button became
+disabled. Regression tests first failed, then passed after narrowly fixing both.
+Consent CSP now permits only the validated callback origin/port, not arbitrary
+loopback ports; invalid callbacks and unrelated pages retain strict boundaries.
+The consent page was visually inspected, but browser submission still reported
+ERR_BLOCKED_BY_CLIENT and no client grant was created. Desktop login remains
+unverified; do not infer the remaining browser failure's cause from the code fixes.
+The temporary account/database, binary, logs, generated protocol helper and
+assetloop-acceptance client configuration were removed; CLI logout confirmed no
+stored OAuth credentials. The 8081 process was stopped. 8080 was not modified.
+The setup/tool guide is available in `docs/MCP.md`.
 
 Dual-database verification is now executed, not deferred: commit `7328a92` passed
 [CI run 34229709652](https://github.com/SampsonFox/assetloop/actions/runs/34229709652).
@@ -85,10 +104,11 @@ generated-tree cleanliness and vet passed. `secret-scan` passed. No packaging,
 UAT pull request, promotion or production release was invoked. Historical notes
 below describe earlier checkpoints and their then-unavailable PostgreSQL checks.
 
-Local desktop acceptance preparation: an isolated opt-in server is running on
+Historical desktop acceptance preparation: an isolated opt-in server ran on
 `127.0.0.1:8081`, with its own `data/mcp-acceptance` database/blob directory. The
-existing 8080 instance was not changed. Discovery metadata is reachable and
-advertises issuer-bound OAuth callbacks. Actual desktop consent/tool acceptance
+existing 8080 instance was not changed. Discovery metadata was reachable and
+advertised issuer-bound OAuth callbacks. That isolated runtime has been removed.
+Actual desktop consent/tool acceptance
 is still open; automated HTTP SDK success is not desktop success.
 
 The named `TestFullElementScenario` now includes `MCP OAuth lifecycle` on each

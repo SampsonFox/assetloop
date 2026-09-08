@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,35 @@ import (
 	basestore "github.com/SampsonFox/assetloop/internal/store"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
 )
+
+func TestOAuthRepeatedResource(t *testing.T) {
+	s := &Server{options: Options{OAuthIssuer: "http://127.0.0.1:8081"}}
+	for _, tc := range []struct {
+		name, query string
+		want        bool
+	}{
+		{"same resource", "resource=a&resource=a", true},
+		{"different resources", "resource=a&resource=b", false},
+		{"same client", "client_id=a&client_id=a", false},
+		{"same state", "state=a&state=a", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, method := range []string{"GET", "POST"} {
+				target, body := "http://127.0.0.1:8081/oauth/authorize", ""
+				if method == "GET" {
+					target += "?" + tc.query
+				} else {
+					body = tc.query
+				}
+				r := httptest.NewRequest(method, target, strings.NewReader(body))
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				if got := s.oauthRequest(httptest.NewRecorder(), r); got != tc.want {
+					t.Fatalf("%s accepted=%v, want %v", method, got, tc.want)
+				}
+			}
+		})
+	}
+}
 
 func TestOAuthConsentAndRevocation(t *testing.T) {
 	ctx := context.Background()
@@ -57,6 +87,19 @@ func TestOAuthConsentAndRevocation(t *testing.T) {
 		t.Fatalf("consent: %d %s", page.Code, page.Body.String())
 	}
 	csrf := responseCookie(t, page, csrfCookie)
+	if !strings.Contains(page.Header().Get("Content-Security-Policy"), "form-action 'self' http://127.0.0.1:49152;") {
+		t.Fatal("consent CSP blocks the registered loopback callback")
+	}
+	badForm, _ := url.ParseQuery(form.Encode())
+	badForm.Set("redirect_uri", "https://unregistered.example/callback")
+	bad := request(t, h, "GET", issuer+"/oauth/authorize?"+badForm.Encode(), nil, []*http.Cookie{cookie})
+	if bad.Code != 400 || strings.Contains(bad.Header().Get("Content-Security-Policy"), "unregistered.example") {
+		t.Fatal("unvalidated callback entered CSP")
+	}
+	ordinary := request(t, h, "GET", issuer+"/account/clients", nil, []*http.Cookie{cookie})
+	if strings.Contains(ordinary.Header().Get("Content-Security-Policy"), "49152") {
+		t.Fatal("callback allowance leaked to ordinary pages")
+	}
 	form.Set("decision", "allow")
 	denied := request(t, h, "POST", issuer+"/oauth/authorize", form, []*http.Cookie{cookie})
 	if denied.Code != 403 {

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/SampsonFox/assetloop/internal/application"
+	"github.com/SampsonFox/assetloop/internal/blob"
+	localblob "github.com/SampsonFox/assetloop/internal/blob/local"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	transport "github.com/SampsonFox/assetloop/internal/mcp"
 	webtransport "github.com/SampsonFox/assetloop/internal/web"
@@ -31,7 +33,7 @@ func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session application.SessionCredential, modelID string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	host := httptest.NewUnstartedServer(nil)
 	issuer := "http://" + host.Listener.Addr().String()
@@ -45,6 +47,18 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 		t.Fatal(err)
 	}
 	auth, catalog, lifecycle, specs := application.NewAuthService(store), application.NewCatalogService(store), application.NewLifecycleService(store), application.NewSpecificationService(store)
+	local, err := localblob.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	blobs := blob.Registry{"local": local}
+	media := application.NewModelMediaService(store, blobs, blob.ObjectKeyMapper{}, "local")
+	// Upload is intentionally a fixture: MCP has no upload tool. All supported
+	// catalog, configuration, binding and deletion operations below go over HTTP.
+	resource, err := media.Upload(ctx, session.Principal, application.UploadModel3DResource{Name: "MCP walkthrough GLB", File: fullElementGLB()})
+	if err != nil {
+		t.Fatal(err)
+	}
 	web, err := webtransport.New(auth, catalog, lifecycle, db, webtransport.Options{AuthMode: "local", Specifications: specs, OAuth: oauth, OAuthIssuer: issuer})
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +66,7 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	mux := http.NewServeMux()
 	mux.Handle("/", web.Handler())
 	mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
-	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Management: application.NewManagementService(store.(application.ManagementStore), nil)}, oauthHTTP.Authenticate)))
+	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Media: media, Management: application.NewManagementService(store.(application.ManagementStore), blobs)}, oauthHTTP.Authenticate)))
 	host.Config.Handler = mux
 	host.Start()
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -118,6 +132,7 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	if err != nil || len(list.Tools) != 39 {
 		t.Fatal("OAuth MCP discovery failed")
 	}
+	called := map[string]bool{}
 	call := func(name string, input, output any) {
 		t.Helper()
 		result, err := mcpClient.CallTool(ctx, &sdk.CallToolParams{Name: name, Arguments: input})
@@ -128,6 +143,8 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 		if err != nil || json.Unmarshal(data, output) != nil {
 			t.Fatalf("MCP %s result invalid", name)
 		}
+		called[name] = true
+		t.Logf("HTTP tools/call PASS %s", name)
 	}
 	var asset struct{ Data domain.Asset }
 	assetInput := transport.SaveAssetInput{RequestKey: "full-mcp-asset", ModelID: modelID, DisplayName: "MCP confirmed full element", TagIDs: []string{}}
@@ -183,6 +200,13 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	if page.StatusCode != 200 || !strings.Contains(string(body), assetInput.DisplayName) {
 		t.Fatal("MCP asset not visible through authenticated Web")
 	}
+	runMCPToolWalkthrough(t, call, resource.ID, assetID, originalID)
+	for _, tool := range list.Tools {
+		if !called[tool.Name] {
+			t.Errorf("discovered tool was not successfully called: %s", tool.Name)
+		}
+	}
+	t.Logf("HTTP walkthrough successfully called %d/%d discovered tools", len(called), len(list.Tools))
 	grants, err := oauth.Grants(ctx, session.Principal)
 	if err != nil || len(grants) != 1 {
 		t.Fatal("client grant missing")

@@ -386,7 +386,9 @@
     form.dataset.submitting = "true";
     form.dataset.dirty = "false";
     if (event.submitter) {
-      event.submitter.disabled = true;
+      // Keep the submitter successful so native POST includes its name/value.
+      // The form-level guard above already rejects repeated submissions.
+      event.submitter.setAttribute("aria-disabled", "true");
       event.submitter.setAttribute("aria-busy", "true");
     }
   });

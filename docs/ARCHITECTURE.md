@@ -114,7 +114,12 @@ calls application services directly, not the application's own Web endpoints.
 It is opt-in and requires independently revocable OAuth client authorization
 against the existing account. Current role capabilities intersect granted read,
 catalog and lifecycle scopes; Web sessions and disabled-auth local principals
-are not MCP credentials. Authorization-code PKCE, discovery and rotating tokens
+are not MCP credentials. Authorization-code PKCE uses a consent-page-only CSP
+allowance for the validated registered callback origin
+(including its exact loopback port); all other pages retain same-origin forms.
+No unvalidated redirect may enter this allowance. Repeated identical resource
+indicators retain the same single audience; distinct resources are rejected.
+PKCE, discovery and rotating tokens
 are required before mounting the endpoint. Management idempotency belongs in
 application transactions, alongside the existing lifecycle receipts. Detailed
 scope, implementation status and acceptance evidence live in

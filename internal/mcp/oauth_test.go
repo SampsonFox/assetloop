@@ -51,6 +51,7 @@ func TestOAuthHTTPExchangeAndRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {"test"}, "resource": {cmd.Resource}, "redirect_uri": {cmd.RedirectURI}, "code_verifier": {verifier}, "code": {code}}
+	form.Add("resource", cmd.Resource) // Codex can repeat the discovered resource indicator.
 	post := func(path string, form url.Values, handler http.HandlerFunc) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", issuer+path, strings.NewReader(form.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -114,6 +115,8 @@ func TestOAuthFormBoundary(t *testing.T) {
 		{"query", "POST", "?code=secret", "client_id=test", "application/x-www-form-urlencoded"},
 		{"JSON", "POST", "", `{}`, "application/json"},
 		{"duplicate", "POST", "", "client_id=a&client_id=b", "application/x-www-form-urlencoded"},
+		{"same client", "POST", "", "client_id=a&client_id=a", "application/x-www-form-urlencoded"},
+		{"different resources", "POST", "", "resource=a&resource=b", "application/x-www-form-urlencoded"},
 		{"large", "POST", "", strings.Repeat("x", 17<<10), "application/x-www-form-urlencoded"},
 		{"secret", "POST", "", "client_secret=not-supported", "application/x-www-form-urlencoded"},
 	} {

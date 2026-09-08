@@ -106,6 +106,7 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 | `internal/web/viewer_mechanics.test.mjs` | Dependency-free Node test harness for viewer framing, keyboard controls, reduced motion, idle rendering and failure fallback |
 | `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → typed model allowances → direct items with different capacity tags sharing an appearance GLB → dedicated override/inheritance → foreign purchase → repair correction → sale scenario on both databases |
 | `internal/integration/mcp_full_element_test.go` | Extends the same full-element scenario with HTTP Web consent/PKCE exchange, authenticated SDK discovery/write/retry/correction, Web visibility and client revocation without ending the Web session |
+| `internal/integration/mcp_walkthrough_test.go` | Calls every discovered MCP tool over the full-element OAuth HTTP connection; checks saved values, write replay, configuration/binding cleanup and resource deletion; fails on an uncalled tool |
 
 ## Read paths by task
 

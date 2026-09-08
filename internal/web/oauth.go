@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/SampsonFox/assetloop/internal/application"
@@ -30,7 +31,11 @@ func (s *Server) oauthRequest(w http.ResponseWriter, r *http.Request) bool {
 		http.Error(w, "Invalid request", 400)
 		return false
 	}
-	for _, values := range r.Form {
+	for key, values := range r.Form {
+		// RFC 8707 permits repeated resource indicators; retain one audience.
+		if key == "resource" && len(values) > 0 && !slices.ContainsFunc(values, func(value string) bool { return value != values[0] }) {
+			continue
+		}
 		if len(values) != 1 {
 			http.Error(w, "Duplicate parameter", 400)
 			return false
@@ -50,6 +55,15 @@ func (s *Server) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid authorization request", 400)
 		return
 	}
+	// Browsers enforce form-action on the POST's OAuth redirect too. Allow only
+	// this validated callback origin, never all loopback ports or arbitrary URLs.
+	redirect, _ := url.Parse(cmd.RedirectURI)
+	callbackOrigin := redirect.Scheme + "://" + redirect.Host
+	if strings.ContainsAny(callbackOrigin, "; \t\r\n") {
+		http.Error(w, "Invalid callback origin", 400)
+		return
+	}
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; form-action 'self' "+callbackOrigin+"; frame-ancestors 'none'")
 	actor, err := s.principal(r)
 	if err != nil {
 		if r.Method != "GET" {

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/SampsonFox/assetloop/internal/application"
@@ -162,7 +163,11 @@ func oauthForm(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
 		oauthJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
 		return nil, false
 	}
-	for _, values := range r.PostForm {
+	for key, values := range r.PostForm {
+		// RFC 8707 permits repeated resource indicators; retain one audience.
+		if key == "resource" && len(values) > 0 && !slices.ContainsFunc(values, func(value string) bool { return value != values[0] }) {
+			continue
+		}
 		if len(values) != 1 {
 			oauthJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
 			return nil, false
