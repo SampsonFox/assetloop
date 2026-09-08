@@ -131,8 +131,57 @@ func testManagementReplay(t *testing.T, store application.ManagementStore, actor
 		t.Fatal("retry after rollback failed")
 	}
 	viewer := actor
+	testSpecificationReplay(t, manager, store, actor, first.ID)
 	viewer.Role = application.RoleViewer
 	if _, err := manager.CreateCategory(ctx, viewer, "category-key", application.CreateCategory{Name: "Idempotent", IconKey: "camera"}); !errors.Is(err, application.ErrForbidden) {
 		t.Fatal("replay bypassed current permission")
+	}
+}
+
+func testSpecificationReplay(t *testing.T, manager *application.ManagementService, store application.ManagementStore, actor application.Principal, category string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	kind, err := manager.SaveType(ctx, actor, "type-key", application.SaveSpecificationType{Name: "Capacity", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag, err := manager.SaveTag(ctx, actor, "tag-key", application.SaveSpecificationTag{TypeID: kind.ID, Name: "256GB", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry, err := manager.SaveTag(ctx, actor, "tag-key", application.SaveSpecificationTag{TypeID: kind.ID, Name: "256GB", Enabled: true}); err != nil || retry.ID != tag.ID {
+		t.Fatal("tag replay failed")
+	}
+	model, err := manager.CreateModel(ctx, actor, "spec-model-key", application.CreateModel{CategoryID: category, Name: "Tagged model"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.SaveModel(ctx, actor, "model-config-key", application.SaveModelSpecification{ModelID: model.ID, TagIDs: []string{tag.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := application.SaveSpecificationAsset{ModelID: model.ID, DisplayName: "Tagged item", TagIDs: []string{tag.ID}}
+	asset, err := manager.SaveAsset(ctx, actor, "asset-key", cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry, err := manager.SaveAsset(ctx, actor, "asset-key", cmd); err != nil || retry.ID != asset.ID {
+		t.Fatal("asset replay failed")
+	}
+	cmd.DisplayName = "Must roll back"
+	if _, err := application.NewManagementService(failedReceiptStore{store}).SaveAsset(ctx, actor, "asset-rollback", cmd); err == nil {
+		t.Fatal("asset receipt failure ignored")
+	}
+	assets, err := store.ListAssets(ctx, actor.TenantID)
+	if err != nil || len(assets) != 1 {
+		t.Fatalf("nested asset escaped rollback: %d / %v", len(assets), err)
+	}
+	if err := store.WithManagementWrite(ctx, actor.TenantID, func(tx application.ManagementStore) error {
+		return tx.WithSpecificationWrite(ctx, "different-tenant", func(application.SpecificationStore) error {
+			t.Error("cross-tenant nested transaction invoked")
+			return nil
+		})
+	}); !errors.Is(err, application.ErrForbidden) {
+		t.Fatal("nested tenant restriction missing")
 	}
 }

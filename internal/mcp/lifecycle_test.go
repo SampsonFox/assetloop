@@ -105,4 +105,24 @@ func testLifecycleTools(t *testing.T, s Services, owner application.Principal, c
 	if createdModel.ID == "" || call("create_product_model", modelInput, false).ID != createdModel.ID {
 		t.Fatal("model tool replay failed")
 	}
+	kind := call("save_tag_type", SaveTagTypeInput{RequestKey: "http-tag-type", Name: "Capacity", Enabled: true}, false)
+	tagInput := SaveTagInput{RequestKey: "http-tag", TypeID: kind.ID, Name: "256GB", Enabled: true}
+	tag := call("save_specification_tag", tagInput, false)
+	if tag.ID == "" || call("save_specification_tag", tagInput, false).ID != tag.ID {
+		t.Fatal("tag tool replay failed")
+	}
+	call("save_model_configuration", SaveModelInput{RequestKey: "http-model-config", ModelID: createdModel.ID, TagIDs: []string{tag.ID}, AppearanceOverrides: map[string]bool{}}, false)
+	assetInput := SaveAssetInput{RequestKey: "http-asset", ModelID: createdModel.ID, DisplayName: "From MCP", TagIDs: []string{tag.ID}}
+	createdAsset := call("save_asset", assetInput, false)
+	if createdAsset.ID == "" || call("save_asset", assetInput, false).ID != createdAsset.ID {
+		t.Fatal("asset tool replay failed")
+	}
+	persisted, err := s.Specifications.Asset(ctx, owner, createdAsset.ID)
+	if err != nil || persisted.DisplayName != "From MCP" {
+		t.Fatal("asset not visible through shared service")
+	}
+	assetInput.ID = createdAsset.ID
+	assetInput.RequestKey = "http-asset-update"
+	assetInput.DisplayName = "Updated through MCP"
+	call("save_asset", assetInput, false)
 }

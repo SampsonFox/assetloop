@@ -143,3 +143,16 @@ cover category/model creation retries and category updates. There are now 22
 tools (17 reads, 5 writes). Existing schema-14 upgrade tests cross migrations
 15–16 while retaining account data. PostgreSQL runtime validation remains open,
 as do management concurrency coverage and the remaining write families.
+
+Specification management checkpoint: the management port now includes the existing
+specification Store contract. Nested specification writes reuse the outer
+management transaction only for its locked tenant. Wrapper methods cover assets,
+types, tags, model configurations, appearance defaults and resource metadata.
+Seven matching MCP tools bring discovery to 29 tools. HTTP tests exercise type/tag
+creation, model allowance save and item create/update with replay; Store tests
+prove nested item rollback when receipt persistence fails and reject a different
+tenant inside the outer transaction. `go test ./internal/mcp ./internal/integration
+./internal/application -count=1` passes (PostgreSQL still skipped without DSN).
+3D tool happy-path coverage, supporting configuration/reference queries, event-type
+mutations, resource binding/deletion, concurrency and final client acceptance are
+still pending; tool registration alone does not complete those acceptance items.

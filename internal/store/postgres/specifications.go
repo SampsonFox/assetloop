@@ -11,6 +11,12 @@ import (
 )
 
 func (s *Store) WithSpecificationWrite(ctx context.Context, tenant string, fn func(application.SpecificationStore) error) error {
+	if s.tx != nil && s.managementTenant != "" {
+		if tenant != s.managementTenant {
+			return application.ErrForbidden
+		}
+		return fn(s)
+	}
 	tenantID, err := uuid.Parse(tenant)
 	if err != nil {
 		return err

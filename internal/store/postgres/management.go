@@ -21,7 +21,7 @@ func (s *Store) WithManagementWrite(ctx context.Context, tenant string, fn func(
 		return err
 	}
 	defer tx.Rollback()
-	scoped := &Store{db: s.db, tx: tx}
+	scoped := &Store{db: s.db, tx: tx, managementTenant: tenant}
 	n, err := scoped.queries().LockLifecycleTenant(ctx, tenantID)
 	if err != nil {
 		return err

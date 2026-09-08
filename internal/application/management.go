@@ -13,6 +13,7 @@ import (
 type ManagementRequest struct{ TenantID, UserID, Key, Hash, ResultJSON string }
 type ManagementStore interface {
 	CatalogStore
+	SpecificationStore
 	WithManagementWrite(context.Context, string, func(ManagementStore) error) error
 	FindManagementRequest(context.Context, string, string, string) (ManagementRequest, bool, error)
 	SaveManagementRequest(context.Context, ManagementRequest) error
@@ -24,6 +25,52 @@ type ManagementService struct{ store ManagementStore }
 
 func NewManagementService(store ManagementStore) *ManagementService {
 	return &ManagementService{store: store}
+}
+
+func (s *ManagementService) SaveModel(ctx context.Context, actor Principal, key string, cmd SaveModelSpecification) error {
+	_, err := managementWrite(ctx, s, actor, key, "save_model", CapabilityManageCatalog, cmd, func(store ManagementStore) (bool, error) {
+		err := NewSpecificationService(store).SaveModel(ctx, actor, cmd)
+		return err == nil, err
+	})
+	return err
+}
+func (s *ManagementService) SaveResource(ctx context.Context, actor Principal, key string, cmd SaveResourceSpecification) error {
+	_, err := managementWrite(ctx, s, actor, key, "save_resource", CapabilityManageCatalog, cmd, func(store ManagementStore) (bool, error) {
+		err := NewSpecificationService(store).SaveResource(ctx, actor, cmd)
+		return err == nil, err
+	})
+	return err
+}
+func (s *ManagementService) DeleteAppearance(ctx context.Context, actor Principal, key, id string) error {
+	_, err := managementWrite(ctx, s, actor, key, "delete_appearance", CapabilityManageCatalog, id, func(store ManagementStore) (bool, error) {
+		err := NewSpecificationService(store).DeleteAppearance(ctx, actor, id)
+		return err == nil, err
+	})
+	return err
+}
+
+func (s *ManagementService) SaveAsset(ctx context.Context, actor Principal, key string, cmd SaveSpecificationAsset) (domain.Asset, error) {
+	return managementWrite(ctx, s, actor, key, "save_asset", CapabilityManageCatalog, cmd, func(store ManagementStore) (domain.Asset, error) {
+		return NewSpecificationService(store).SaveAsset(ctx, actor, cmd)
+	})
+}
+
+func (s *ManagementService) SaveType(ctx context.Context, actor Principal, key string, cmd SaveSpecificationType) (domain.SpecificationTagType, error) {
+	return managementWrite(ctx, s, actor, key, "save_tag_type", CapabilityManageCatalog, cmd, func(store ManagementStore) (domain.SpecificationTagType, error) {
+		return NewSpecificationService(store).SaveType(ctx, actor, cmd)
+	})
+}
+
+func (s *ManagementService) SaveTag(ctx context.Context, actor Principal, key string, cmd SaveSpecificationTag) (domain.SpecificationTag, error) {
+	return managementWrite(ctx, s, actor, key, "save_tag", CapabilityManageCatalog, cmd, func(store ManagementStore) (domain.SpecificationTag, error) {
+		return NewSpecificationService(store).SaveTag(ctx, actor, cmd)
+	})
+}
+
+func (s *ManagementService) SaveAppearance(ctx context.Context, actor Principal, key string, cmd SaveAppearanceDefault) (domain.AppearanceDefault, error) {
+	return managementWrite(ctx, s, actor, key, "save_appearance", CapabilityManageCatalog, cmd, func(store ManagementStore) (domain.AppearanceDefault, error) {
+		return NewSpecificationService(store).SaveAppearance(ctx, actor, cmd)
+	})
 }
 
 func managementWrite[T any](ctx context.Context, s *ManagementService, actor Principal, key, operation string, capability Capability, command any, run func(ManagementStore) (T, error)) (T, error) {
