@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	ScopeRead      = "assets:read"
-	ScopeCatalog   = "assets:catalog"
-	ScopeLifecycle = "assets:lifecycle"
+	ScopeRead      = application.OAuthRead
+	ScopeCatalog   = application.OAuthCatalog
+	ScopeLifecycle = application.OAuthLifecycle
 )
 
 // Identity is supplied by the token verifier, never by tool arguments.

@@ -67,3 +67,12 @@ scope; the second tenant cannot read the first tenant's category. This is not
 OAuth acceptance, write support, PostgreSQL evidence or Codex desktop acceptance.
 The adapter is deliberately not mounted in the application until authorization
 is implemented.
+
+OAuth application policy is implemented in `internal/application/oauth.go`, with
+transactional test-double coverage for S256, exact code-exchange callback binding,
+registered loopback ports, audience/client checks, expiration, current roles,
+hash-only persistence, write rollback, code/refresh replay revocation, concurrent
+code exchange and client-scoped token revocation. Scope constants are shared with
+the MCP adapter. `go test ./internal/application ./internal/mcp -count=1` passes.
+Real Store implementations and HTTP consent/token endpoints remain incomplete;
+these policy tests are not a substitute for either database's compatibility run.

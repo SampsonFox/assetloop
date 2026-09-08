@@ -27,6 +27,7 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `internal/mcp/` | Streamable HTTP semantic query adapter calling application services; SDK HTTP regression tests; not mounted until OAuth wiring is complete |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
+| `internal/application/oauth.go`, `oauth_test.go` | OAuth application policy and persistence port: registered callbacks, S256 PKCE, audience/scopes, code exchange, rotating refresh, replay revocation and current-role authorization; Store/HTTP wiring pending |
 | `internal/domain/` | Pure catalog/lifecycle types plus the versioned ISO 4217 catalog, exact minor-unit money, and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
 | `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation |
