@@ -44,15 +44,15 @@ func TestMarketCredentialsLocalFileAndEnvironment(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".env.zhuanzhuan.local"), []byte("ZHUANZHUAN_MCP_TOKEN=fixture-local\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ZHUANZHUAN_PRICE_UNIT_CONFIRMED", "false")
+
 	cfg, err := Load(filepath.Join(dir, ".env"))
-	if err != nil || cfg.Market.Token != "fixture-local" || cfg.Market.UnitsConfirmed {
-		t.Fatal("local configuration or default unit gate failed", err)
+	if err != nil || cfg.Market.Token != "fixture-local" {
+		t.Fatal("local provider configuration failed", err)
 	}
 	t.Setenv("ZHUANZHUAN_MCP_TOKEN", "fixture-environment")
-	t.Setenv("ZHUANZHUAN_PRICE_UNIT_CONFIRMED", "true")
+
 	cfg, err = Load(filepath.Join(dir, ".env"))
-	if err != nil || cfg.Market.Token != "fixture-environment" || !cfg.Market.UnitsConfirmed {
+	if err != nil || cfg.Market.Token != "fixture-environment" {
 		t.Fatal("environment precedence failed", err)
 	}
 }

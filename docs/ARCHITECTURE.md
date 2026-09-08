@@ -458,8 +458,11 @@ Web and CLI invoke application use cases. OS scheduled tasks call refresh-market
 09:00 Asia/Shanghai, with database leases preventing overlapping workers. Only
 referenced enabled series refresh automatically; all-sold assets retain 90 days of
 refresh. Local startup catches up current observations, never backfills missed prices.
-Secrets remain environment or ignored local configuration. Unit confirmation gates
-production quote writes. Core costs remain derived only from lifecycle cashflows.
+Secrets remain environment or ignored local configuration. Currency and upstream
+amount units belong to each provider adapter; Zhuanzhuan defaults to CNY yuan and
+normalizes to integer fen. Application services validate ISO currency and operate
+on normalized minor units without platform-specific currency checks or user unit
+confirmation. Core costs remain derived only from lifecycle cashflows.
 
 ## 10. Configuration architecture
 

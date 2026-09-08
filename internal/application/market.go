@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	ErrMarketAuth        = errors.New("market.authentication")
-	ErrMarketRateLimit   = errors.New("market.rate_limit")
-	ErrMarketTemporary   = errors.New("market.temporary")
-	ErrMarketInvalid     = errors.New("market.invalid_response")
-	ErrMarketUnit        = errors.New("market.unit_unconfirmed")
+	ErrMarketAuth      = errors.New("market.authentication")
+	ErrMarketRateLimit = errors.New("market.rate_limit")
+	ErrMarketTemporary = errors.New("market.temporary")
+	ErrMarketInvalid   = errors.New("market.invalid_response")
+
 	ErrMarketUnavailable = errors.New("market.unconfigured")
 	ErrMarketMismatch    = errors.New("market.model_changed")
 	ErrMarketBusy        = errors.New("market.busy")
@@ -26,9 +26,8 @@ var MarketLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
 func MarketDate(t time.Time) string { return t.In(MarketLocation).Format("2006-01-02") }
 
 type MarketOptions struct {
-	UnitsConfirmed bool
-	Now            func() time.Time
-	MinInterval    time.Duration
+	Now         func() time.Time
+	MinInterval time.Duration
 }
 type MarketService struct {
 	store    MarketStore
@@ -45,8 +44,7 @@ func NewMarketService(store MarketStore, p MarketDataProvider, fx FXProvider, o 
 	}
 	return &MarketService{store: store, provider: p, fx: fx, options: o}
 }
-func (s *MarketService) Configured() bool     { return s.provider != nil }
-func (s *MarketService) UnitsConfirmed() bool { return s.options.UnitsConfirmed }
+func (s *MarketService) Configured() bool { return s.provider != nil }
 func marketQuery(q MarketQuery) (MarketQuery, error) {
 	var e error
 	q.Keyword, e = catalogText("keyword", q.Keyword, 200, true)
@@ -86,7 +84,8 @@ func (s *MarketService) fetch(ctx context.Context, q MarketQuery) (MarketQuote, 
 		s.next = time.Now().Add(s.options.MinInterval)
 		quote, e := s.provider.FetchQuote(ctx, q)
 		if e == nil {
-			if quote.Provider != "zhuanzhuan" || quote.Currency != "CNY" || quote.MaxMinor <= 0 || strings.TrimSpace(quote.ModelDesc) == "" || quote.ObservedAt.IsZero() || quote.ObservedAt.After(s.options.Now().Add(time.Minute)) {
+			currency, currencyErr := domain.NormalizeCurrency(quote.Currency)
+			if strings.TrimSpace(quote.Provider) == "" || currencyErr != nil || currency != quote.Currency || quote.MaxMinor <= 0 || strings.TrimSpace(quote.ModelDesc) == "" || quote.ObservedAt.IsZero() || quote.ObservedAt.After(s.options.Now().Add(time.Minute)) {
 				return MarketQuote{}, ErrMarketInvalid
 			}
 			if quote.MinMinor != nil && (*quote.MinMinor <= 0 || *quote.MinMinor > quote.MaxMinor) {
@@ -115,9 +114,6 @@ type CreateMarketItem struct {
 func (s *MarketService) Create(ctx context.Context, a Principal, cmd CreateMarketItem) (domain.MarketItem, error) {
 	if e := a.Require(CapabilityManageCatalog); e != nil {
 		return domain.MarketItem{}, e
-	}
-	if !s.options.UnitsConfirmed {
-		return domain.MarketItem{}, ErrMarketUnit
 	}
 	name, e := catalogText("market item name", cmd.Name, 200, true)
 	if e != nil {
@@ -283,9 +279,6 @@ func (s *MarketService) Refresh(ctx context.Context, a Principal, id string) err
 	return s.refresh(ctx, a.TenantID, id)
 }
 func (s *MarketService) refresh(ctx context.Context, tenant, id string) (result error) {
-	if !s.options.UnitsConfirmed {
-		return ErrMarketUnit
-	}
 	if s.provider == nil {
 		return ErrMarketUnavailable
 	}
@@ -346,7 +339,7 @@ func (s *MarketService) refresh(ctx context.Context, tenant, id string) (result 
 	if e != nil {
 		return e
 	}
-	if quote.ModelDesc != item.ModelDesc {
+	if quote.Provider != item.Provider || quote.ModelDesc != item.ModelDesc {
 		return ErrMarketMismatch
 	}
 	base, _, e := s.store.TenantBaseCurrency(ctx, tenant)
@@ -370,7 +363,7 @@ func (s *MarketService) refresh(ctx context.Context, tenant, id string) (result 
 	})
 }
 func MarketErrorCode(e error) string {
-	for _, known := range []error{ErrMarketAuth, ErrMarketRateLimit, ErrMarketTemporary, ErrMarketInvalid, ErrMarketUnit, ErrMarketUnavailable, ErrMarketMismatch, ErrMarketBusy, ErrMarketFX} {
+	for _, known := range []error{ErrMarketAuth, ErrMarketRateLimit, ErrMarketTemporary, ErrMarketInvalid, ErrMarketUnavailable, ErrMarketMismatch, ErrMarketBusy, ErrMarketFX} {
 		if errors.Is(e, known) {
 			return known.Error()
 		}
@@ -383,9 +376,6 @@ func MarketErrorCode(e error) string {
 
 // RefreshDue is the trusted process entry point. Web requests never accept a tenant override.
 func (s *MarketService) RefreshDue(ctx context.Context, tenant, id string) (int, error) {
-	if !s.options.UnitsConfirmed {
-		return 0, ErrMarketUnit
-	}
 	if s.provider == nil {
 		return 0, ErrMarketUnavailable
 	}

@@ -55,7 +55,7 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 	}
 	now := time.Date(2026, 9, 8, 2, 0, 0, 0, time.UTC)
 	p := &quoteFixture{now: &now, model: "phone 256GB", max: 645800}
-	svc := application.NewMarketService(first, p, nil, application.MarketOptions{UnitsConfirmed: true, Now: func() time.Time { return now }})
+	svc := application.NewMarketService(first, p, nil, application.MarketOptions{Now: func() time.Time { return now }})
 	catalog := application.NewCatalogService(first)
 	cat, e := catalog.CreateCategory(ctx, actor, application.CreateCategory{Name: "Market fixture"})
 	if e != nil {
@@ -76,10 +76,6 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 	}
 	one, two := asset("First market device"), asset("Second market device")
 	cmd := application.CreateMarketItem{Name: "Shared phone", Query: application.MarketQuery{Keyword: "phone", FilterCriteria: "256GB"}, ConfirmedModel: p.model, AssetID: one.ID}
-	gated := application.NewMarketService(first, p, nil, application.MarketOptions{})
-	if _, e := gated.Create(ctx, actor, cmd); !errors.Is(e, application.ErrMarketUnit) {
-		t.Fatal(e)
-	}
 	item, e := svc.Create(ctx, actor, cmd)
 	if e != nil {
 		t.Fatal(e)
@@ -195,7 +191,7 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("refresh did not reach provider")
 	}
-	peer := application.NewMarketService(second, p, nil, application.MarketOptions{UnitsConfirmed: true, Now: func() time.Time { return now }})
+	peer := application.NewMarketService(second, p, nil, application.MarketOptions{Now: func() time.Time { return now }})
 	if e = peer.Refresh(ctx, actor, item.ID); !errors.Is(e, application.ErrMarketBusy) {
 		t.Fatal(e)
 	}
@@ -249,7 +245,7 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 		t.Fatal(e)
 	}
 	fx := &fxFixture{err: application.ErrMarketFX}
-	foreignSvc := application.NewMarketService(first, p, fx, application.MarketOptions{UnitsConfirmed: true, Now: func() time.Time { return now }})
+	foreignSvc := application.NewMarketService(first, p, fx, application.MarketOptions{Now: func() time.Time { return now }})
 	cmd.AssetID = ""
 	cmd.Name = "USD phone"
 	foreignItem, e := foreignSvc.Create(ctx, foreign, cmd)

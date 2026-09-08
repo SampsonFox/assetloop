@@ -24,8 +24,7 @@ type Blob struct {
 type OSS struct{ Endpoint, Region, Bucket, AccessKeyID, AccessKeySecret, PathPrefix string }
 
 type Market struct {
-	Token          string
-	UnitsConfirmed bool
+	Token string
 }
 
 type Config struct {
@@ -40,17 +39,16 @@ type Config struct {
 
 func Load(dotenvPath string) (Config, error) {
 	values := map[string]string{
-		"ZHUANZHUAN_MCP_TOKEN":            "",
-		"ZHUANZHUAN_PRICE_UNIT_CONFIRMED": "false",
-		"APP_ENV":                         "local",
-		"HTTP_ADDR":                       "127.0.0.1:8080",
-		"LOG_LEVEL":                       "info",
-		"AUTH_MODE":                       "local",
-		"DB_DRIVER":                       "sqlite",
-		"DB_DSN":                          "./data/assetloop.db",
-		"ATTACHMENT_DEFAULT_STORE":        "local",
-		"ATTACHMENT_LOCAL_ROOT":           "./data/blobs",
-		"ALIYUN_OSS_ENDPOINT":             "", "ALIYUN_OSS_REGION": "", "ALIYUN_OSS_BUCKET": "",
+		"ZHUANZHUAN_MCP_TOKEN":     "",
+		"APP_ENV":                  "local",
+		"HTTP_ADDR":                "127.0.0.1:8080",
+		"LOG_LEVEL":                "info",
+		"AUTH_MODE":                "local",
+		"DB_DRIVER":                "sqlite",
+		"DB_DSN":                   "./data/assetloop.db",
+		"ATTACHMENT_DEFAULT_STORE": "local",
+		"ATTACHMENT_LOCAL_ROOT":    "./data/blobs",
+		"ALIYUN_OSS_ENDPOINT":      "", "ALIYUN_OSS_REGION": "", "ALIYUN_OSS_BUCKET": "",
 		"ALIYUN_OSS_ACCESS_KEY_ID": "", "ALIYUN_OSS_ACCESS_KEY_SECRET": "", "ALIYUN_OSS_PATH_PREFIX": "",
 	}
 	if err := loadDotenv(dotenvPath, values); err != nil {
@@ -99,7 +97,7 @@ func Load(dotenvPath string) (Config, error) {
 	}
 
 	return Config{
-		Market:      Market{Token: strings.TrimSpace(values["ZHUANZHUAN_MCP_TOKEN"]), UnitsConfirmed: values["ZHUANZHUAN_PRICE_UNIT_CONFIRMED"] == "true"},
+		Market:      Market{Token: strings.TrimSpace(values["ZHUANZHUAN_MCP_TOKEN"])},
 		Environment: values["APP_ENV"],
 		HTTPAddr:    values["HTTP_ADDR"],
 		LogLevel:    values["LOG_LEVEL"],

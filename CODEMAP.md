@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. Zhuanzhuan shared daily quotes, FX, settings and scheduled CLI are implemented with formal writes gated on unit verification. General attachments and the MCP server remain later slices.
+Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. Zhuanzhuan shared daily quotes, FX, settings and scheduled CLI are implemented. Each adapter owns its platform currency and unit contract. General attachments and the MCP server remain later slices.
 
 ## Authority map
 

@@ -21,7 +21,7 @@ func newMarketService(st application.MarketStore, cfg config.Config) *applicatio
 	if cfg.Market.Token != "" {
 		provider = zhuanzhuan.New(cfg.Market.Token)
 	}
-	return application.NewMarketService(st, provider, frankfurter.New(), application.MarketOptions{UnitsConfirmed: cfg.Market.UnitsConfirmed, MinInterval: 2 * time.Second})
+	return application.NewMarketService(st, provider, frankfurter.New(), application.MarketOptions{MinInterval: 2 * time.Second})
 }
 func refreshMarketCommand(args []string) error {
 	flags := flag.NewFlagSet("refresh-market", flag.ContinueOnError)

@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// Currency and upstream major-unit interpretation belong to this adapter.
+const DefaultCurrency = "CNY"
+
 const Endpoint = "https://mcp.zhuanzhuan.com/zai/zai-transfer"
 
 type Provider struct {
@@ -211,13 +214,13 @@ func (p *Provider) parseQuote(b []byte, version string) (application.MarketQuote
 		return string(b)
 	}
 	model := strings.TrimSpace(field("modelDesc"))
-	max, e := domain.ParseMajorAmount(field("dealMaxPrice"), "CNY")
+	max, e := domain.ParseMajorAmount(field("dealMaxPrice"), DefaultCurrency)
 	if e != nil || max <= 0 || model == "" || len(model) > 1000 {
 		return application.MarketQuote{}, invalid
 	}
-	quote := application.MarketQuote{ModelDesc: model, Currency: "CNY", Provider: "zhuanzhuan", ProviderVersion: version, MaxMinor: max, ObservedAt: p.now().UTC()}
+	quote := application.MarketQuote{ModelDesc: model, Currency: DefaultCurrency, Provider: "zhuanzhuan", ProviderVersion: version, MaxMinor: max, ObservedAt: p.now().UTC()}
 	if v := field("dealMinPrice"); v != "" && v != "null" {
-		n, e := domain.ParseMajorAmount(v, "CNY")
+		n, e := domain.ParseMajorAmount(v, DefaultCurrency)
 		if e != nil || n <= 0 || n > max {
 			return application.MarketQuote{}, invalid
 		}

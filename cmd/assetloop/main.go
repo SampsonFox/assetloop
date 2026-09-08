@@ -144,7 +144,7 @@ func serveWithMarket(addr string, handler http.Handler, market *application.Mark
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if market != nil && market.Configured() && market.UnitsConfirmed() {
+	if market != nil && market.Configured() {
 		go func() {
 			n, err := market.RefreshDue(ctx, "", "")
 			if err != nil {

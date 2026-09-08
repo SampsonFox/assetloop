@@ -13,15 +13,16 @@ Read-only probe 2026-09-08: zai-transfer-mcp 1.0.0 / protocol 2025-03-26.
 iPhone 15 Pro + 256GB returned modelDesc=iPhone 15 Pro 256G,
 dealMinPrice=3452, dealMaxPrice=6458. No currency, unit, source date or sample count.
 The jump URL redirects to the public homepage on desktop and mobile user agents.
-CNY yuan is an unverified contract assumption until official display confirmation;
-ZHUANZHUAN_PRICE_UNIT_CONFIRMED defaults false and blocks application price writes.
+The approved integration contract assigns currency and units to the adapter:
+Zhuanzhuan uses CNY yuan and returns integer fen. The application does not impose
+a CNY-only constraint or require user unit confirmation. Other adapters must provide
+their own platform currency/default and normalize upstream units.
 The adapter remains testable with sanitized fixtures. Never copy tokens into evidence.
 
 ## Configuration and scheduled execution
 
 Set ZHUANZHUAN_MCP_TOKEN in the process environment, ignored .env, or ignored
 .env.zhuanzhuan.local beside the selected configuration file. The environment wins.
-Set ZHUANZHUAN_PRICE_UNIT_CONFIRMED=true only after official CNY/yuan verification.
 Web shows configuration state only. Credentials never enter quote evidence.
 
 Use an installed binary in a stable path, with absolute SQLite DB_DSN and
@@ -40,8 +41,7 @@ The Windows installer creates a task scoped to that absolute configuration path,
 daily at 09:00 Asia/Shanghai. It runs as the current signed-in user without stored
 passwords or elevated privileges, skips overlapping instances and starts when a
 missed time becomes available. The machine must be on and that user signed in;
-application startup also catches up the current date. Installation requires both
-credentials and unit confirmation. The dry run prints XML with paths, not secrets.
+application startup also catches up the current date. Installation requires configured credentials. The dry run prints XML with paths, not secrets.
 
 Linux/server deployment can use systemd units (deployment itself needs its normal
 environment authorization). Keep the service in the application's deployment
@@ -86,8 +86,8 @@ the next quote request, using the original observation date.
 
 - Live Zhuanzhuan preview succeeded through the Go application and Web drawer:
   iPhone 15 Pro / 256GB -> iPhone 15 Pro 256G, max 6458, min 3452.
-  The app's display assumes CNY yuan; official unit confirmation is still pending.
-  Formal prices remain empty and OS scheduling has not been activated.
+  CNY yuan is now the adapter-owned default approved by the user. Formal saving
+  is enabled without a separate currency confirmation setting.
 - A real Frankfurter v2 time-series response succeeded. Expanded providers are
   objects containing key, date and rate. The recorded public fixture tests this
   actual shape, latest non-future date selection and fixed-point rates.
@@ -105,8 +105,8 @@ the next quote request, using the original observation date.
   container and a dedicated non-superuser role/database, without shared credentials
   or host ports. The container and uploaded test binaries were removed afterwards.
   SQLite and PostgreSQL have both executed the market scenario; no skips count as passes.
-- Browser QA verified query preview, return to editable conditions, disabled
-  confirmation while unverified, existing detail empty state and loaded 3D model.
+- Browser QA verified query preview, return to editable conditions, model
+  confirmation, existing detail empty state and loaded 3D model.
   Asset editing correctly prefills model and selected tags into a child quote drawer;
   cancelling leaves the original asset unchanged.
   One Impeccable detector pass ran in regex fallback (HTML parser dependencies
@@ -116,3 +116,17 @@ The fixed source icon is the official site's favicon from
 [Zhuanzhuan](https://m.zhuanzhuan.com/favicon.ico), stored locally for provider
 identification. No product pictures are fetched.
 Frankfurter reference: [official documentation](https://frankfurter.dev/).
+
+## Adapter currency activation (2026-09-08)
+
+The user approved adapter-owned defaults: Zhuanzhuan uses CNY/yuan; the temporary
+unit-confirmation configuration and UI gate were removed. A regression verifies
+that the application preserves valid adapter currencies (including USD, JPY and
+KWD) and integer minor amounts, rejecting invalid currency codes without applying
+a platform-specific default. Future adapters own their respective defaults.
+
+The local Windows daily task is installed and Ready, with its next execution at
+2026-09-09 09:00 Asia/Shanghai. Its XML importer uses UTF-16LE with BOM, covered by
+a Unicode-path regression. The refresh CLI exits successfully with zero eligible
+records; users can now create and bind real quotes. Existing application data and
+UAT/production delivery gates remain unchanged.

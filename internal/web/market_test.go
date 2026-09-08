@@ -38,7 +38,7 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 		t.Fatal(e)
 	}
 	p := &webQuoteFixture{}
-	market := application.NewMarketService(st, p, nil, application.MarketOptions{UnitsConfirmed: true})
+	market := application.NewMarketService(st, p, nil, application.MarketOptions{})
 	catalog := application.NewCatalogService(st)
 	server, e := New(auth, catalog, application.NewLifecycleService(st), db, Options{AuthMode: "local", Specifications: application.NewSpecificationService(st), Market: market})
 	if e != nil {

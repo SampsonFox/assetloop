@@ -39,3 +39,27 @@ func TestMarketDateShanghai(t *testing.T) {
 		t.Fatal("wrong snapshot date")
 	}
 }
+
+type normalizedQuoteStub struct{ quote MarketQuote }
+
+func (p normalizedQuoteStub) FetchQuote(context.Context, MarketQuery) (MarketQuote, error) {
+	return p.quote, nil
+}
+func TestMarketAcceptsAdapterCurrencyWithoutPlatformDefaults(t *testing.T) {
+	for _, currency := range []string{"CNY", "USD", "JPY", "KWD", "ZZZ", ""} {
+		t.Run(currency, func(t *testing.T) {
+			quote := MarketQuote{Provider: "fixture-platform", Currency: currency, ModelDesc: "Fixture device", MaxMinor: 12345, ObservedAt: time.Now()}
+			svc := NewMarketService(nil, normalizedQuoteStub{quote}, nil, MarketOptions{})
+			got, err := svc.fetch(context.Background(), MarketQuery{Keyword: "device"})
+			if currency == "" || currency == "ZZZ" {
+				if err == nil {
+					t.Fatal("invalid currency accepted")
+				}
+				return
+			}
+			if err != nil || got.Currency != currency || got.MaxMinor != 12345 || got.Provider != "fixture-platform" {
+				t.Fatalf("adapter contract changed: %+v %v", got, err)
+			}
+		})
+	}
+}

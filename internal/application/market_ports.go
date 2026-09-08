@@ -7,6 +7,9 @@ import (
 )
 
 type MarketQuery struct{ Keyword, FilterCriteria string }
+
+// MarketQuote carries ISO currency and integer minor units normalized by the provider.
+// Each adapter owns its platform default currency and upstream amount-unit contract.
 type MarketQuote struct {
 	ModelDesc, Currency, Provider, ProviderVersion, Evidence string
 	MaxMinor                                                 int64
