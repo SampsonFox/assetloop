@@ -51,6 +51,7 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	registerCatalog(server, services)
 	registerSpecifications(server, services)
 	registerEventTypes(server, services)
+	registerMedia(server, services)
 	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, &sdk.StreamableHTTPOptions{Stateless: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

@@ -80,6 +80,7 @@ func TestCatalogTransactionRollback(t *testing.T) {
 				t.Fatalf("model escaped transaction: %v / %v", models, err)
 			}
 			testManagementReplay(t, store.(application.ManagementStore), account.Principal)
+			testManagementBinding(t, store.(application.ManagementStore), account.Principal, original.ID)
 		})
 	}
 }

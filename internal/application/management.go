@@ -15,6 +15,7 @@ type ManagementStore interface {
 	CatalogStore
 	SpecificationStore
 	LifecycleStore
+	ModelMediaStore
 	WithManagementWrite(context.Context, string, func(ManagementStore) error) error
 	FindManagementRequest(context.Context, string, string, string) (ManagementRequest, bool, error)
 	SaveManagementRequest(context.Context, ManagementRequest) error
@@ -26,6 +27,15 @@ type ManagementService struct{ store ManagementStore }
 
 func NewManagementService(store ManagementStore) *ManagementService {
 	return &ManagementService{store: store}
+}
+
+func (s *ManagementService) BindResource(ctx context.Context, actor Principal, key string, cmd BindModel3DResource) error {
+	_, err := managementWrite(ctx, s, actor, key, "bind_resource", CapabilityManageCatalog, cmd, func(store ManagementStore) (bool, error) {
+		// Binding only changes metadata; no blob access is needed in this transaction.
+		err := (&ModelMediaService{store: store}).Bind(ctx, actor, cmd)
+		return err == nil, err
+	})
+	return err
 }
 
 func (s *ManagementService) CreateEventType(ctx context.Context, actor Principal, key string, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {

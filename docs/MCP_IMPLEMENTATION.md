@@ -60,6 +60,17 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+3D binding checkpoint: `bind_3d_resource` and `get_3d_binding` reuse the existing
+media application use cases. Binding and its management receipt commit together;
+the query returns explicit/effective IDs without blob locations. The SDK discovers
+34 tools. `internal/integration/mcp_media_test.go` uploads a real GLB through the
+existing local BlobStore, verifies rollback on receipt failure, replay after a
+later clear, model inheritance and asset overrides, referenced-delete refusal,
+HTTP scope/current-role denial and cross-tenant rejection. The MCP, integration
+and application packages pass on SQLite; PostgreSQL remains unexecuted without
+its test DSN. Recoverable MCP resource deletion remains pending and must not put
+irreversible blob deletion inside the management database transaction.
+
 Initial adapter: `go test ./internal/mcp -count=1` passes. Seventeen read tools
 are discovered over actual Streamable HTTP. A nil/empty verifier fails closed on
 GET/POST/DELETE; authenticated calls carry the resolved identity and enforce read

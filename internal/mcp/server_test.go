@@ -67,11 +67,12 @@ func TestHTTPQueries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(list.Tools) != 32 {
-				t.Fatalf("tools = %d, want 32", len(list.Tools))
+			if len(list.Tools) != 34 {
+				t.Fatalf("tools = %d, want 34", len(list.Tools))
 			}
 			for _, tool := range list.Tools {
 				write := strings.HasPrefix(tool.Name, "save_") || strings.HasPrefix(tool.Name, "create_") || strings.HasPrefix(tool.Name, "update_") || strings.HasPrefix(tool.Name, "delete_") || strings.HasPrefix(tool.Name, "set_") || tool.Name == "record_event" || tool.Name == "correct_event"
+				write = write || tool.Name == "bind_3d_resource"
 				if tool.Annotations == nil || tool.Annotations.ReadOnlyHint == write {
 					t.Errorf("%s is not annotated read-only", tool.Name)
 				}
