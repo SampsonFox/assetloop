@@ -37,7 +37,7 @@ func TestHTTPQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := credential.Principal
-	services := Services{Catalog: application.NewCatalogService(store), Specifications: application.NewSpecificationService(store), Lifecycle: application.NewLifecycleService(store), Management: application.NewManagementService(store)}
+	services := Services{Catalog: application.NewCatalogService(store), Specifications: application.NewSpecificationService(store), Lifecycle: application.NewLifecycleService(store), Management: application.NewManagementService(store, nil)}
 	category, err := services.Catalog.CreateCategory(ctx, owner, application.CreateCategory{Name: "Private camera", IconKey: "camera"})
 	if err != nil {
 		t.Fatal(err)
@@ -67,8 +67,8 @@ func TestHTTPQueries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(list.Tools) != 34 {
-				t.Fatalf("tools = %d, want 34", len(list.Tools))
+			if len(list.Tools) != 35 {
+				t.Fatalf("tools = %d, want 35", len(list.Tools))
 			}
 			for _, tool := range list.Tools {
 				write := strings.HasPrefix(tool.Name, "save_") || strings.HasPrefix(tool.Name, "create_") || strings.HasPrefix(tool.Name, "update_") || strings.HasPrefix(tool.Name, "delete_") || strings.HasPrefix(tool.Name, "set_") || tool.Name == "record_event" || tool.Name == "correct_event"

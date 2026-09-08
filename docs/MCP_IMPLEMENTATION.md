@@ -60,6 +60,19 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+Recoverable deletion checkpoint: `delete_3d_resource` reuses the media service's
+guarded preparation and cleanup. Its management receipt atomically records the
+pending deletion and immutable object identity; success is returned only after
+cleanup, and retries resume cleanup even if metadata was already removed.
+No schema addition or blob I/O inside a SQL transaction. Fault-injected tests in
+`mcp_media_test.go` cover receipt failure before blob I/O, blob failure with a
+retained pending record, rejection of binding a pending resource, metadata
+failure after blob deletion, completed retries, conflicting keys, current-role
+denial and missing resources without a matching receipt. HTTP tests cover scope
+denial and deletion/replay; discovery now contains 35 tools. SQLite/application
+tests pass; live PostgreSQL, concurrent independent-connection management replay
+and actual client acceptance remain outstanding.
+
 3D binding checkpoint: `bind_3d_resource` and `get_3d_binding` reuse the existing
 media application use cases. Binding and its management receipt commit together;
 the query returns explicit/effective IDs without blob locations. The SDK discovers

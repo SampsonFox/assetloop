@@ -24,7 +24,16 @@ type BindingResult struct {
 	Conflict            bool   `json:"conflict"`
 }
 
+type DeleteResourceInput struct {
+	RequestKey string `json:"request_key"`
+	ResourceID string `json:"resource_id"`
+}
+
 func registerMedia(server *sdk.Server, s Services) {
+	register(server, "delete_3d_resource", "Delete a confirmed unreferenced 3D resource and its GLB. Irreversible; read references and confirm intent first. Reuse request_key to resume a failed deletion.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q DeleteResourceInput) (any, error) {
+		err := s.Management.DeleteResource(ctx, p, q.RequestKey, q.ResourceID)
+		return err == nil, err
+	})
 	register(server, "get_3d_binding", "Read an explicit binding and its effective resource without storage locations.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q BindingInput) (any, error) {
 		b, err := s.Media.Binding(ctx, p, q.Kind, q.TargetID)
 		return BindingResult{Name: b.Name, ResourceID: b.ResourceID, EffectiveResourceID: b.EffectiveResourceID, Source: b.Source, Conflict: b.Conflict}, err

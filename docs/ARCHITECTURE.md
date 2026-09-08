@@ -136,6 +136,16 @@ current capability before returning the saved result, and different commands
 cannot reuse the key. This is independent of lifecycle event receipts and is
 not a generic SQL or transport-owned mutation API.
 
+Resource deletion is the cross-storage exception to ordinary result receipts:
+the management transaction commits the guarded pending-delete state and a receipt
+of the immutable resource identity together, before touching BlobStore. That
+receipt is a deletion intent, not a success response. The shared media cleanup
+then deletes the object (missing is already complete) and pending metadata;
+every retry resumes cleanup from the same committed identity, including after
+metadata removal. A missing resource without a matching receipt is not success.
+This reuses the Web pending-delete policy without making blob I/O rollbackable,
+adding a state table, or introducing an external transaction coordinator.
+
 ### 4.4 Infrastructure adapters
 
 - Stores translate application operations to SQLite or PostgreSQL.

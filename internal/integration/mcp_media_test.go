@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,7 +25,7 @@ func testManagementBinding(t *testing.T, store application.ManagementStore, owne
 		t.Fatal(err)
 	}
 	media := application.NewModelMediaService(store, blob.Registry{"local": local}, blob.ObjectKeyMapper{}, "local")
-	manager := application.NewManagementService(store)
+	manager := application.NewManagementService(store, blob.Registry{"local": local})
 	model, err := manager.CreateModel(ctx, owner, "binding-model", application.CreateModel{CategoryID: category, Name: "Binding model"})
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +39,7 @@ func testManagementBinding(t *testing.T, store application.ManagementStore, owne
 		t.Fatal(err)
 	}
 	cmd := application.BindModel3DResource{Kind: "model", TargetID: model.ID, ResourceID: r.ID}
-	if err := application.NewManagementService(failedReceiptStore{store}).BindResource(ctx, owner, "binding-rollback", cmd); err == nil {
+	if err := application.NewManagementService(failedReceiptStore{store}, nil).BindResource(ctx, owner, "binding-rollback", cmd); err == nil {
 		t.Fatal("receipt failure ignored")
 	}
 	b, err := media.Binding(ctx, owner, "model", model.ID)
@@ -137,4 +138,122 @@ func testManagementBinding(t *testing.T, store application.ManagementStore, owne
 	call("get_3d_binding", query, true)
 	input.RequestKey = "other-tenant"
 	call("bind_3d_resource", input, true)
+	identity.Principal = owner
+	deletable, err := media.Upload(ctx, owner, application.UploadModel3DResource{Name: "HTTP delete", File: fullElementGLB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deletion := transport.DeleteResourceInput{RequestKey: "http-delete", ResourceID: deletable.ID}
+	identity.Scopes = []string{transport.ScopeRead}
+	call("delete_3d_resource", deletion, true)
+	identity.Scopes = []string{transport.ScopeCatalog}
+	call("delete_3d_resource", deletion, false)
+	call("delete_3d_resource", deletion, false)
+	if _, err := media.GetResource(ctx, owner, deletable.ID); !errors.Is(err, application.ErrModel3DNotFound) {
+		t.Fatal("HTTP deletion did not remove resource")
+	}
+	testManagementDeletion(t, store, owner, media, local, model.ID)
+}
+
+type retryDeleteBlob struct {
+	application.BlobStore
+	fail  bool
+	calls int
+}
+
+func (b *retryDeleteBlob) Delete(ctx context.Context, key string) error {
+	b.calls++
+	if b.fail {
+		b.fail = false
+		return errors.New("injected blob deletion failure")
+	}
+	return b.BlobStore.Delete(ctx, key)
+}
+
+type retryFinishStore struct {
+	application.ManagementStore
+	fail bool
+}
+
+func (s *retryFinishStore) FinishModel3DResourceDelete(ctx context.Context, tenant, id string) error {
+	if s.fail {
+		s.fail = false
+		return errors.New("injected metadata deletion failure")
+	}
+	return s.ManagementStore.FinishModel3DResourceDelete(ctx, tenant, id)
+}
+
+func testManagementDeletion(t *testing.T, store application.ManagementStore, owner application.Principal, media *application.ModelMediaService, local application.BlobStore, modelID string) {
+	t.Helper()
+	ctx := context.Background()
+	r, err := media.Upload(ctx, owner, application.UploadModel3DResource{Name: "Retry delete", File: fullElementGLB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blobs := &retryDeleteBlob{BlobStore: local, fail: true}
+	registry := blob.Registry{"local": blobs}
+	failedReceipt := application.NewManagementService(failedReceiptStore{store}, registry)
+	if err := failedReceipt.DeleteResource(ctx, owner, "delete-rollback", r.ID); err == nil {
+		t.Fatal("receipt failure ignored")
+	}
+	current, err := media.GetResource(ctx, owner, r.ID)
+	if err != nil || current.Status != "ready" || blobs.calls != 0 {
+		t.Fatal("failed receipt changed resource or blob")
+	}
+	manager := application.NewManagementService(store, registry)
+	if err := manager.DeleteResource(ctx, owner, "delete-retry", r.ID); err == nil {
+		t.Fatal("blob failure reported success")
+	}
+	current, err = media.GetResource(ctx, owner, r.ID)
+	if err != nil || current.Status != "pending-delete" {
+		t.Fatalf("missing recoverable state: %+v / %v", current, err)
+	}
+	if err := manager.BindResource(ctx, owner, "pending-bind", application.BindModel3DResource{Kind: "model", TargetID: modelID, ResourceID: r.ID}); err == nil {
+		t.Fatal("pending resource was rebound")
+	}
+	for i := 0; i < 2; i++ {
+		if err := manager.DeleteResource(ctx, owner, "delete-retry", r.ID); err != nil {
+			t.Fatalf("deletion replay: %v", err)
+		}
+	}
+	if _, err := local.Stat(ctx, r.ObjectKey); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("deleted blob remains: %v", err)
+	}
+	if _, err := media.GetResource(ctx, owner, r.ID); !errors.Is(err, application.ErrModel3DNotFound) {
+		t.Fatal("deleted metadata remains")
+	}
+	if err := manager.DeleteResource(ctx, owner, "delete-retry", modelID); err == nil {
+		t.Fatal("conflicting delete key accepted")
+	}
+	viewer := owner
+	viewer.Role = application.RoleViewer
+	if err := manager.DeleteResource(ctx, viewer, "delete-retry", r.ID); !errors.Is(err, application.ErrForbidden) {
+		t.Fatal("replay bypassed current role")
+	}
+	if err := manager.DeleteResource(ctx, owner, "unknown-delete", r.ID); err == nil {
+		t.Fatal("missing resource without matching receipt reported success")
+	}
+
+	r, err = media.Upload(ctx, owner, application.UploadModel3DResource{Name: "Metadata retry", File: fullElementGLB()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finish := &retryFinishStore{ManagementStore: store, fail: true}
+	manager = application.NewManagementService(finish, registry)
+	if err := manager.DeleteResource(ctx, owner, "finish-retry", r.ID); err == nil {
+		t.Fatal("metadata failure reported success")
+	}
+	if _, err := local.Stat(ctx, r.ObjectKey); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("failure injection did not occur after blob deletion")
+	}
+	current, err = media.GetResource(ctx, owner, r.ID)
+	if err != nil || current.Status != "pending-delete" {
+		t.Fatal("metadata failure lost retry state")
+	}
+	if err := manager.DeleteResource(ctx, owner, "finish-retry", r.ID); err != nil {
+		t.Fatalf("metadata recovery: %v", err)
+	}
+	if err := manager.DeleteResource(ctx, owner, "finish-retry", r.ID); err != nil {
+		t.Fatalf("completed recovery replay: %v", err)
+	}
 }

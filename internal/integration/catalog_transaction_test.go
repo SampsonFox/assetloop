@@ -97,7 +97,7 @@ func (s failedReceiptStore) SaveManagementRequest(context.Context, application.M
 func testManagementReplay(t *testing.T, store application.ManagementStore, actor application.Principal) {
 	t.Helper()
 	ctx := context.Background()
-	manager := application.NewManagementService(store)
+	manager := application.NewManagementService(store, nil)
 	cmd := application.CreateCategory{Name: "Idempotent", IconKey: "camera"}
 	first, err := manager.CreateCategory(ctx, actor, "category-key", cmd)
 	if err != nil {
@@ -118,7 +118,7 @@ func testManagementReplay(t *testing.T, store application.ManagementStore, actor
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.NewManagementService(failedReceiptStore{store}).CreateCategory(ctx, actor, "rollback-key", cmd); err == nil {
+	if _, err := application.NewManagementService(failedReceiptStore{store}, nil).CreateCategory(ctx, actor, "rollback-key", cmd); err == nil {
 		t.Fatal("receipt failure ignored")
 	}
 	after, err := store.ListCategories(ctx, actor.TenantID)
@@ -131,7 +131,7 @@ func testManagementReplay(t *testing.T, store application.ManagementStore, actor
 	if _, err := manager.CreateCategory(ctx, actor, "rollback-key", cmd); err != nil {
 		t.Fatal("retry after rollback failed")
 	}
-	if _, err := application.NewManagementService(failedReceiptStore{store}).CreateEventType(ctx, actor, "type-rollback", application.CreateAssetEventType{Name: "Rolled back type", Cashflow: "expense"}); err == nil {
+	if _, err := application.NewManagementService(failedReceiptStore{store}, nil).CreateEventType(ctx, actor, "type-rollback", application.CreateAssetEventType{Name: "Rolled back type", Cashflow: "expense"}); err == nil {
 		t.Fatal("event-type receipt failure ignored")
 	}
 	types, err := store.ListAssetEventTypes(ctx, actor.TenantID)
@@ -182,7 +182,7 @@ func testSpecificationReplay(t *testing.T, manager *application.ManagementServic
 		t.Fatal("asset replay failed")
 	}
 	cmd.DisplayName = "Must roll back"
-	if _, err := application.NewManagementService(failedReceiptStore{store}).SaveAsset(ctx, actor, "asset-rollback", cmd); err == nil {
+	if _, err := application.NewManagementService(failedReceiptStore{store}, nil).SaveAsset(ctx, actor, "asset-rollback", cmd); err == nil {
 		t.Fatal("asset receipt failure ignored")
 	}
 	assets, err := store.ListAssets(ctx, actor.TenantID)

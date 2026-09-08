@@ -23,10 +23,25 @@ type ManagementStore interface {
 
 // ManagementService adds durable command replay to existing management use cases.
 // Business validation remains in the called services, not in a second MCP model.
-type ManagementService struct{ store ManagementStore }
+type ManagementService struct {
+	store ManagementStore
+	blobs BlobStores
+}
 
-func NewManagementService(store ManagementStore) *ManagementService {
-	return &ManagementService{store: store}
+func NewManagementService(store ManagementStore, blobs BlobStores) *ManagementService {
+	return &ManagementService{store: store, blobs: blobs}
+}
+
+func (s *ManagementService) DeleteResource(ctx context.Context, actor Principal, key, id string) error {
+	// This receipt records a committed deletion intent, not completed blob I/O.
+	// Preserve the original object identity so retries can finish after row removal.
+	r, err := managementWrite(ctx, s, actor, key, "delete_resource", CapabilityManageCatalog, id, func(store ManagementStore) (domain.Model3DResource, error) {
+		return (&ModelMediaService{store: store}).prepareResourceDelete(ctx, actor, id)
+	})
+	if err != nil {
+		return err
+	}
+	return (&ModelMediaService{store: s.store, stores: s.blobs}).finishResourceDelete(ctx, actor, r)
 }
 
 func (s *ManagementService) BindResource(ctx context.Context, actor Principal, key string, cmd BindModel3DResource) error {

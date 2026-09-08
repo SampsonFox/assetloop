@@ -337,16 +337,33 @@ func (s *ModelMediaService) References(ctx context.Context, actor Principal, id 
 	return s.store.Model3DReferences(ctx, actor.TenantID, id)
 }
 func (s *ModelMediaService) DeleteResource(ctx context.Context, actor Principal, id string) error {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
-		return err
-	}
-	r, err := s.GetResource(ctx, actor, id)
+	r, err := s.prepareResourceDelete(ctx, actor, id)
 	if err != nil {
 		return err
 	}
+	return s.finishResourceDelete(ctx, actor, r)
+}
+
+func (s *ModelMediaService) prepareResourceDelete(ctx context.Context, actor Principal, id string) (domain.Model3DResource, error) {
+	if err := actor.Require(CapabilityManageCatalog); err != nil {
+		return domain.Model3DResource{}, err
+	}
+	r, err := s.GetResource(ctx, actor, id)
+	if err != nil {
+		return domain.Model3DResource{}, err
+	}
 	// Atomic guarded transition blocks new bindings before any blob deletion.
 	if err := s.store.MarkModel3DResourcePendingDelete(ctx, actor.TenantID, id); err != nil {
-		return err
+		return domain.Model3DResource{}, err
+	}
+	return r, nil
+}
+
+// Only called with a resource whose guarded pending-delete transition committed.
+// Both operations tolerate an earlier attempt having already completed them.
+func (s *ModelMediaService) finishResourceDelete(ctx context.Context, actor Principal, r domain.Model3DResource) error {
+	if s.stores == nil {
+		return ErrModel3DUnavailable
 	}
 	b, ok := s.stores.Get(r.StoreID)
 	if !ok {
@@ -355,7 +372,7 @@ func (s *ModelMediaService) DeleteResource(ctx context.Context, actor Principal,
 	if err := b.Delete(ctx, r.ObjectKey); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("delete GLB (retry pending resource): %w", err)
 	}
-	return s.store.FinishModel3DResourceDelete(ctx, actor.TenantID, id)
+	return s.store.FinishModel3DResourceDelete(ctx, actor.TenantID, r.ID)
 }
 func (s *ModelMediaService) GetForModel(ctx context.Context, actor Principal, modelID string) (domain.ProductModel3D, error) {
 	if err := actor.Require(CapabilityView); err != nil {

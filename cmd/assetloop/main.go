@@ -145,7 +145,7 @@ func run(args []string) error {
 			}
 			mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
 			mux.Handle("/oauth/revoke", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Revoke)))
-			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: application.NewManagementService(appStore)}, oauthHTTP.Authenticate)))
+			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: application.NewManagementService(appStore, blobStores)}, oauthHTTP.Authenticate)))
 			handler = mux
 		}
 		return serve(cfg.HTTPAddr, handler)
