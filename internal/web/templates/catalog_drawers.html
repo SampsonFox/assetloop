@@ -1,43 +1,50 @@
 {{define "catalog-drawers"}}{{$s := .Strings}}
 {{with .CatalogEditingModel}}<button hidden type="button" data-dialog-initial-open data-dialog-open="model-drawer" data-title="{{t $s "catalog.edit_model"}}" data-action="/admin/catalog/models/{{.ID}}" data-edit-model-id="{{.ID}}" data-category-id="{{.CategoryID}}" data-name="{{.Name}}">{{t $s "catalog.edit_model"}}</button>{{end}}
-<dialog class="drawer" id="category-drawer" aria-labelledby="category-drawer-title">
-  <form id="category-form" class="drawer-panel stack" action="/admin/catalog/categories" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
-    <header class="drawer-heading"><div><p class="eyebrow">{{t $s "title.catalog"}}</p><h2 id="category-drawer-title" data-dialog-title>{{t $s "catalog.category_add"}}</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.close"}}" title="{{t $s "common.close"}}">{{template "ui-icon" "close"}}</button></header>
+{{with .CatalogEditingCategory}}<button hidden type="button" data-dialog-initial-open data-dialog-open="category-drawer" data-title="{{if .ID}}{{t $s "catalog.edit_category"}}{{else}}{{t $s "catalog.category_add"}}{{end}}" data-action="/admin/catalog/categories{{if .ID}}/{{.ID}}{{end}}" data-name="{{.Name}}" data-icon-key="{{.IconKey}}">{{if .ID}}{{t $s "catalog.edit_category"}}{{else}}{{t $s "catalog.category_add"}}{{end}}</button>{{end}}
+{{block "fragment-category-drawer" .}}{{$s := .Strings}}
+<dialog data-management-drawer class="drawer" id="category-drawer" aria-labelledby="category-drawer-title">
+  <form id="category-form" class="drawer-panel" action="/admin/catalog/categories{{with .CatalogEditingCategory}}{{if .ID}}/{{.ID}}{{end}}{{end}}" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
+    <header class="drawer-heading"><h2 id="category-drawer-title" data-dialog-title>{{if and .CatalogEditingCategory .CatalogEditingCategory.ID}}{{t $s "catalog.edit_category"}}{{else}}{{t $s "catalog.category_add"}}{{end}}</h2><div class="drawer-heading-actions"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button>{{if .CanManageCatalog}}<button class="auto" type="submit">{{t $s "common.save"}}</button>{{end}}</div></header>
+    <div class="drawer-body stack">
+    {{if .Error}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">{{if eq .CatalogFlow "asset"}}<input type="hidden" name="flow" value="asset">{{end}}
-    <label>{{t $s "catalog.category_name"}}<input name="name" required maxlength="120" placeholder="{{t $s "catalog.category_placeholder"}}" data-dialog-initial-focus></label>
-    <label>{{t $s "catalog.icon"}}<select name="icon_key" required>{{range .CategoryIcons}}<option value="{{.Key}}">{{iconLabel $s .Key}}</option>{{end}}</select></label>
-    <div class="drawer-actions"><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.cancel"}}" title="{{t $s "common.cancel"}}">{{template "ui-icon" "close"}}</button><button class="icon-button management-primary" type="submit" aria-label="{{t $s "common.save"}}" title="{{t $s "common.save"}}">{{template "ui-icon" "save"}}</button></div>
+    <label>{{t $s "catalog.category_name"}}<input name="name" {{if not .CanManageCatalog}}disabled{{end}} value="{{with .CatalogEditingCategory}}{{.Name}}{{end}}" required maxlength="120" placeholder="{{t $s "catalog.category_placeholder"}}" data-dialog-initial-focus></label>
+    <label>{{t $s "catalog.icon"}}<select name="icon_key" {{if not .CanManageCatalog}}disabled{{end}} required>{{range .CategoryIcons}}<option value="{{.Key}}"{{if $.CatalogEditingCategory}}{{if eq $.CatalogEditingCategory.IconKey .Key}} selected{{end}}{{end}}>{{iconLabel $s .Key}}</option>{{end}}</select></label>
+    </div>
   </form>
-</dialog>
+</dialog>{{end}}
 
-<dialog class="drawer" id="model-drawer" aria-labelledby="model-drawer-title">
+{{block "fragment-model-drawer" .}}{{$s := .Strings}}
+<dialog data-management-drawer class="drawer" id="model-drawer" aria-labelledby="model-drawer-title">
   <div class="drawer-panel model-drawer-panel">
-    <header class="drawer-heading"><div><p class="eyebrow">{{t $s "title.catalog"}}</p><h2 id="model-drawer-title" data-dialog-title>{{t $s "catalog.add_model"}}</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.close"}}" title="{{t $s "common.close"}}">{{template "ui-icon" "close"}}</button></header>
-    <form id="model-form" class="stack" action="/admin/catalog/models" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
+    <header class="drawer-heading"><h2 id="model-drawer-title" data-dialog-title>{{if .CatalogEditingModel}}{{t $s "catalog.edit_model"}}{{else}}{{t $s "catalog.add_model"}}{{end}}</h2><div class="drawer-heading-actions"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button>{{if .CanManageCatalog}}<button class="auto" type="submit" form="model-form" {{if not .Categories}}disabled{{end}}>{{t $s "common.save"}}</button>{{end}}</div></header>
+    <form id="model-form" class="stack model-drawer-body" action="/admin/catalog/models{{with .CatalogEditingModel}}/{{.ID}}{{end}}" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">{{if eq .CatalogFlow "asset"}}<input type="hidden" name="flow" value="asset">{{end}}
-      <div class="form-field"><div class="field-heading"><label for="model-category">{{t $s "catalog.model_category"}}</label><button class="icon-button" type="button" data-dialog-open="category-drawer" data-title="{{t $s "catalog.category_add"}}" data-action="/admin/catalog/categories" aria-label="{{t $s "catalog.category_add"}}" title="{{t $s "catalog.category_add"}}">{{template "ui-icon" "plus"}}</button></div><select id="model-category" name="category_id" required data-dialog-initial-focus><option value="">{{t $s "common.select"}}</option>{{range .Categories}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div>
-      <label>{{t $s "catalog.model_name"}}<input name="name" required maxlength="160" placeholder="{{t $s "catalog.model_placeholder"}}"></label>
-      <div class="drawer-actions"><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.cancel"}}" title="{{t $s "common.cancel"}}">{{template "ui-icon" "close"}}</button><button class="icon-button management-primary" type="submit" {{if not .Categories}}disabled{{end}} aria-label="{{t $s "common.save"}}" title="{{t $s "common.save"}}">{{template "ui-icon" "save"}}</button></div>
-    </form>
-    <section class="model-media-form" data-model-library hidden><h3>{{t $s "catalog.model_3d"}}</h3><p class="muted">{{t $s "tags.precedence"}}</p><a class="icon-button" data-model-library-link href="/admin/3d" aria-label="{{t $s "resource.manage_binding"}}" title="{{t $s "resource.manage_binding"}}">{{template "ui-icon" "link"}}</a></section>
+      <div class="model-identity-fields">
+        <div class="form-field"><label for="model-category">{{t $s "catalog.model_category"}}</label><div class="model-category-control"><select id="model-category" name="category_id" {{if not .CanManageCatalog}}disabled{{end}} required data-dialog-initial-focus><option value="">{{t $s "common.select"}}</option>{{range .Categories}}<option value="{{.ID}}"{{if $.CatalogEditingModel}}{{if eq $.CatalogEditingModel.CategoryID .ID}} selected{{end}}{{end}}>{{.Name}}</option>{{end}}</select><button class="icon-button" type="button" data-dialog-open="category-drawer" data-title="{{t $s "catalog.category_add"}}" data-action="/admin/catalog/categories" aria-label="{{t $s "catalog.category_add"}}" title="{{t $s "catalog.category_add"}}">{{template "ui-icon" "plus"}}</button><a class="icon-button" data-drawer-target="category-drawer" data-drawer-field="category_id" href="/admin/catalog/categories/{{with .CatalogEditingModel}}{{.CategoryID}}{{else}}new{{end}}" aria-label="{{t $s "catalog.edit_category"}}" title="{{t $s "catalog.edit_category"}}">{{template "ui-icon" "edit"}}</a></div></div>
+        <label>{{t $s "catalog.model_name"}}<input name="name" {{if not .CanManageCatalog}}disabled{{end}} value="{{with .CatalogEditingModel}}{{.Name}}{{end}}" required maxlength="160" placeholder="{{t $s "catalog.model_placeholder"}}"></label>
+      </div>
+    <section class="model-media-form" data-model-library {{if not .CatalogEditingModel}}hidden{{end}}><h3>{{t $s "catalog.model_3d"}}</h3><p class="muted">{{t $s "tags.precedence"}}</p><a class="icon-button" data-model-library-link data-drawer-target="binding-editor" href="{{with .CatalogEditingModel}}/admin/catalog/models/{{.ID}}/binding{{end}}" aria-label="{{t $s "resource.manage_binding"}}" title="{{t $s "resource.manage_binding"}}">{{template "ui-icon" "link"}}</a></section>
     {{template "model-tags" .}}
+    </form>
   </div>
-</dialog>
+</dialog>{{end}}
 
 
 {{end}}
 
 {{define "model-tags"}}{{$s := .Strings}}
-<section data-model-tags hidden><h3>{{t $s "tags.allowed"}}</h3><p class="muted">{{t $s "tags.allowed_help"}}</p><a href="/admin/tags">{{t $s "tags.title"}}</a>
+<section data-model-tags {{if not .CatalogEditingModel}}hidden{{end}}><h3>{{t $s "tags.allowed"}}</h3><p class="muted">{{t $s "tags.allowed_help"}}</p>
 {{range .ModelTagEditors}}{{$model := .}}
-<p data-model-tag-group="{{.ModelID}}" hidden><a href="/admin/catalog/models/{{.ModelID}}/appearance">{{t $s "appearance.title"}}</a></p>
-<form class="stack model-tag-editor" action="/admin/catalog/models/{{.ModelID}}/tags" method="post" data-model-tag-group="{{.ModelID}}" hidden data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
-<input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-{{if and $.Error $.CatalogEditingModel}}{{if eq $.CatalogEditingModel.ID .ModelID}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{$.Error}}</p>{{if $.TagReferences}}<section><h4>{{t $s "tags.references"}}</h4><ul>{{range $.TagReferences}}<li>{{if eq .Kind "asset"}}<a href="/assets/{{.TargetID}}/edit">{{t $s "resource.kind.asset"}} · {{.TargetID}}</a>{{else if eq .Kind "appearance"}}<a href="/admin/catalog/models/{{.ModelID}}/appearance?rule_id={{.TargetID}}">{{t $s "tags.ref.appearance"}} · {{.TargetID}}</a>{{end}}</li>{{end}}</ul></section>{{end}}{{end}}{{end}}
+{{$active := and $.CatalogEditingModel (eq $.CatalogEditingModel.ID .ModelID)}}
+<p data-model-tag-group="{{.ModelID}}"{{if not $active}} hidden{{end}}><a data-drawer-target="appearance-editor" href="/admin/catalog/models/{{.ModelID}}/appearance">{{t $s "appearance.title"}}</a></p>
+<fieldset class="stack model-tag-editor" data-model-tag-group="{{.ModelID}}"{{if not $active}} hidden disabled{{else if not $.CanManageCatalog}} disabled{{end}}>
+<input type="hidden" name="model_configuration" value="1">
+{{if and $.Error $.CatalogEditingModel}}{{if eq $.CatalogEditingModel.ID .ModelID}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{$.Error}}</p>{{if $.TagReferences}}<section><h4>{{t $s "tags.references"}}</h4><ul>{{range $.TagReferences}}<li>{{if eq .Kind "asset"}}<a data-drawer-target="asset-detail" href="/assets/{{.TargetID}}">{{t $s "resource.kind.asset"}} · {{.TargetID}}</a>{{else if eq .Kind "appearance"}}<a data-drawer-target="appearance-editor" href="/admin/catalog/models/{{.ModelID}}/appearance?rule_id={{.TargetID}}">{{t $s "tags.ref.appearance"}} · {{.TargetID}}</a>{{end}}</li>{{end}}</ul></section>{{end}}{{end}}{{end}}
+<div class="stack" data-model-related-tags>{{range .Dimensions}}<div><a data-drawer-target="tag-editor" href="/admin/tags?view=types&amp;edit={{.ID}}&amp;dialog=tag-editor">{{.Name}}</a> · <a data-drawer-target="tag-editor" href="/admin/tags?type_id={{.ID}}&amp;dialog=tag-editor">{{t $s "tags.add_value"}}</a>{{range .Choices}} · <a data-drawer-target="tag-editor" href="/admin/tags?edit={{.ID}}&amp;dialog=tag-editor">{{.Name}}</a>{{end}}</div>{{end}}</div>
 <div data-transfer-source>
 {{range .Dimensions}}<fieldset data-tag-dimension="{{.ID}}" data-appearance="{{.Appearance}}"><legend>{{.Name}}</legend><div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" data-label="{{.Name}}" data-enabled="{{.Enabled}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div>
 <label>{{t $s "tags.appearance_override"}}<select name="appearance_{{.ID}}"><option value="" {{if eq .Override ""}}selected{{end}}>{{t $s "tags.inherit_type"}} · {{if .Appearance}}{{t $s "tags.yes"}}{{else}}{{t $s "tags.no"}}{{end}}</option><option value="yes" {{if eq .Override "yes"}}selected{{end}}>{{t $s "tags.yes"}}</option><option value="no" {{if eq .Override "no"}}selected{{end}}>{{t $s "tags.no"}}</option></select></label></fieldset>{{else}}<p class="muted">{{t $s "tags.empty"}}</p>{{end}}
 </div>
-<div class="drawer-actions"><button class="icon-button management-primary" type="submit" aria-label="{{t $s "tags.save_allowed"}}" title="{{t $s "tags.save_allowed"}}">{{template "ui-icon" "save"}}</button></div>
-</form>{{end}}</section>
+</fieldset>{{end}}</section>
 {{end}}

@@ -20,8 +20,10 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 |---|---|
 | `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |
 | `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, inherited GLB viewer, code-defined zh-CN/en language packs, account menu, semantic light/dark themes with user accent palettes, shared catalog drawers, inline custom lifecycle event types, and progressively disclosed FX evidence forms |
-| `internal/web/resources.go`, `resource_tags.go`, `resources_i18n.go`, `templates/resources.html`, `templates/resource.html` | Paged 3D library, on-demand preview, shared attribution, descriptive tags/categories, current reference navigation and deletion retry |
+| `internal/web/resources.go`, `resource_tags.go`, `resources_i18n.go`, `templates/resources.html`, `templates/resource.html` | Paged 3D library with shared list backdrop and wide preview/edit drawer; atomic metadata/tag save, attribution, reference navigation and deletion retry |
+| `internal/web/shared_rename.test.mjs` | Conditional shared-name confirmation, no-JS confirmation fallback and unified resource editor form coverage |
 | `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons; consistent compact catalog/tag/resource/event-type row actions and drawer controls; accessible-label/layout regression checks |
+| `internal/web/model_configuration.go`, `model_configuration.test.mjs`, `templates/catalog_drawers.html` | Unified model metadata/tag/appearance submission and transactional save; management drawers share `data-management-drawer` fixed heading actions and independent scrolling, covered by `management_ui.test.mjs` |
 | `internal/mcp/` | Semantic MCP tool transport |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
@@ -89,6 +91,12 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 | `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → typed model allowances → direct items with different capacity tags sharing an appearance GLB → dedicated override/inheritance → foreign purchase → repair correction → sale scenario on both databases |
 
 ## Read paths by task
+
+Asset 3D selection: `templates/asset_form.html` and `static/asset-tags.js` provide
+a native searchable resource choice and child preview. `SaveSpecificationAsset.ResourceID`
+commits the optional override alongside metadata/tags through the specification transaction;
+nil preserves existing bindings and empty restores inheritance. Shared Store conformance
+covers atomic rollback; Web transport retains ordinary form and drawer save paths.
 
 | Task | Start here | Then read only |
 |---|---|---|
@@ -158,6 +166,17 @@ Resource deletion -> reject references -> pending deletion -> BlobStore.Delete -
 Do not list every file. List stable entry points, ports, and ownership boundaries. Once code exists, use `rg` inside the selected path rather than loading the whole repository.
 
 ## Unified settings navigation
+
+Associated details use `internal/web/drawer_transport.go` (`X-Assetloop-Drawer`
+fragment negotiation and semantic save responses) and `static/drawer-stack.js`
+(ordered modal stack, independent submissions, in-place related-field updates,
+cancel/race guards and responsive push). Existing application authorization and
+CSRF checks remain mandatory. `drawer_catalog.go`, `drawer_assets.go` and
+`drawer_resources.go` provide category details, asset save transport and target
+3D binding details; `templates/resource_binding.html` is the binding editor, not
+a management-list drawer. `drawer_*_test.go` and `drawer_stack.test.mjs` cover
+the negotiated endpoints and stack behavior. Viewers expose container-scoped
+initialization and receive `drawer:visibility` / `drawer:dispose` events.
 
 `internal/web/settings.go` owns the authenticated `/settings` landing and module
 classification. Existing catalog, tag, 3D and lifecycle-type routes share the

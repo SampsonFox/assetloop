@@ -30,7 +30,7 @@ func (s *Store) CreateModel(ctx context.Context, model domain.ProductModel) erro
 }
 
 func (s *Store) UpdateModel(ctx context.Context, model domain.ProductModel) error {
-	count, err := sqlitedb.New(s.db).UpdateModel(ctx, sqlitedb.UpdateModelParams{CategoryID: model.CategoryID, Name: model.Name, TenantID: model.TenantID, ID: model.ID})
+	count, err := s.queries().UpdateModel(ctx, sqlitedb.UpdateModelParams{CategoryID: model.CategoryID, Name: model.Name, TenantID: model.TenantID, ID: model.ID})
 	return updatedRow(count, err)
 }
 
@@ -176,7 +176,7 @@ func (s *Store) ListAssetsWithSummary(ctx context.Context, tenantID string, opts
 
 func (s *Store) ListModelsPage(ctx context.Context, tenantID string, opts application.ModelListOptions) (application.ModelListResult, error) {
 	rows, err := sqlitedb.New(s.db).ListModelsPage(ctx, sqlitedb.ListModelsPageParams{
-		TenantID: tenantID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID,
+		TenantID: tenantID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID, TagFilter: opts.TagID,
 		SortKey: opts.Sort, SortDirection: opts.Direction,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
 	})

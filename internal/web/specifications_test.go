@@ -120,6 +120,38 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	allowed := url.Values{"csrf_token": {csrf.Value}, "tag_ids": {tag.ID}, "appearance_" + kind.ID: {"no"}}
+	t.Run("unified model drawer POST preserves draft and saves all fields", func(t *testing.T) {
+		m, err := catalog.CreateModel(ctx, owner, application.CreateModel{CategoryID: category.ID, Name: "Drawer HTTP"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := "/admin/catalog/models/" + m.ID
+		form := url.Values{"model_configuration": {"1"}, "category_id": {category.ID}, "name": {"Drawer changed"}, "tag_ids": {tag.ID}, "appearance_" + kind.ID: {"yes"}}
+		if got := request(t, handler, "POST", path, form, cookies); got.Code != 403 {
+			t.Fatal("unified save skipped CSRF")
+		}
+		form.Set("csrf_token", csrf.Value)
+		form.Set("appearance_"+kind.ID, "invalid")
+		got := request(t, handler, "POST", path, form, cookies)
+		if got.Code != 422 || !strings.Contains(got.Body.String(), `data-name="Drawer changed"`) || !strings.Contains(got.Body.String(), `data-dialog-initial-open`) {
+			t.Fatalf("lost draft: %d %s", got.Code, got.Body.String())
+		}
+		unchanged, err := spec.Model(ctx, owner, m.ID)
+		if err != nil || unchanged.Name != m.Name {
+			t.Fatal("partial save on failure")
+		}
+		form.Set("appearance_"+kind.ID, "yes")
+		got = request(t, handler, "POST", path, form, cookies)
+		if got.Code != 303 || got.Header().Get("Location") != "/admin/catalog" {
+			t.Fatalf("save: %d %s", got.Code, got.Body.String())
+		}
+		saved, err := spec.Model(ctx, owner, m.ID)
+		state, stateErr := spec.Snapshot(ctx, owner)
+		definition := state.Model(owner.TenantID, m.ID)
+		if err != nil || stateErr != nil || saved.Name != "Drawer changed" || len(definition.AllowedTagIDs) != 1 || definition.AllowedTagIDs[0] != tag.ID || !definition.AppearanceOverrides[kind.ID] {
+			t.Fatalf("incomplete save: %+v %+v", saved, definition)
+		}
+	})
 	response = request(t, handler, "POST", "/admin/catalog/models/"+model.ID+"/tags", allowed, cookies)
 	if response.Code != 303 {
 		t.Fatalf("model allowance: %d %s", response.Code, response.Body.String())
@@ -201,7 +233,7 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 	if response.Code != 422 || !strings.Contains(response.Body.String(), "请先处理引用") {
 		t.Fatal("used allowance removal accepted")
 	}
-	if !strings.Contains(response.Body.String(), `href="/assets/`+assetID+`/edit"`) || !strings.Contains(response.Body.String(), "data-dialog-initial-open") {
+	if !strings.Contains(response.Body.String(), `data-drawer-target="asset-detail" href="/assets/`+assetID+`"`) || !strings.Contains(response.Body.String(), "data-dialog-initial-open") {
 		t.Fatal("allowance error must open the editor and link to its blocking references")
 	}
 	page = request(t, handler, "GET", "/admin/catalog?"+url.Values{"q": {"no model matches this"}, "dialog": {"model-drawer"}, "edit_model_id": {model.ID}}.Encode(), nil, cookies)

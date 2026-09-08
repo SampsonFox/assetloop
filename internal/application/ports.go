@@ -57,6 +57,7 @@ type AssetListResult struct {
 type ModelListOptions struct {
 	Query      string
 	CategoryID string
+	TagID      string
 	Sort       string
 	Direction  string
 	Page       int

@@ -1,15 +1,20 @@
-{{define "content"}}{{$s := .Strings}}
+{{define "content"}}{{template "asset-detail-content" .}}{{end}}
+{{define "fragment-asset-detail"}}{{$s := .Strings}}
+<dialog data-management-drawer class="drawer" id="asset-detail" aria-labelledby="asset-detail-title"><div class="drawer-panel"><header class="drawer-heading"><h2 id="asset-detail-title">{{.Asset.DisplayName}}</h2><div class="drawer-heading-actions"><button type="button" class="secondary auto" data-dialog-close>{{t $s "common.close"}}</button>{{if .CanManageCatalog}}<a class="button auto" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor">{{t $s "assets.edit"}}</a>{{end}}</div></header><div class="drawer-body">{{template "asset-detail-profile" .}}</div></div></dialog>
+{{end}}
+{{define "asset-detail-content"}}{{$s := .Strings}}
 <div class="page-heading asset-detail-heading">
   <h1>{{.Asset.DisplayName}}</h1>
 	<div class="heading-actions asset-detail-actions">
 		<a class="icon-button" href="/" aria-label="{{t $s "common.back_assets"}}" title="{{t $s "common.back_assets"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
 		</a>
-		{{if .CanManageCatalog}}<a class="icon-button" href="/assets/{{.Asset.ID}}/edit" aria-label="{{t $s "assets.edit"}}" title="{{t $s "assets.edit"}}">
+		{{if .CanManageCatalog}}<a class="icon-button" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor" aria-label="{{t $s "assets.edit"}}" title="{{t $s "assets.edit"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>
 		</a>{{end}}
 	</div>
 </div>
+{{block "asset-detail-profile" .}}{{$s := .Strings}}
 <section class="card asset-profile">
   <figure class="asset-product-visual{{if .Model3D}} has-model{{end}}"{{if .Model3D}} data-model-viewer data-model-loaded="{{t $s "resource.loaded"}}" data-model-error="{{t $s "resource.preview_error"}}" data-model-url="/assets/{{.Asset.ID}}/model.glb?v={{.Model3D.SHA256}}"{{end}}>
     <div class="asset-model-fallback" data-model-fallback>
@@ -19,7 +24,6 @@
     <canvas class="asset-model-canvas" data-model-canvas aria-label="{{t $s "asset.model_3d_label"}}" tabindex="0"></canvas>
     <div class="asset-model-status" data-model-status role="status">{{t $s "asset.model_3d_loading"}}</div>
     <div class="asset-model-controls"><span>{{t $s "resource.viewer_hint"}}</span><button class="icon-button" type="button" data-model-rotate aria-pressed="true" aria-label="{{t $s "resource.auto_rotate"}}" title="{{t $s "resource.auto_rotate"}}"><svg class="model-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg><svg class="model-play" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg></button><button class="icon-button" type="button" data-model-reset aria-label="{{t $s "asset.model_3d_reset"}}" title="{{t $s "asset.model_3d_reset"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2.6 8.4M3 4v6h6"/></svg></button></div>
-    <script type="module" src="/static/asset-model-viewer.js"></script>
     {{end}}
   </figure>
   <div class="asset-profile-content">
@@ -27,8 +31,8 @@
     <h2>{{.Asset.Model}}</h2>
     <p class="asset-variant-summary">{{.Asset.TagSummary}}</p>
     <dl class="asset-details-grid">
-      <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{.Asset.Category}}</dd></div>
-      <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{.Asset.Model}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "asset.category"}}</dt><dd>{{if .CanManageCatalog}}<a href="/admin/catalog/categories/{{.Asset.CategoryID}}" data-drawer-target="category-drawer">{{.Asset.Category}}</a>{{else}}{{.Asset.Category}}{{end}}</dd></div>
+      <div class="asset-detail"><dt>{{t $s "asset.model"}}</dt><dd>{{if .CanManageCatalog}}<a href="/admin/catalog?dialog=model-drawer&amp;edit_model_id={{.Asset.ModelID}}" data-drawer-target="model-drawer">{{.Asset.Model}}</a>{{else}}{{.Asset.Model}}{{end}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "tags.values"}}</dt><dd>{{if .Asset.TagSummary}}{{.Asset.TagSummary}}{{else}}—{{end}}</dd></div>
       <div class="asset-detail"><dt>{{t $s "assets.serial_number"}}</dt><dd>{{if .Asset.SerialNumber}}{{.Asset.SerialNumber}}{{else}}—{{end}}</dd></div>
 
@@ -39,6 +43,8 @@
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>
 </section>
+{{end}}
+{{if .Model3D}}<script type="module" src="/static/asset-model-viewer.js"></script>{{end}}
 <div class="asset-cost-layout section-gap">
 {{template "cost_dashboard" .}}
 <section class="compact-timeline" id="lifecycle-timeline" data-loading="{{t $s "timeline.loading"}}" data-updated="{{t $s "timeline.updated"}}" data-failed="{{t $s "timeline.failed"}}" data-session="{{t $s "timeline.session"}}">
@@ -78,7 +84,7 @@
     {{if .Error}}<p class="error wide" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="request_key" value="{{.EventForm.RequestKey}}">
-    <div class="form-field"><div class="field-heading"><a href="/admin/event-types">{{t $s "types.manage"}}</a><label for="event-type-select">{{t $s "asset.event_type"}}</label><button class="link-button" type="button" data-dialog-open="event-type-drawer" data-title="{{t $s "asset.event_type_create"}}" data-action="/admin/event-types" aria-controls="event-type-drawer">{{t $s "asset.event_type_add"}}</button></div><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}{{if .Enabled}}<option value="{{.ID}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .ID}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}{{end}}</select></div>
+    <div class="form-field"><label for="event-type-select">{{t $s "asset.event_type"}}</label><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}{{if .Enabled}}<option value="{{.ID}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .ID}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}{{end}}{{if .CanManageLifecycle}}<option value="__create__" data-event-type-create hidden disabled>{{t $s "asset.event_type_add"}}…</option>{{end}}</select>{{if .CanManageLifecycle}}<noscript><a href="/admin/event-types?dialog=event-type-manage">{{t $s "asset.event_type_add"}}</a></noscript>{{end}}</div>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
     <div class="form-field" data-money-field>
       <label for="event-amount">{{t $s "asset.amount"}}</label>

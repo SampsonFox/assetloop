@@ -8,6 +8,18 @@ const dimensions=()=>[
  {id:'storage',name:'储存',appearance:false,override:'',choices:[{id:'128',enabled:true},{id:'256',enabled:true,selected:true}]},
  {id:'cpu',name:'CPU 型号',appearance:false,override:'',choices:[{id:'a19',enabled:true}]},
 ];
+test('transfer names and detail actions stay in one non-wrapping row',()=>{
+ const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+ const rows=[...css.matchAll(/^\.transfer-row\s*\{([^}]+)\}/gm)];
+ const choices=[...css.matchAll(/\.transfer-row \.transfer-choice\s*\{([^}]+)\}/g)];
+ assert.match(rows.at(-1)[1],/flex-wrap:nowrap/);
+ assert.match(choices.at(-1)[1],/flex:0 1 auto/);
+ assert.match(choices.at(-1)[1],/justify-content:flex-start/);
+ assert.match(choices.at(-1)[1],/width:auto/);
+ assert.match(css,/\.transfer-detail\s*\{[^}]*flex:0 0 auto/);
+ assert.match(css,/\.transfer-group-title::after\s*\{[^}]*border-top:1px solid var\(--line\)/);
+ assert.match(css,/\.transfer-group > \.transfer-row\s*\{[^}]*padding-inline-start:8px/);
+});
 test('dynamic dimensions activate only after choosing a value; defaults are inherited',()=>{
  const s=createTagTransferState(dimensions());assert.deepEqual(s.active().map(d=>d.id),['color','storage']);
  s.moveTags(['a19'],true);assert.deepEqual(s.active().map(d=>d.id),['color','storage','cpu']);
@@ -40,11 +52,12 @@ test('native form retains stable IDs and override fields without JavaScript',()=
  const html=readFileSync(new URL('./templates/catalog_drawers.html',import.meta.url),'utf8');
  assert.match(html,/data-transfer-source/);assert.match(html,/data-tag-dimension="{{.ID}}"/);
  assert.match(html,/name="tag_ids"/);assert.match(html,/name="appearance_{{.ID}}"/);
- assert.match(html,/tags.save_allowed/);
+ assert.match(html,/name="model_configuration" value="1"/);
+ assert.match(html,/form="model-form"/);
 });
 test('enhancement supports repeated settings loads without duplicate widgets, search does not submit',()=>{
  const js=readFileSync(new URL('./static/tag-transfer.js',import.meta.url),'utf8');
- assert.match(js,/initialized.has\(form\)/);assert.match(js,/settings:loaded/);
+ assert.match(js,/initialized.has\(editor\)/);assert.match(js,/settings:loaded/);
  assert.match(js,/event.key==='Enter'\) event.preventDefault\(\)/);
  assert.match(js,/form.dataset.dirty=String\(dirty\)/);
  assert.match(js,/source.hidden=true/);

@@ -19,6 +19,10 @@ func (s *Server) saveTaggedAsset(w http.ResponseWriter, r *http.Request, actor a
 		return
 	}
 	cmd := application.SaveSpecificationAsset{ID: id, ModelID: r.PostForm.Get("model_id"), DisplayName: r.PostForm.Get("display_name"), SerialNumber: r.PostForm.Get("serial_number"), PurchaseChannel: r.PostForm.Get("purchase_channel"), Notes: r.PostForm.Get("notes")}
+	if r.PostForm.Has("resource_id") {
+		value := r.PostForm.Get("resource_id")
+		cmd.ResourceID = &value
+	}
 	if values, present := r.PostForm["tag_ids"]; present {
 		cmd.TagIDs = []string{}
 		for _, value := range values {

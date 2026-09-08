@@ -2,6 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
+test('asset drawers stack preview above usable fields independent of viewport width',()=>{
+  const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+  assert.match(css,/dialog \.asset-profile\s*\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css,/dialog \.asset-product-visual\s*\{[^}]*min-height:0[^}]*height:180px/);
+  assert.match(css,/dialog \.asset-profile-content\s*\{[^}]*padding:24px 0 0/);
+  assert.match(css,/dialog \.asset-editor-fields\s*\{[^}]*repeat\(auto-fit,minmax\(min\(100%,220px\),1fr\)\)/);
+  assert.match(css,/dialog\[data-drawer-kind="asset-editor"\] > \.drawer-panel\s*\{[^}]*width:min\(720px,100%\)/);
+});
+
 test('asset detail uses a compact alias-only heading without changing other pages',()=>{
   const template=readFileSync(new URL('./templates/asset.html',import.meta.url),'utf8');
   const header=template.split('<section class="card asset-profile">')[0];

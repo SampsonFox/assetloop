@@ -1,0 +1,18 @@
+{{define "content"}}<section class="page-heading"><h2>{{t .Strings "resource.binding"}} · {{.BindingName}}</h2>{{if .CanManageCatalog}}<button class="auto" type="submit" form="binding-form">{{t .Strings "common.save"}}</button>{{end}}</section>{{template "resource-binding-body" .}}{{end}}
+{{define "fragment-binding-editor"}}{{$s := .Strings}}
+<dialog data-management-drawer class="drawer" id="binding-editor" aria-labelledby="binding-editor-title"><div class="drawer-panel"><header class="drawer-heading"><h2 id="binding-editor-title">{{t $s "resource.binding"}} · {{.BindingName}}</h2><div class="drawer-heading-actions"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button>{{if .CanManageCatalog}}<button class="auto" type="submit" form="binding-form">{{t $s "common.save"}}</button>{{end}}</div></header><div class="drawer-body stack">{{template "resource-binding-body" .}}</div></div></dialog>
+{{end}}
+{{define "resource-binding-body"}}{{$s := .Strings}}
+{{if .Error}}<p class="error" role="alert" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
+<p>{{if .Binding.ResourceID}}{{t $s "resource.direct"}}{{else}}{{t $s "resource.inherited"}}{{end}} · {{if .BoundResource}}<a data-drawer-target="resource-editor" href="/admin/3d/{{.BoundResource.ID}}">{{.BoundResource.Name}}</a>{{else}}{{t $s "common.none"}}{{end}}</p>
+<p class="muted">{{t $s "tags.precedence"}}</p>
+<form class="asset-filters" method="get" action="{{.ReturnTo}}"><label class="asset-search">{{t $s "assets.search"}}<input type="search" name="q" value="{{.TableQuery}}" placeholder="{{t $s "resource.search"}}"></label><button class="icon-button" type="submit" aria-label="{{t $s "assets.filter"}}" title="{{t $s "assets.filter"}}">{{template "ui-icon" "search"}}</button></form>
+{{if .CanManageCatalog}}<form id="binding-form" class="stack" method="post" action="{{.ReturnTo}}" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+<a class="link-button" data-drawer-target="resource-upload" data-drawer-field="resource_id" href="/admin/3d?dialog=resource-upload">{{t $s "resource.upload"}}</a>{{end}}
+<div class="stack" data-drawer-query-results="candidates">
+{{if .CanManageCatalog}}<label>{{t $s "resource.name"}}<select name="resource_id" data-drawer-query-select="resource_id"><option value="" {{if not .Binding.ResourceID}}selected{{end}}>{{t $s "resource.unbind"}}</option>{{if .Binding.ResourceID}}<option value="{{.Binding.ResourceID}}" selected>{{.BoundResource.Name}} · {{t $s "resource.current"}}</option>{{end}}{{range .Resources}}{{if and (eq .Status "ready") (ne .ID $.Binding.ResourceID)}}<option value="{{.ID}}">{{.Name}}</option>{{end}}{{end}}</select></label>{{end}}
+{{if .Resources}}<ul class="appearance-rules">{{range .Resources}}<li><a data-drawer-target="resource-editor" href="/admin/3d/{{.ID}}">{{.Name}}</a>{{if ne .Status "ready"}} · {{t $s "resource.pending"}}{{end}}</li>{{end}}</ul>{{else}}<p class="empty-inline">{{t $s "resource.empty"}}</p>{{end}}
+{{if gt .TableTotalPages 1}}<nav class="pagination" aria-label="{{t $s "resource.pagination"}}"><span>{{.TablePage}} / {{.TableTotalPages}}</span><div>{{if .TablePreviousURL}}<a data-drawer-target="binding-editor" href="{{.TablePreviousURL}}">{{t $s "assets.previous"}}</a>{{end}}{{if .TableNextURL}}<a data-drawer-target="binding-editor" href="{{.TableNextURL}}">{{t $s "assets.next"}}</a>{{end}}</div></nav>{{end}}
+</div>
+{{if .CanManageCatalog}}</form>{{end}}
+{{end}}

@@ -1,8 +1,14 @@
-{{define "content"}}{{$s := .Strings}}
+{{define "content"}}{{template "asset-editor-heading" .}}{{template "asset-editor-content" .}}{{template "asset-editor-actions" .}}{{template "catalog-drawers" .}}<script src="/static/asset-tags.js" defer></script>{{end}}
+{{define "fragment-asset-editor"}}{{$s := .Strings}}{{if .CanManageCatalog}}
+<dialog data-management-drawer class="drawer" id="asset-editor" aria-labelledby="asset-editor-title"><div class="drawer-panel"><header class="drawer-heading"><h2 id="asset-editor-title">{{if .AssetFormEditing}}{{t $s "assets.edit"}}{{else}}{{t $s "assets.create"}}{{end}}</h2><div class="drawer-heading-actions"><button type="button" class="secondary auto" data-dialog-close>{{t $s "common.cancel"}}</button><button type="submit" class="auto" form="asset-form" {{if not .Models}}disabled{{end}}>{{t $s "common.save"}}</button></div></header><div class="drawer-body">{{template "asset-editor-content" .}}</div></div></dialog>
+{{end}}{{end}}
+{{define "asset-editor-heading"}}{{$s := .Strings}}
 <div class="page-heading">
   <div><p class="eyebrow">{{t $s "assets.concrete"}}</p><h1>{{if .AssetFormEditing}}{{t $s "assets.edit"}}{{else}}{{t $s "assets.create"}}{{end}}</h1></div>
-  <a href="{{if .AssetFormEditing}}/assets/{{.Asset.ID}}{{else}}/{{end}}">{{if .AssetFormEditing}}{{t $s "assets.back_detail"}}{{else}}{{t $s "common.back_assets"}}{{end}}</a>
+  <a data-drawer-cancel href="{{if .AssetFormEditing}}/assets/{{.Asset.ID}}{{else}}/{{end}}">{{if .AssetFormEditing}}{{t $s "assets.back_detail"}}{{else}}{{t $s "common.back_assets"}}{{end}}</a>
 </div>
+{{end}}
+{{define "asset-editor-content"}}{{$s := .Strings}}
 {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
 <section class="card asset-profile asset-editor-profile">
   <figure class="asset-product-visual">
@@ -13,7 +19,9 @@
     <form id="asset-form" class="asset-editor-form" action="{{.AssetFormAction}}" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
-      <div class="form-field"><div class="field-heading"><label for="asset-model">{{t $s "catalog.model_name"}}</label><button class="link-button" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_model"}}</button></div><select id="asset-model" name="model_id" required data-asset-model data-remove-tags-confirm="{{t $s "tags.remove_on_switch"}}"><option value="">{{t $s "common.select"}}</option>{{range .Models}}<option value="{{.ID}}"{{if eq .ID $.Asset.ModelID}} selected{{end}}>{{.CategoryName}} / {{.Name}}</option>{{end}}</select></div>
+      <div class="form-field"><div class="field-heading"><label for="asset-model">{{t $s "catalog.model_name"}}</label><a class="link-button" href="/admin/catalog?dialog=model-drawer" data-drawer-target="model-drawer">{{t $s "catalog.add_model"}}</a></div><select id="asset-model" name="model_id" required data-asset-model data-remove-tags-confirm="{{t $s "tags.remove_on_switch"}}"><option value="">{{t $s "common.select"}}</option>{{range .Models}}<option value="{{.ID}}" data-category-id="{{.CategoryID}}" data-category-name="{{.CategoryName}}"{{if eq .ID $.Asset.ModelID}} selected{{end}}>{{.CategoryName}} / {{.Name}}</option>{{end}}</select></div>
+      <a href="/admin/catalog?dialog=model-drawer&amp;edit_model_id={{.Asset.ModelID}}" data-drawer-target="model-drawer" data-drawer-field="model_id" data-drawer-query="edit_model_id" {{if not .Asset.ModelID}}hidden{{end}}>{{t $s "common.edit"}} · {{t $s "asset.model"}}</a>
+      {{$categoryID := ""}}{{$categoryName := ""}}{{range .Models}}{{if eq .ID $.Asset.ModelID}}{{$categoryID = .CategoryID}}{{$categoryName = .CategoryName}}{{end}}{{end}}<a href="/admin/catalog/categories/{{$categoryID}}" data-drawer-target="category-drawer" data-asset-category-reference {{if not $categoryID}}hidden{{end}}>{{$categoryName}}</a>
       <p class="muted">{{t $s "tags.item_optional"}}</p>
       <div data-asset-tag-fields>{{range .AssetTagEditors}}{{if eq .ModelID $.Asset.ModelID}}{{template "asset-tag-dimensions" (tagEditor . $s)}}{{end}}{{end}}</div>
       <p class="muted" role="status" data-tag-change-status></p>
@@ -25,18 +33,17 @@
         <label>{{t $s "assets.purchase_channel"}}<input name="purchase_channel" value="{{.Asset.PurchaseChannel}}" maxlength="160"></label>
         <label class="wide">{{t $s "common.notes"}}<textarea name="notes" maxlength="2000" rows="4">{{.Asset.Notes}}</textarea></label>
       </div>
-      <div class="editor-actions"><a class="button secondary auto" href="{{if .AssetFormEditing}}/assets/{{.Asset.ID}}{{else}}/{{end}}">{{t $s "common.cancel"}}</a><button class="auto" type="submit">{{t $s "common.save"}}</button></div>
+      <div class="form-field" data-asset-resource><label for="asset-resource">{{t $s "resource.asset_model"}}</label><div class="asset-resource-control"><select id="asset-resource" name="resource_id" data-resource-choice data-invalid-message="{{t $s "resource.choose_existing"}}"><option value="">{{t $s "resource.inherit_model"}}</option>{{range .Resources}}{{if eq .Status "ready"}}<option value="{{.ID}}" {{if eq $.Asset.Model3DResourceID .ID}}selected{{end}}>{{.Name}}</option>{{end}}{{end}}</select><button type="button" class="secondary auto" data-resource-preview hidden>{{t $s "resource.preview"}}</button></div></div>
     </form>
     {{else}}
     <div class="empty-inline"><strong>{{t $s "assets.no_types"}}</strong><p class="muted">{{t $s "assets.no_types_help"}}</p></div>
-    <button class="button auto" type="button" data-dialog-open="model-drawer" data-title="{{t $s "catalog.add_model"}}" data-action="/admin/catalog/models">{{t $s "catalog.add_model"}}</button>
+    <a class="button auto" href="/admin/catalog?dialog=model-drawer" data-drawer-target="model-drawer">{{t $s "catalog.add_model"}}</a>
     {{end}}
   </div>
 </section>
-{{if .AssetFormEditing}}<p><a class="button secondary" href="/admin/3d?kind=asset&amp;target={{.Asset.ID}}&amp;name={{.Asset.DisplayName}}">{{t $s "resource.manage_binding"}}</a></p>{{end}}
-{{template "catalog-drawers" .}}
-<script src="/static/asset-tags.js" defer></script>
 {{end}}
+
+{{define "asset-editor-actions"}}{{$s := .Strings}}{{if .Models}}<div class="editor-actions"><a class="button secondary auto" data-drawer-cancel href="{{if .AssetFormEditing}}/assets/{{.Asset.ID}}{{else}}/{{end}}">{{t $s "common.cancel"}}</a><button class="auto" type="submit" form="asset-form">{{t $s "common.save"}}</button></div>{{end}}{{end}}
 
 {{define "asset-tag-dimensions"}}{{$s := .Strings}}
 {{range .Editor.Dimensions}}<fieldset class="asset-tag-dimension"><legend>{{.Name}}</legend>{{if .Multiple}}<div class="tag-choices">{{range .Choices}}<label class="checkbox"><input type="checkbox" name="tag_ids" value="{{.ID}}" data-tag-name="{{.Name}}" {{if .Selected}}checked{{end}}>{{.Name}}{{if not .Enabled}} <span class="muted">{{t $s "types.disabled"}}</span>{{end}}</label>{{end}}</div>{{else}}<label><span class="visually-hidden">{{.Name}}</span><select name="tag_ids"><option value="">{{t $s "tags.not_selected"}}</option>{{range .Choices}}<option value="{{.ID}}" data-tag-name="{{.Name}}" {{if .Selected}}selected{{end}}>{{.Name}}{{if not .Enabled}} · {{t $s "types.disabled"}}{{end}}</option>{{end}}</select></label>{{end}}</fieldset>{{end}}

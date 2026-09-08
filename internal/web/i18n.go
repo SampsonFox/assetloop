@@ -50,7 +50,7 @@ var messages = map[application.Locale]map[string]string{
 		"catalog.edit_category": "编辑类别", "catalog.edit_model": "编辑型号",
 		"catalog.empty_heading": "还没有型号", "catalog.empty_help": "新增第一个型号，并为它选择或新增所属类别。",
 		"catalog.add_first_model": "新增第一个型号", "catalog.category_add": "新增类别", "catalog.category_name": "类别名称", "catalog.category_placeholder": "手机", "catalog.icon": "图标",
-		"catalog.model_category": "所属类别", "catalog.model_name": "型号名称", "catalog.model_placeholder": "iPhone 17 Pro",
+		"catalog.model_category": "所属类别", "catalog.model_name": "型号名称", "catalog.model_placeholder": "iPhone 17 Pro", "tags.all_values": "全部标签",
 		"catalog.search": "搜索型号", "catalog.search_placeholder": "搜索型号或类别…", "catalog.all_categories": "全部类别", "catalog.pagination": "型号分页", "catalog.count_suffix": "个型号", "catalog.no_results_heading": "没有匹配的型号", "catalog.no_results_help": "换个关键词或类别条件试试。",
 
 		"catalog.model_3d": "3D 模型", "catalog.model_3d_badge": "已有 3D", "catalog.model_3d_empty": "尚未上传 GLB", "catalog.model_3d_bound": "当前已绑定 GLB", "catalog.model_3d_file": "GLB 文件（最大 25 MiB）", "catalog.model_3d_source": "来源网址", "catalog.model_3d_author": "作者", "catalog.model_3d_license": "许可证", "catalog.model_3d_license_placeholder": "例如 CC BY 4.0", "catalog.model_3d_help": "不选择文件时只更新来源信息；新文件会替换当前模型。", "catalog.model_3d_save": "保存 3D 模型",
@@ -119,7 +119,7 @@ var messages = map[application.Locale]map[string]string{
 		"catalog.edit_category": "Edit category", "catalog.edit_model": "Edit model",
 		"catalog.empty_heading": "No models yet", "catalog.empty_help": "Add the first model and select or create its category.",
 		"catalog.add_first_model": "Add first model", "catalog.category_add": "Add category", "catalog.category_name": "Category name", "catalog.category_placeholder": "Phone", "catalog.icon": "Icon",
-		"catalog.model_category": "Category", "catalog.model_name": "Model name", "catalog.model_placeholder": "iPhone 17 Pro",
+		"catalog.model_category": "Category", "catalog.model_name": "Model name", "catalog.model_placeholder": "iPhone 17 Pro", "tags.all_values": "All tags",
 		"catalog.search": "Search models", "catalog.search_placeholder": "Search model or category…", "catalog.all_categories": "All categories", "catalog.pagination": "Model pagination", "catalog.count_suffix": "models", "catalog.no_results_heading": "No matching models", "catalog.no_results_help": "Try another keyword or category.",
 
 		"catalog.model_3d": "3D model", "catalog.model_3d_badge": "3D ready", "catalog.model_3d_empty": "No GLB uploaded", "catalog.model_3d_bound": "GLB currently attached", "catalog.model_3d_file": "GLB file (25 MiB maximum)", "catalog.model_3d_source": "Source URL", "catalog.model_3d_author": "Author", "catalog.model_3d_license": "License", "catalog.model_3d_license_placeholder": "For example, CC BY 4.0", "catalog.model_3d_help": "Leave the file empty to update attribution only. A new file replaces the current model.", "catalog.model_3d_save": "Save 3D model",

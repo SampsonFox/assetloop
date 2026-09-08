@@ -5,14 +5,21 @@ import {execFileSync} from 'node:child_process';
 import vm from 'node:vm';
 
 const source=process.env.TEST_OLD_DIALOG ? execFileSync('git',['-c',`safe.directory=${process.cwd().replaceAll('\\','/')}`,'show','HEAD:internal/web/static/app.js'],{encoding:'utf8'}) : readFileSync(new URL('./static/app.js',import.meta.url),'utf8');
+test('opening a lifecycle form retains its default type unless the opener supplies one',()=>{
+ const start=source.indexOf('      for (const [dataKey, fieldName] of Object.entries(fields))');
+ const loop=source.slice(start,source.indexOf('      if (dialog.id === "model-drawer")',start));
+ const field={value:'buy-id'},context={fields:{eventType:'event_type'},form:{elements:{namedItem:()=>field}},opener:{dataset:{}}};
+ vm.runInNewContext(loop,context); assert.equal(field.value,'buy-id');
+ context.opener.dataset.eventType='custom-id';vm.runInNewContext(loop,context);assert.equal(field.value,'custom-id');
+});
 function harness(forms) {
   const start=source.indexOf('  const formBaselines =');
   assert.notEqual(start,-1,'compare actual values to opening baseline, not input-event flags');
   const state=source.slice(start,source.indexOf('  // Use an in-page modal:',start));
   const close=source.slice(source.indexOf('  const closingDialogs ='),source.indexOf('  // Standalone editors'));
   let answer=true, prompts=0, resets=0, pending;
-  const dialog={open:true,querySelectorAll:()=>forms,close(){this.open=false;}};
-  const context={confirmDiscard:()=>{prompts++;return pending || Promise.resolve(answer);},discardDialogForms:()=>{resets++;}};
+  const dialog={open:true,dataset:{},querySelector:()=>null,hasAttribute:()=>false,querySelectorAll:()=>forms,close(){this.open=false;}};
+  const context={window:{},confirmDiscard:()=>{prompts++;return pending || Promise.resolve(answer);},discardDialogForms:()=>{resets++;}};
   vm.createContext(context);
   vm.runInContext(`${state}\n${close}\nthis.api={rememberDialogForms,updateDirty,dirtyForm,closeDialog};`,context);
   context.api.rememberDialogForms(dialog);
@@ -71,6 +78,23 @@ test('standalone editor navigation confirms once, preserves rejected drafts and 
   await context.leave('/');assert.equal(calls,2);
   assert.match(source,/if \(leavingPage\) return;/);
 });
+test('lifecycle dropdown creation restores the selection before opening a child and returns focus',()=>{
+  const block=source.slice(source.indexOf('  const chooseEventType ='),source.indexOf('  const syncEventTypeFields ='));
+  const select={value:'__create__',dataset:{selectedType:'buy-id'},selectedOptions:[{hasAttribute:()=>true}],isConnected:true,focus:()=>{focused=true;}};
+  let opened,focused=false;
+  const context={window:{assetloopDrawers:{open:link=>{assert.equal(select.value,'buy-id');opened=link;}}},select};
+  vm.createContext(context);vm.runInContext(`${block}\nthis.choose=chooseEventType;`,context);
+  assert.equal(context.choose(select),true);
+  assert.equal(opened.href,'/admin/event-types?dialog=event-type-manage');
+  assert.equal(opened.dataset.drawerTarget,'event-type-manage');
+  opened.focus();assert.equal(focused,true);
+  select.selectedOptions[0].hasAttribute=()=>false;select.value='new-id';
+  assert.equal(context.choose(select),false);assert.equal(select.value,'new-id');
+  const template=readFileSync(new URL('templates/asset.html',import.meta.url),'utf8');
+  assert.match(template,/data-event-type-create hidden disabled/);
+  assert.doesNotMatch(template,/types.view_selected|data-drawer-query="edit_type_id"/);
+});
+
 test('unchanged standalone editor leaves without asking',async()=>{
   const block=source.slice(source.indexOf('  const pageForms ='),source.indexOf("  document.addEventListener('click', (event) =>"));
   let navigated=false;

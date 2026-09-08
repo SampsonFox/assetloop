@@ -67,7 +67,22 @@
     syncFXPreview(select.form);
   };
 
+  const chooseEventType = (select) => {
+    if (!select.selectedOptions[0]?.hasAttribute('data-event-type-create')) return false;
+    select.value = select.dataset.selectedType || '';
+    window.assetloopDrawers?.open({
+      href: '/admin/event-types?dialog=event-type-manage',
+      dataset: {drawerTarget: 'event-type-manage'},
+      get isConnected() { return select.isConnected; },
+      focus: (options) => select.focus(options),
+    });
+    return true;
+  };
+
   const syncEventTypeFields = (select) => {
+    select.dataset.selectedType = select.value;
+    const create = select.querySelector('[data-event-type-create]');
+    if (create) { create.hidden = false; create.disabled = false; }
     const neutral = select.selectedOptions[0]?.dataset.cashflow === "neutral";
     const amount = select.form.elements.namedItem("amount");
     for (const field of select.form.querySelectorAll("[data-money-field]")) field.hidden = neutral;
@@ -112,7 +127,7 @@
     return forms.find((form) => form.dataset.dirty === 'true');
   };
   // Use an in-page modal: embedded browsers may suppress native confirm UI.
-  const confirmDiscard = (message) => new Promise((resolve) => {
+  const confirmDiscard = (message, rename = false) => new Promise((resolve) => {
     const english = document.documentElement.lang.startsWith('en');
     const prompt = document.createElement('dialog');
     prompt.className = 'discard-dialog';
@@ -121,6 +136,7 @@
     const title = document.createElement('h2');
     title.id = 'discard-dialog-title';
     title.textContent = english ? 'Discard changes?' : '放弃修改？';
+    if (rename) title.textContent = english ? 'Rename shared label?' : '确认修改共享名称？';
     const description = document.createElement('p');
     description.id = 'discard-dialog-message';
     description.textContent = message;
@@ -132,6 +148,7 @@
     const discard = document.createElement('button');
     discard.type = 'button'; discard.className = 'auto';
     discard.textContent = english ? 'Discard changes' : '放弃修改';
+    if (rename) discard.textContent = english ? 'Confirm and save' : '确认并保存';
     const finish = (accepted) => { prompt.close(); prompt.remove(); resolve(accepted); };
     stay.addEventListener('click', () => finish(false));
     discard.addEventListener('click', () => finish(true));
@@ -163,13 +180,15 @@
   };
   const closingDialogs = new WeakSet();
   const closeDialog = async (dialog) => {
+    if (dialog?.querySelector('form[data-submitting="true"]')) return false;
     if (!dialog?.open || closingDialogs.has(dialog)) return false;
     closingDialogs.add(dialog);
     try {
       const form = dirtyForm(dialog);
       if (form && !await confirmDiscard(form.dataset.discardConfirm)) return false;
-      discardDialogForms(dialog);
+      await window.assetloopDrawers?.beforeClose(dialog);
       dialog.close();
+      discardDialogForms(dialog);
       return true;
     } finally { closingDialogs.delete(dialog); }
   };
@@ -249,6 +268,7 @@
       const title = dialog.querySelector("[data-dialog-title]");
       if (title) title.textContent = opener.dataset.title;
       for (const [dataKey, fieldName] of Object.entries(fields)) {
+        if (fieldName === "event_type" && !opener.dataset[dataKey]) continue;
         const field = form.elements.namedItem(fieldName);
         if (field) field.value = opener.dataset[dataKey] || "";
       }
@@ -257,12 +277,13 @@
         const library = dialog.querySelector("[data-model-library]");
         if (library) {
           library.hidden = !modelId;
-          library.querySelector("[data-model-library-link]").href = `/admin/3d?${new URLSearchParams({kind: "model", target: modelId, name: opener.dataset.name || ""})}`;
+          library.querySelector("[data-model-library-link]").href = `/admin/catalog/models/${modelId}/binding`;
         }
         const tags = dialog.querySelector("[data-model-tags]");
         if (tags) tags.hidden = !modelId;
         for (const group of dialog.querySelectorAll("[data-model-tag-group]")) {
           group.hidden = group.dataset.modelTagGroup !== modelId;
+          if (group.tagName === "FIELDSET") group.disabled = group.hidden;
         }
         if (mediaForm) {
           mediaForm.hidden = !modelId;
@@ -283,6 +304,7 @@
       if (eventType) syncEventTypeFields(eventType);
       rememberDialogForms(dialog);
       dialog.showModal();
+      window.assetloopDrawers?.opened(dialog);
       queueMicrotask(() => focusDialog(dialog));
       return;
     }
@@ -300,6 +322,7 @@
   });
 
   document.addEventListener("input", (event) => {
+    if (event.target.matches('[data-event-type-select]') && event.target.selectedOptions[0]?.hasAttribute('data-event-type-create')) return;
     if (event.target.closest("[data-transfer-ui]")) return;
     const form = event.target.closest("form[data-guard-dirty]");
     updateDirty(form);
@@ -308,11 +331,12 @@
 
   document.addEventListener("change", (event) => {
     if (event.target.closest("[data-transfer-ui]")) return;
+    const eventType = event.target.closest("[data-event-type-select]");
+    if (eventType && chooseEventType(eventType)) return;
     const dirty = event.target.closest("form[data-guard-dirty]");
     updateDirty(dirty);
     const currency = event.target.closest("[data-currency-select]");
     if (currency) syncFXFields(currency);
-    const eventType = event.target.closest("[data-event-type-select]");
     if (eventType) syncEventTypeFields(eventType);
     updateDirty(dirty);
     const autoSubmit = event.target.closest("[data-auto-submit]");
@@ -324,14 +348,37 @@
     form.requestSubmit();
   });
 
-  document.addEventListener("submit", (event) => {
+  document.addEventListener("submit", async (event) => {
     if (event.defaultPrevented) return;
     const form = event.target;
+    if (form.hasAttribute('data-shared-name')) {
+      const name = form.elements.namedItem('name').value.trim();
+      const confirmation = form.elements.namedItem('confirm_rename');
+      if (name !== form.dataset.sharedName && confirmation.value !== '1') {
+        event.preventDefault();
+        if (form.dataset.confirming === 'true') return;
+        form.dataset.confirming = 'true';
+        const accepted = await confirmDiscard(form.dataset.renameMessage, true);
+        delete form.dataset.confirming;
+        if (accepted && name === form.elements.namedItem('name').value.trim()) {
+          confirmation.value = '1';
+          form.requestSubmit(event.submitter);
+        }
+        return;
+      }
+    }
     const message = form.dataset.confirm;
-    if (message && !window.confirm(message)) {
+    if (message && !form.dataset.confirmAccepted) {
       event.preventDefault();
+      if(form.dataset.confirming === 'true') return;
+      form.dataset.confirming='true';
+      const accepted=await confirmDiscard(message);
+      delete form.dataset.confirming;
+      if(accepted){form.dataset.confirmAccepted='true';form.requestSubmit(event.submitter);}
       return;
     }
+    delete form.dataset.confirmAccepted;
+    if (window.assetloopDrawers?.submit(event)) return;
     if (form.dataset.submitting === "true") {
       event.preventDefault();
       return;
@@ -353,6 +400,13 @@
 
   const initPage = () => {
   initDialogs();
+  for (const field of document.querySelectorAll('form[data-shared-name] input[name="confirm_rename"]')) field.disabled = false;
+  const resourceEditor = document.querySelector('dialog[data-resource-editor]');
+  if (resourceEditor && !resourceEditor.open) {
+    rememberDialogForms(resourceEditor);
+    resourceEditor.showModal();
+    queueMicrotask(() => focusDialog(resourceEditor));
+  }
   for (const select of document.querySelectorAll("[data-currency-select]")) syncFXFields(select);
   for (const select of document.querySelectorAll("[data-event-type-select]")) syncEventTypeFields(select);
   for (const form of pageForms()) {
@@ -392,5 +446,14 @@
   }
   };
   document.addEventListener("settings:loaded", initPage);
+  window.assetloopDialog = {close:closeDialog, confirm:confirmDiscard, initialize(dialog) {
+    initDialogs();
+    for (const field of dialog.querySelectorAll('input[name="confirm_rename"]')) field.disabled = false;
+    rememberDialogForms(dialog);
+  }};
+  document.addEventListener('input', (event) => {
+    const form = event.target.closest('form[data-shared-name]');
+    if (form && event.target.name === 'name') form.elements.namedItem('confirm_rename').value = '';
+  });
   initPage();
 })();

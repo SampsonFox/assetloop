@@ -58,94 +58,98 @@ type Server struct {
 }
 
 type pageData struct {
-	Title               string
-	Locale              application.Locale
-	Theme               application.Theme
-	Accent              application.Accent
-	Strings             map[string]string
-	ReturnTo            string
-	CSRFToken           string
-	Error               string
-	Principal           *application.Principal
-	Members             []application.Member
-	Categories          []domain.ItemCategory
-	Models              []domain.ProductModel
-	Assets              []domain.Asset
-	AssetSummaries      map[string]domain.AssetSummary
-	Asset               *domain.Asset
-	CanManageCatalog    bool
-	Events              []domain.AssetEvent
-	Summary             domain.AssetSummary
-	Cost                domain.CostDashboard
-	BaseCurrency        string
-	BaseCurrencyLocked  bool
-	NowValue            string
-	CanManageLifecycle  bool
-	EventTypes          []domain.AssetEventTypeDefinition
-	EditingEventType    *domain.AssetEventTypeDefinition
-	EventTypeError      string
-	EventTypeForm       eventTypeFormData
-	AssetCount          int
-	TotalExpenseMinor   int64
-	TotalIncomeMinor    int64
-	TotalNetMinor       int64
-	AssetView           string
-	AssetQuery          string
-	AssetStatus         string
-	AssetSort           string
-	AssetDirection      string
-	AssetSortURLs       map[string]string
-	AssetTotal          int
-	AssetPage           int
-	AssetTotalPages     int
-	AssetPreviousURL    string
-	AssetNextURL        string
-	AssetListURL        string
-	AssetGridURL        string
-	AssetClearURL       string
-	AssetHasFilters     bool
-	AssetAdvanced       bool
-	TableQuery          string
-	TableFilter         string
-	TableSort           string
-	TableDirection      string
-	TableShowVoided     bool
-	TableAdvanced       bool
-	TableTotal          int
-	TablePage           int
-	TableTotalPages     int
-	TablePreviousURL    string
-	TableNextURL        string
-	TableClearURL       string
-	TableHasFilters     bool
-	TableSortURLs       map[string]string
-	CategoryIcons       []application.CategoryIconOption
-	CatalogFlow         string
-	AssetFormAction     string
-	AssetFormEditing    bool
-	NavAssets           bool
-	NavCatalog          bool
-	SettingsSection     string
-	NavMembers          bool
-	EventForm           eventFormData
-	Model3D             *domain.ProductModel3D
-	Resources           []domain.Model3DResource
-	Resource            *domain.Model3DResource
-	References          []application.Model3DReference
-	BindingKind         string
-	BindingID           string
-	BindingName         string
-	Binding             *application.Model3DBinding
-	BoundResource       *domain.Model3DResource
-	Specifications      specificationPageData
-	ModelTagEditors     []modelTagEditor
-	CatalogEditingModel *domain.ProductModel
-	TagReferences       []application.SpecificationLink
-	AssetTagEditors     []modelTagEditor
-	ResourceTags        modelTagEditor
-	ResourceCategories  []tagChoice
-	ReferenceURLs       map[string]string
-	Appearance          appearancePageData
+	Title                  string
+	Locale                 application.Locale
+	Theme                  application.Theme
+	Accent                 application.Accent
+	Strings                map[string]string
+	ReturnTo               string
+	CSRFToken              string
+	Error                  string
+	Principal              *application.Principal
+	Members                []application.Member
+	Categories             []domain.ItemCategory
+	Models                 []domain.ProductModel
+	Assets                 []domain.Asset
+	AssetSummaries         map[string]domain.AssetSummary
+	Asset                  *domain.Asset
+	CanManageCatalog       bool
+	Events                 []domain.AssetEvent
+	Summary                domain.AssetSummary
+	Cost                   domain.CostDashboard
+	BaseCurrency           string
+	BaseCurrencyLocked     bool
+	NowValue               string
+	CanManageLifecycle     bool
+	EventTypes             []domain.AssetEventTypeDefinition
+	EditingEventType       *domain.AssetEventTypeDefinition
+	EventTypeError         string
+	EventTypeForm          eventTypeFormData
+	AssetCount             int
+	TotalExpenseMinor      int64
+	TotalIncomeMinor       int64
+	TotalNetMinor          int64
+	AssetView              string
+	AssetQuery             string
+	AssetStatus            string
+	AssetSort              string
+	AssetDirection         string
+	AssetSortURLs          map[string]string
+	AssetTotal             int
+	AssetPage              int
+	AssetTotalPages        int
+	AssetPreviousURL       string
+	AssetNextURL           string
+	AssetListURL           string
+	AssetGridURL           string
+	AssetClearURL          string
+	AssetHasFilters        bool
+	AssetAdvanced          bool
+	TableQuery             string
+	TableFilter            string
+	TableTagFilter         string
+	TableSort              string
+	TableDirection         string
+	TableShowVoided        bool
+	TableAdvanced          bool
+	TableTotal             int
+	TablePage              int
+	TableTotalPages        int
+	TablePreviousURL       string
+	TableNextURL           string
+	TableClearURL          string
+	TableHasFilters        bool
+	TableSortURLs          map[string]string
+	CategoryIcons          []application.CategoryIconOption
+	CatalogFlow            string
+	AssetFormAction        string
+	AssetFormEditing       bool
+	NavAssets              bool
+	NavCatalog             bool
+	SettingsSection        string
+	NavMembers             bool
+	EventForm              eventFormData
+	Model3D                *domain.ProductModel3D
+	Resources              []domain.Model3DResource
+	Resource               *domain.Model3DResource
+	ResourceEditor         bool
+	References             []application.Model3DReference
+	BindingKind            string
+	BindingID              string
+	BindingName            string
+	Binding                *application.Model3DBinding
+	BoundResource          *domain.Model3DResource
+	Specifications         specificationPageData
+	ModelTagEditors        []modelTagEditor
+	CatalogTagFilterGroups []catalogTagFilterGroup
+	CatalogEditingModel    *domain.ProductModel
+	CatalogEditingCategory *domain.ItemCategory
+	TagReferences          []application.SpecificationLink
+	AssetTagEditors        []modelTagEditor
+	ResourceTags           modelTagEditor
+	ResourceCategories     []tagChoice
+	ReferenceURLs          map[string]string
+	Appearance             appearancePageData
 }
 
 type eventFormData struct {
@@ -242,8 +246,8 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance"} {
-		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/"+page+".html")
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding"} {
+		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/resources.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
 		}
@@ -269,6 +273,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /catalog", s.legacyCatalog)
 	mux.HandleFunc("GET /settings", s.settingsPage)
 	mux.HandleFunc("GET /admin/catalog", s.catalogPage)
+	mux.HandleFunc("GET /admin/catalog/categories/{id}", s.categoryDetail)
+	mux.HandleFunc("GET /admin/catalog/categories/new", s.categoryDetail)
 	mux.HandleFunc("POST /admin/catalog/categories", s.createCategory)
 	mux.HandleFunc("POST /admin/catalog/categories/{id}", s.updateCategory)
 	mux.HandleFunc("POST /admin/catalog/models", s.createModel)
@@ -277,12 +283,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/catalog/models/{id}/tags", s.saveModelTags)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance", s.saveAppearance)
 	mux.HandleFunc("GET /admin/catalog/models/{id}/appearance", s.appearancePage)
+	mux.HandleFunc("GET /admin/catalog/models/{id}/binding", func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("kind", "model")
+		s.resourceBindingPage(w, r)
+	})
+	mux.HandleFunc("POST /admin/catalog/models/{id}/binding", func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("kind", "model")
+		s.saveResourceBinding(w, r)
+	})
+	mux.HandleFunc("GET /admin/3d/binding/{kind}/{id}", s.resourceBindingPage)
+	mux.HandleFunc("POST /admin/3d/binding/{kind}/{id}", s.saveResourceBinding)
 	mux.HandleFunc("POST /admin/catalog/models/{id}/appearance/upload", s.uploadAppearance)
 	mux.HandleFunc("POST /admin/catalog/appearance/{id}/delete", s.deleteAppearance)
 	mux.HandleFunc("GET /assets/new", s.newAssetForm)
-	mux.HandleFunc("POST /assets", s.createAsset)
+	mux.HandleFunc("POST /assets", s.saveDrawerAsset)
 	mux.HandleFunc("GET /assets/{id}/edit", s.editAssetForm)
-	mux.HandleFunc("POST /assets/{id}", s.updateAsset)
+	mux.HandleFunc("POST /assets/{id}", s.saveDrawerAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
 	mux.HandleFunc("GET /assets/{id}/model.glb", s.assetModel3D)
 	mux.HandleFunc("GET /admin/3d", s.resourcesPage)
@@ -307,7 +323,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /events/{id}/correct", s.correctEvent)
 	staticFS, _ := fs.Sub(assets, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
-	return securityHeaders(mux)
+	return securityHeaders(drawerTransport(mux))
 }
 
 func (s *Server) updateModel3D(w http.ResponseWriter, r *http.Request) {
@@ -409,6 +425,9 @@ func (s *Server) createCategory(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalogMutationError(w, r, principal, err)
 		return
 	}
+	if drawerSaved(w, "category", category.ID, category.Name, true) {
+		return
+	}
 	s.redirectAfterCatalogCreate(w, r, "model-drawer", "category_id", category.ID)
 }
 
@@ -420,9 +439,12 @@ func (s *Server) updateCategory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	_, err := s.catalog.UpdateCategory(r.Context(), principal, application.UpdateCategory{ID: r.PathValue("id"), Name: r.FormValue("name"), IconKey: r.FormValue("icon_key")})
+	category, err := s.catalog.UpdateCategory(r.Context(), principal, application.UpdateCategory{ID: r.PathValue("id"), Name: r.FormValue("name"), IconKey: r.FormValue("icon_key")})
 	if err != nil {
 		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	if drawerSaved(w, "category", category.ID, category.Name, true) {
 		return
 	}
 	http.Redirect(w, r, "/admin/catalog", http.StatusSeeOther)
@@ -443,14 +465,24 @@ func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 		s.renderCatalogMutationError(w, r, principal, err)
 		return
 	}
+	if drawerSaved(w, "model", model.ID, model.Name, true) {
+		return
+	}
 	if r.FormValue("flow") == "asset" {
 		http.Redirect(w, r, "/assets/new?model_id="+model.ID, http.StatusSeeOther)
+		return
+	}
+	if drawerSaved(w, "model", model.ID, model.Name, true) {
 		return
 	}
 	s.redirectToModelEditor(w, r, model.ID)
 }
 
 func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
+	if r.FormValue("model_configuration") == "1" {
+		s.saveModelConfiguration(w, r)
+		return
+	}
 	if !s.verifyCSRF(w, r) {
 		return
 	}
@@ -461,6 +493,9 @@ func (s *Server) updateModel(w http.ResponseWriter, r *http.Request) {
 	_, err := s.catalog.UpdateModel(r.Context(), principal, application.UpdateModel{ID: r.PathValue("id"), CategoryID: r.FormValue("category_id"), Name: r.FormValue("name")})
 	if err != nil {
 		s.renderCatalogError(w, r, principal, err)
+		return
+	}
+	if drawerSaved(w, "model", r.PathValue("id"), r.FormValue("name"), true) {
 		return
 	}
 	s.redirectToModelEditor(w, r, r.PathValue("id"))
@@ -911,8 +946,9 @@ func (s *Server) renderAssetMutationError(w http.ResponseWriter, r *http.Request
 func assetFromForm(r *http.Request, id string) domain.Asset {
 	asset := domain.Asset{
 		ID: id, ModelID: r.FormValue("model_id"), DisplayName: r.FormValue("display_name"),
-		SerialNumber:    r.FormValue("serial_number"),
-		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
+		Model3DResourceID: r.FormValue("resource_id"),
+		SerialNumber:      r.FormValue("serial_number"),
+		PurchaseChannel:   r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	}
 	for _, id := range r.PostForm["tag_ids"] {
 		if id != "" {
@@ -962,6 +998,19 @@ func (s *Server) renderAssetForm(w http.ResponseWriter, r *http.Request, status 
 			return
 		}
 		data.AssetTagEditors = assetTagEditors(state, principal.TenantID, snapshot.Models, asset)
+	}
+	if s.modelMedia != nil {
+		for page := 1; ; page++ {
+			result, err := s.modelMedia.ListResources(r.Context(), principal, application.Model3DResourceListOptions{Page: page, PageSize: 100})
+			if err != nil {
+				s.renderError(w, r, 500, err)
+				return
+			}
+			data.Resources = append(data.Resources, result.Resources...)
+			if page*100 >= result.Total || len(result.Resources) == 0 {
+				break
+			}
+		}
 	}
 	s.render(w, status, "asset_form", data)
 }
@@ -1071,7 +1120,33 @@ func assetsURL(view, query, status, sortKey, direction string, page int) string 
 }
 
 func catalogURL(query, categoryID, sortKey, direction string, page int) string {
-	return tableURL("/admin/catalog", query, "category", categoryID, sortKey, direction, "category", "asc", page)
+	return catalogURLWithTag(query, categoryID, "", sortKey, direction, page)
+}
+
+func catalogURLWithTag(query, categoryID, tagID, sortKey, direction string, page int) string {
+	values := url.Values{}
+	if query != "" {
+		values.Set("q", query)
+	}
+	if categoryID != "" {
+		values.Set("category", categoryID)
+	}
+	if tagID != "" {
+		values.Set("tag_id", tagID)
+	}
+	if sortKey != "" && sortKey != "category" {
+		values.Set("sort", sortKey)
+	}
+	if direction != "" && direction != "asc" {
+		values.Set("direction", direction)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	if len(values) == 0 {
+		return "/admin/catalog"
+	}
+	return "/admin/catalog?" + values.Encode()
 }
 
 func membersURL(query, role, sortKey, direction string, page int) string {
@@ -1148,6 +1223,7 @@ func assetView(r *http.Request) string {
 func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status int, principal application.Principal, message string, references ...application.SpecificationLink) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	categoryID := strings.TrimSpace(r.URL.Query().Get("category"))
+	tagID := strings.TrimSpace(r.URL.Query().Get("tag_id"))
 	sortKey := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("sort")), "category")
 	direction := valueOrDefault(strings.TrimSpace(r.URL.Query().Get("direction")), "asc")
 	page := queryPage(r)
@@ -1158,31 +1234,31 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 	result, err := s.catalog.ListModelsPage(r.Context(), principal, application.ModelListOptions{
-		Query: query, CategoryID: categoryID, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
+		Query: query, CategoryID: categoryID, TagID: tagID, Sort: sortKey, Direction: direction, Page: page, PageSize: pageSize,
 	})
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if result.Total == 0 && page > 1 {
-		http.Redirect(w, r, catalogURL(query, categoryID, sortKey, direction, 1), http.StatusFound)
+		http.Redirect(w, r, catalogURLWithTag(query, categoryID, tagID, sortKey, direction, 1), http.StatusFound)
 		return
 	}
 	totalPages, previousURL, nextURL := tablePagination(result.Total, page, pageSize, func(target int) string {
-		return catalogURL(query, categoryID, sortKey, direction, target)
+		return catalogURLWithTag(query, categoryID, tagID, sortKey, direction, target)
 	})
 	sortURLs := map[string]string{}
 	for _, column := range []string{"category", "name", "created"} {
-		sortURLs[column] = catalogURL(query, categoryID, column, nextSortDirection(sortKey, direction, column), 1)
+		sortURLs[column] = catalogURLWithTag(query, categoryID, tagID, column, nextSortDirection(sortKey, direction, column), 1)
 	}
 	data := pageData{
 		Title: textFor(principal.Locale, "title.catalog"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Categories: categories, Models: result.Models, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CategoryIcons: application.CategoryIconOptions,
-		TableQuery:    query, TableFilter: categoryID, TableSort: sortKey, TableDirection: direction,
+		TableQuery:    query, TableFilter: categoryID, TableTagFilter: tagID, TableSort: sortKey, TableDirection: direction,
 		TableTotal: result.Total, TablePage: page, TableTotalPages: totalPages,
 		TablePreviousURL: previousURL, TableNextURL: nextURL,
-		TableClearURL: catalogURL("", "", "category", "asc", 1), TableHasFilters: query != "" || categoryID != "" || sortKey != "category" || direction != "asc",
+		TableClearURL: catalogURLWithTag("", "", "", "category", "asc", 1), TableHasFilters: query != "" || categoryID != "" || tagID != "" || sortKey != "category" || direction != "asc",
 		TableSortURLs: sortURLs,
 	}
 	if s.options.Specifications != nil {
@@ -1192,7 +1268,7 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 			return
 		}
 		editID := strings.TrimSpace(r.URL.Query().Get("edit_model_id"))
-		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/tags") {
+		if r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/tags") || r.PostForm.Get("model_configuration") == "1") {
 			editID = r.PathValue("id")
 		}
 		editorModels := append([]domain.ProductModel(nil), result.Models...)
@@ -1203,6 +1279,10 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 				return
 			}
 			data.CatalogEditingModel = &model
+			if r.Method == http.MethodPost && r.PostForm.Get("model_configuration") == "1" {
+				data.CatalogEditingModel.Name = r.PostForm.Get("name")
+				data.CatalogEditingModel.CategoryID = r.PostForm.Get("category_id")
+			}
 			found := false
 			for _, existing := range editorModels {
 				found = found || existing.ID == editID
@@ -1213,7 +1293,8 @@ func (s *Server) renderCatalog(w http.ResponseWriter, r *http.Request, status in
 		}
 		data.TagReferences = references
 		data.ModelTagEditors = modelTagEditors(state, principal.TenantID, editorModels)
-		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/tags") && message != "" {
+		data.CatalogTagFilterGroups = catalogTagFilterGroups(state)
+		if r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/tags") || r.PostForm.Get("model_configuration") == "1") && message != "" {
 			cmd := modelTagsFromForm(r)
 			for i := range data.ModelTagEditors {
 				if data.ModelTagEditors[i].ModelID == cmd.ModelID {
@@ -1551,6 +1632,19 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 		data.NavMembers = strings.HasPrefix(returnURL.Path, "/admin/members")
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if fragment, ok := w.(*drawerResponse); ok && (status < 400 || status == http.StatusUnprocessableEntity) {
+		if !data.CanManageCatalog && !data.CanManageLifecycle {
+			w.Header().Set("X-Assetloop-Readonly", "true")
+		}
+		target := "fragment-" + fragment.target
+		if s.templates[name].Lookup(target) != nil {
+			w.WriteHeader(status)
+			if err := s.templates[name].ExecuteTemplate(w, target, data); err != nil {
+				panic(err)
+			}
+			return
+		}
+	}
 	w.WriteHeader(status)
 	if err := s.templates[name].ExecuteTemplate(w, "base", data); err != nil {
 		panic(err)

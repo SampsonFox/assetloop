@@ -5,7 +5,7 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 test('tag management has compact actions and uses its own table styling', () => {
   const html = read('./templates/specifications.html');
-  assert.match(html, /class="heading-actions"><a class="icon-button management-primary"/);
+  assert.match(html, /class="heading-actions"><a data-drawer-target="tag-editor" class="icon-button management-primary"/);
   assert.match(html, /aria-label="{{if \$data.Values}}{{t \$s "tags.add_value"}}/);
   assert.match(html, /{{template "ui-icon" "plus"}}/);
   assert.match(html, /class="catalog-table specification-table"/);

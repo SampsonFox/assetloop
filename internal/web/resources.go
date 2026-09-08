@@ -154,10 +154,18 @@ func (s *Server) renderResource(w http.ResponseWriter, r *http.Request, p applic
 		resource.Name, resource.SourceURL, resource.Author, resource.License = draft.Name, draft.SourceURL, draft.Author, draft.License
 	}
 	data := pageData{Title: resource.Name, Principal: &p, CSRFToken: s.ensureCSRF(w, r), Error: message, Resource: &resource, References: references, CanManageCatalog: p.Can(application.CapabilityManageCatalog), ReturnTo: "/admin/3d/" + resource.ID}
+	data.ResourceEditor = true
 	if err := s.resourceTagData(r, p, &data); err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	list, err := s.modelMedia.ListResources(r.Context(), p, application.Model3DResourceListOptions{Page: 1, PageSize: 25})
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	data.Resources, data.TableTotal, data.TablePage = list.Resources, list.Total, 1
+	data.TableTotalPages, data.TablePreviousURL, data.TableNextURL = tablePagination(list.Total, 1, 25, func(n int) string { return resourceLibraryURL("", "", "", "", n) })
 	s.render(w, status, "resource", data)
 }
 
@@ -202,6 +210,9 @@ func (s *Server) uploadResource(w http.ResponseWriter, r *http.Request) {
 		s.renderResources(w, r, p, http.StatusUnprocessableEntity, s.resourceError(p.Locale, err), &draft)
 		return
 	}
+	if drawerSaved(w, "resource", resource.ID, resource.Name, true) {
+		return
+	}
 	http.Redirect(w, r, "/admin/3d/"+resource.ID, http.StatusSeeOther)
 }
 
@@ -211,12 +222,21 @@ func (s *Server) updateResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	draft := resourceDraft(r)
-	_, err := s.modelMedia.UpdateResource(r.Context(), p, application.UpdateModel3DResource{ID: r.PathValue("id"), Name: draft.Name, SourceURL: draft.SourceURL, Author: draft.Author, License: draft.License})
+	details := application.UpdateModel3DResource{ID: r.PathValue("id"), Name: draft.Name, SourceURL: draft.SourceURL, Author: draft.Author, License: draft.License}
+	var err error
+	if r.FormValue("resource_configuration") == "1" && s.options.Specifications != nil {
+		err = s.options.Specifications.SaveResource(r.Context(), p, application.SaveResourceSpecification{ResourceID: details.ID, Details: &details, TagIDs: nonemptyTagIDs(r.PostForm["tag_ids"]), CategoryIDs: r.PostForm["category_ids"]})
+	} else {
+		_, err = s.modelMedia.UpdateResource(r.Context(), p, details)
+	}
 	if err != nil {
 		s.renderResource(w, r, p, http.StatusUnprocessableEntity, s.resourceError(p.Locale, err), &draft)
 		return
 	}
-	http.Redirect(w, r, "/admin/3d/"+r.PathValue("id"), http.StatusSeeOther)
+	if drawerSaved(w, "resource", r.PathValue("id"), draft.Name, true) {
+		return
+	}
+	http.Redirect(w, r, "/admin/3d", http.StatusSeeOther)
 }
 
 func (s *Server) deleteResource(w http.ResponseWriter, r *http.Request) {

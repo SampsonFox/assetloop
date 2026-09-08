@@ -53,7 +53,7 @@ func (s *Store) UpdateModel(ctx context.Context, model domain.ProductModel) erro
 	if err != nil {
 		return fmt.Errorf("parse category ID: %w", err)
 	}
-	count, err := postgresdb.New(s.db).UpdateModel(ctx, postgresdb.UpdateModelParams{CategoryID: categoryID, Name: model.Name, TenantID: tenantID, ID: id})
+	count, err := s.queries().UpdateModel(ctx, postgresdb.UpdateModelParams{CategoryID: categoryID, Name: model.Name, TenantID: tenantID, ID: id})
 	return updatedRow(count, err)
 }
 
@@ -192,7 +192,7 @@ func (s *Store) ListModelsPage(ctx context.Context, tenantID string, opts applic
 		return application.ModelListResult{}, fmt.Errorf("parse tenant ID: %w", err)
 	}
 	rows, err := postgresdb.New(s.db).ListModelsPage(ctx, postgresdb.ListModelsPageParams{
-		TenantID: tenantUUID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID,
+		TenantID: tenantUUID, SearchQuery: opts.Query, CategoryFilter: opts.CategoryID, TagFilter: opts.TagID,
 		SortKey: opts.Sort, SortDirection: opts.Direction,
 		PageSize: int64(opts.PageSize), PageOffset: int64((opts.Page - 1) * opts.PageSize),
 	})

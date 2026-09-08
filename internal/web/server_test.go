@@ -344,7 +344,7 @@ func TestAssetListIsPrimaryAndViewPreferencePersists(t *testing.T) {
 		}
 	}
 	newPage := request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{`class="card asset-profile asset-editor-profile"`, `data-dialog-open="model-drawer"`, `href="/"`} {
+	for _, want := range []string{`class="card asset-profile asset-editor-profile"`, `href="/admin/catalog?dialog=model-drawer" data-drawer-target="model-drawer"`, `href="/"`} {
 		if newPage.Code != http.StatusOK || !strings.Contains(newPage.Body.String(), want) {
 			t.Fatalf("dedicated asset create page missing %q: status=%d body=%s", want, newPage.Code, newPage.Body.String())
 		}
@@ -400,7 +400,7 @@ func TestAssetEditorCreatesMissingTypeWithoutLeavingEditor(t *testing.T) {
 	session := responseCookie(t, setup, sessionCookie)
 
 	home := request(t, handler, http.MethodGet, "/assets/new", nil, []*http.Cookie{session, csrf})
-	for _, want := range []string{`data-dialog-open="model-drawer"`, `data-title="新增型号"`, `id="category-form"`, `id="model-form"`, `name="flow" value="asset"`} {
+	for _, want := range []string{`href="/admin/catalog?dialog=model-drawer" data-drawer-target="model-drawer"`, `>新增型号</a>`, `id="category-form"`, `id="model-form"`, `name="flow" value="asset"`} {
 		if home.Code != http.StatusOK || !strings.Contains(home.Body.String(), want) {
 			t.Fatalf("asset drawer shared type component missing %q: status=%d body=%s", want, home.Code, home.Body.String())
 		}
@@ -438,7 +438,7 @@ func TestAssetEditorCreatesMissingTypeWithoutLeavingEditor(t *testing.T) {
 	if reopened.Code != http.StatusOK || !strings.Contains(reopened.Body.String(), `>手机 / iPhone 17 Pro</option>`) {
 		t.Fatalf("new type was not available to the reopened asset form: status=%d body=%s", reopened.Code, reopened.Body.String())
 	}
-	if !strings.Contains(reopened.Body.String(), `<option value="`+modelID+`" selected>`) {
+	if !regexp.MustCompile(`<option value="`+regexp.QuoteMeta(modelID)+`"[^>]* selected>`).MatchString(reopened.Body.String()) {
 		t.Fatalf("new specification was not selected in the asset editor: %s", reopened.Body.String())
 	}
 }
@@ -509,7 +509,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	small, large := createTag("256GB"), createTag("512GB")
 	postTag("/admin/catalog/models/"+modelID+"/tags", url.Values{"tag_ids": {small, large}})
 	catalog = request(t, handler, http.MethodGet, "/admin/catalog", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"物品类型配置", `class="catalog-table"`, `class="catalog-category"`, `class="variant-tags"`, "256GB", "512GB", "新增型号", "新增类别", `name="q"`, `name="category"`, `name="sort"`, `aria-sort="ascending"`} {
+	for _, want := range []string{"物品类型配置", `class="catalog-table"`, `class="catalog-category"`, `class="variant-tags"`, "256GB", "512GB", "新增型号", "新增类别", `name="q"`, `name="category"`, `name="tag_id"`, `aria-sort="ascending"`} {
 		if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), want) {
 			t.Fatalf("model-first type configuration missing %q: status=%d body=%s", want, catalog.Code, catalog.Body.String())
 		}
@@ -518,12 +518,24 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	if filteredCatalog.Code != http.StatusOK || !strings.Contains(filteredCatalog.Body.String(), "iPhone 17 Pro") || !strings.Contains(filteredCatalog.Body.String(), "256GB") {
 		t.Fatalf("server-filtered catalog page must retain bulk-loaded specifications: status=%d body=%s", filteredCatalog.Code, filteredCatalog.Body.String())
 	}
+	tagFilteredCatalog := request(t, handler, http.MethodGet, "/admin/catalog?tag_id="+small, nil, []*http.Cookie{ownerSession, csrf})
+	if tagFilteredCatalog.Code != http.StatusOK || !strings.Contains(tagFilteredCatalog.Body.String(), "iPhone 17 Pro") || !strings.Contains(tagFilteredCatalog.Body.String(), "256GB") {
+		t.Fatalf("tag-filtered catalog page must retain matching models and grouped tag options: status=%d body=%s", tagFilteredCatalog.Code, tagFilteredCatalog.Body.String())
+	}
 	if strings.Contains(catalog.Body.String(), "价格规格") {
 		t.Fatalf("type configuration must use the simpler specification label: %s", catalog.Body.String())
 	}
 	headingActions := regexp.MustCompile(`(?s)<div class="heading-actions">(.*?)</div>`).FindStringSubmatch(catalog.Body.String())
 	if len(headingActions) != 2 || strings.Contains(headingActions[1], "新增类别") || strings.Contains(headingActions[1], `href="/"`) {
 		t.Fatalf("catalog heading must expose only model creation: %s", catalog.Body.String())
+	}
+	if strings.Contains(catalog.Body.String(), `class="button auto" type="submit">应用筛选</button>`) || strings.Contains(catalog.Body.String(), `data-dialog-open="model-drawer" data-title="编辑型号"`) && strings.Contains(catalog.Body.String(), `>编辑型号</button>`) {
+		t.Fatalf("catalog actions must use icon buttons instead of visible labels: %s", catalog.Body.String())
+	}
+	for _, want := range []string{`aria-label="新增型号"`, `aria-label="搜索"`, `aria-label="编辑型号 · iPhone 17 Pro"`, `<path d="M12 5v14M5 12h14"/>`, `<circle cx="11" cy="11" r="6"/>`} {
+		if !strings.Contains(catalog.Body.String(), want) {
+			t.Fatalf("catalog icon action missing %q: %s", want, catalog.Body.String())
+		}
 	}
 	modelForm := regexp.MustCompile(`(?s)<form id="model-form".*?>(.*?)</form>`).FindStringSubmatch(catalog.Body.String())
 	if len(modelForm) != 2 || !strings.Contains(modelForm[1], "新增类别") {
@@ -583,7 +595,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 	for _, want := range []string{
 		`class="heading-actions asset-detail-actions"`,
 		`class="icon-button" href="/" aria-label="返回物品列表" title="返回物品列表"`,
-		`class="icon-button" href="/assets/` + match[1] + `/edit" aria-label="编辑物品" title="编辑物品"`,
+		`class="icon-button" href="/assets/` + match[1] + `/edit" data-drawer-target="asset-editor" aria-label="编辑物品" title="编辑物品"`,
 	} {
 		if !strings.Contains(detailHeading, want) {
 			t.Fatalf("asset detail heading action missing %q: %s", want, detailHeading)
@@ -638,7 +650,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以所选规格为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `data-cost-dashboard`, `日均持有成本`, `class="cost-metrics"`, `class="compact-timeline"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-dialog-open="event-type-drawer"`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-positive-pattern=`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以所选规格为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `data-cost-dashboard`, `日均持有成本`, `class="cost-metrics"`, `class="compact-timeline"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-event-type-create hidden disabled`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-positive-pattern=`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -1029,7 +1041,7 @@ func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) appli
 
 func optionID(t *testing.T, body, label string) string {
 	t.Helper()
-	pattern := `value="([0-9a-f-]{36})"\s*>` + regexp.QuoteMeta(label) + `</option>`
+	pattern := `value="([0-9a-f-]{36})"[^>]*>` + regexp.QuoteMeta(label) + `</option>`
 	match := regexp.MustCompile(pattern).FindStringSubmatch(body)
 	if len(match) != 2 {
 		t.Fatalf("option %q not found in body: %s", label, body)

@@ -31,8 +31,12 @@ type SaveModelSpecification struct {
 	ModelID             string
 	TagIDs              []string
 	AppearanceOverrides map[string]bool
+	Details             *ModelConfigurationDetails
 }
+type ModelConfigurationDetails struct{ CategoryID, Name string }
 type SaveSpecificationAsset struct {
+	// Nil preserves the binding; an empty value explicitly restores inheritance.
+	ResourceID                                                     *string
 	ID, ModelID, DisplayName, SerialNumber, PurchaseChannel, Notes string
 	TagIDs                                                         []string
 }
@@ -43,6 +47,7 @@ type SaveAppearanceDefault struct {
 type SaveResourceSpecification struct {
 	ResourceID          string
 	TagIDs, CategoryIDs []string
+	Details             *UpdateModel3DResource
 }
 type SpecificationInUseError struct{ References []SpecificationLink }
 
@@ -229,6 +234,16 @@ func (s *SpecificationService) SaveModel(ctx context.Context, actor Principal, c
 				return err
 			}
 		}
+		if cmd.Details != nil {
+			if !specIDSet(state.CategoryIDs)[cmd.Details.CategoryID] {
+				return NewInputError("validation.specification_missing")
+			}
+			name, err := catalogText("model name", cmd.Details.Name, 160, true)
+			if err != nil {
+				return err
+			}
+			return store.UpdateModel(ctx, domain.ProductModel{ID: cmd.ModelID, TenantID: actor.TenantID, CategoryID: cmd.Details.CategoryID, Name: name})
+		}
 		return nil
 	})
 }
@@ -287,6 +302,25 @@ func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, c
 			if err := store.AddAssetSpecificationTag(ctx, actor.TenantID, result.ID, result.ModelID, id); err != nil {
 				return err
 			}
+		}
+		if cmd.ResourceID != nil {
+			id := *cmd.ResourceID
+			if id != "" {
+				if err := validID("resource ID", id); err != nil {
+					return err
+				}
+				resource, err := store.GetModel3DResource(ctx, actor.TenantID, id)
+				if err != nil {
+					return err
+				}
+				if resource.Status != "ready" {
+					return ErrModel3DUnavailable
+				}
+			}
+			if err := store.BindModel3DResource(ctx, actor.TenantID, BindModel3DResource{Kind: "asset", TargetID: result.ID, ResourceID: id}); err != nil {
+				return err
+			}
+			result.Model3DResourceID = id
 		}
 		state.HydrateSelection(&result, ids)
 		return nil
@@ -417,6 +451,15 @@ func (s *SpecificationService) SaveResource(ctx context.Context, actor Principal
 			if err := store.AddResourceCategory(ctx, actor.TenantID, cmd.ResourceID, id); err != nil {
 				return err
 			}
+		}
+		if cmd.Details != nil {
+			fields, err := validateResourceMetadata(*cmd.Details)
+			if err != nil {
+				return err
+			}
+			resource.Name, resource.SourceURL, resource.Author, resource.License = fields.Name, fields.SourceURL, fields.Author, fields.License
+			resource.UpdatedAt = s.now().UTC()
+			return store.UpdateModel3DResource(ctx, resource)
 		}
 		return nil
 	})

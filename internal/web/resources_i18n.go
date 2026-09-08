@@ -5,6 +5,7 @@ import "github.com/SampsonFox/assetloop/internal/application"
 func init() {
 	for locale, values := range map[application.Locale]map[string]string{
 		application.LocaleZhCN: {
+			"resource.asset_model": "3D 模型", "resource.inherit_model": "继承型号", "resource.choose_existing": "请从下拉列表选择资源，或选择继承型号。",
 			"resource.auto_rotate": "自动旋转",
 			"resource.preview":     "预览", "resource.current": "当前绑定",
 			"resource.source_asset": "具体物品专用", "resource.source_model": "继承自型号",
@@ -28,6 +29,7 @@ func init() {
 			"resource.preview_error": "无法显示 3D 预览。请刷新页面重试；资源记录仍可管理。",
 		},
 		application.LocaleEn: {
+			"resource.asset_model": "3D model", "resource.inherit_model": "Inherit from model", "resource.choose_existing": "Choose a resource from the list, or inherit from the model.",
 			"resource.auto_rotate": "Auto-rotate",
 			"resource.preview":     "Preview", "resource.current": "Currently bound",
 			"resource.source_asset": "Dedicated to this asset", "resource.source_model": "Inherited from model",
