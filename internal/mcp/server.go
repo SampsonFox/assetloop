@@ -46,6 +46,7 @@ type ToolError struct {
 func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	server := sdk.NewServer(&sdk.Implementation{Name: "assetloop", Version: "0.1.0"}, nil)
 	registerQueries(server, services)
+	registerLifecycle(server, services)
 	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, &sdk.StreamableHTTPOptions{Stateless: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -90,6 +91,8 @@ func register[I any](server *sdk.Server, name, description, scope string, capabi
 				return failure("not_found", "The requested resource does not exist.", false)
 			case errors.Is(err, application.ErrModel3DReferenced):
 				return failure("referenced", "The resource is still referenced.", false)
+			case errors.Is(err, application.ErrAlreadyVoided):
+				return failure("conflict", "This event is already voided. Read current history before issuing a new correction.", false)
 			default:
 				return failure("unavailable", "The operation could not be completed.", true)
 			}

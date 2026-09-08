@@ -42,6 +42,7 @@ func TestHTTPQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Run("lifecycle writes", func(t *testing.T) { testLifecycleTools(t, services, owner, category.ID) })
 	for _, tc := range []struct {
 		name               string
 		actor              application.Principal
@@ -66,11 +67,11 @@ func TestHTTPQueries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(list.Tools) != 17 {
-				t.Fatalf("tools = %d, want 17", len(list.Tools))
+			if len(list.Tools) != 19 {
+				t.Fatalf("tools = %d, want 19", len(list.Tools))
 			}
 			for _, tool := range list.Tools {
-				if tool.Annotations == nil || !tool.Annotations.ReadOnlyHint {
+				if tool.Name != "record_event" && tool.Name != "correct_event" && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint) {
 					t.Errorf("%s is not annotated read-only", tool.Name)
 				}
 				schema, _ := json.Marshal(tool.InputSchema)

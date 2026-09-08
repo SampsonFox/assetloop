@@ -114,3 +114,13 @@ The authorization management list only contains the acting user's grants.
 CSRF refusal, allow, deny, token exchange, grant listing and immediate revocation.
 No preview instance has been restarted. Browser visual QA and actual Codex OAuth
 acceptance are still pending; the checklist remains open until those are verified.
+
+Lifecycle write checkpoint: `record_event` and `correct_event` now reuse the
+existing application services and durable request receipts. Tool discovery has
+17 read tools and 2 write tools. Every mutation requires a nonempty request key;
+timestamps have explicit zones, money uses integer minor units and FX uses the
+existing 100,000,000 scale. Correction preserves the original asset/type rather
+than accepting fields the use case would ignore. Real SDK HTTP tests prove
+replay identity, payload conflict, append-only three-row correction history and
+scope/role denial. `go test ./internal/mcp -count=1` passes. Catalog/asset/tag/type
+and 3D mutations plus shared management idempotency are still unimplemented.
