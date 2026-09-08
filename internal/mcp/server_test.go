@@ -67,8 +67,8 @@ func TestHTTPQueries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(list.Tools) != 38 {
-				t.Fatalf("tools = %d, want 38", len(list.Tools))
+			if len(list.Tools) != 39 {
+				t.Fatalf("tools = %d, want 39", len(list.Tools))
 			}
 			for _, tool := range list.Tools {
 				write := strings.HasPrefix(tool.Name, "save_") || strings.HasPrefix(tool.Name, "create_") || strings.HasPrefix(tool.Name, "update_") || strings.HasPrefix(tool.Name, "delete_") || strings.HasPrefix(tool.Name, "set_") || tool.Name == "record_event" || tool.Name == "correct_event"

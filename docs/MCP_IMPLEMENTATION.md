@@ -60,6 +60,16 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+Public media output audit: model detail/search/create and resource detail/list/
+effective appearance now use explicit transport projections rather than serializing
+storage-bearing domain values. SDK HTTP tests assert resource identity is retained
+while store IDs, object keys and checksums are absent in direct and nested reads.
+`search_appearance_candidates` reuses the existing application selection policy,
+returns the same safe resource projection, and requires confirmation before binding.
+Candidate tests cover appearance overrides, matches, pagination and scope/tenant
+denial. Discovery contains 39 tools; MCP, integration and application tests pass.
+This does not claim the remaining complete-schema/error audit or live acceptance.
+
 Management concurrency: two independent connections concurrently submit eight
 same-key creates and observe one persisted category and one shared result ID.
 Different payloads racing for one key produce one success and one conflict;

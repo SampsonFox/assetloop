@@ -115,6 +115,22 @@ func testConfigurationQueries(t *testing.T, store application.ManagementStore, o
 	if refs.Data.Total != 3 || len(refs.Data.References) != 3 {
 		t.Fatal("type references incomplete")
 	}
+	var candidates struct {
+		Data struct {
+			Candidates []transport.AppearanceCandidateResult
+			Total      int
+		}
+	}
+	candidateInput := transport.AppearanceCandidateInput{ModelID: modelID, TagIDs: []string{black.ID, large.ID}, PageSize: 1}
+	call("search_appearance_candidates", candidateInput, &candidates, false)
+	if candidates.Data.Total != 1 || len(candidates.Data.Candidates) != 1 || candidates.Data.Candidates[0].Resource.ID != resourceID || candidates.Data.Candidates[0].MatchingTags != 1 || !candidates.Data.Candidates[0].DescriptionComplete {
+		t.Fatalf("candidate query lost appearance policy: %+v", candidates.Data)
+	}
+	candidateInput.Page = 2
+	call("search_appearance_candidates", candidateInput, &candidates, false)
+	if candidates.Data.Total != 1 || len(candidates.Data.Candidates) != 0 {
+		t.Fatal("candidate paging changed total")
+	}
 	query.Kind = "unknown"
 	call("get_specification_references", query, nil, true)
 	for _, denied := range []string{"scope", "tenant"} {
@@ -126,5 +142,6 @@ func testConfigurationQueries(t *testing.T, store application.ManagementStore, o
 		call("get_model_configuration", transport.IDInput{ID: modelID}, nil, true)
 		call("get_resource_configuration", transport.IDInput{ID: resourceID}, nil, true)
 		call("get_specification_references", transport.SpecificationReferencesInput{ID: black.ID, Kind: "tag"}, nil, true)
+		call("search_appearance_candidates", candidateInput, nil, true)
 	}
 }

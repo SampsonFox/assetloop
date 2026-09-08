@@ -36,7 +36,31 @@ type SpecificationReferenceResult struct {
 	TagID    string `json:"tag_id"`
 }
 
+type AppearanceCandidateInput struct {
+	ModelID  string   `json:"model_id"`
+	TagIDs   []string `json:"tag_ids"`
+	Query    string   `json:"query,omitempty"`
+	Page     int      `json:"page,omitempty"`
+	PageSize int      `json:"page_size,omitempty"`
+}
+type AppearanceCandidateResult struct {
+	Resource            ResourceResult `json:"resource"`
+	MatchingTags        int            `json:"matching_tags"`
+	DescriptionComplete bool           `json:"description_complete"`
+}
+
 func registerConfiguration(server *sdk.Server, s Services) {
+	register(server, "search_appearance_candidates", "Search paged existing resource candidates for model/tag selections. Descriptive matches require user confirmation and never create a binding.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q AppearanceCandidateInput) (any, error) {
+		page, err := s.Specifications.Candidates(ctx, p, q.ModelID, q.TagIDs, application.SpecificationListOptions{Query: q.Query, Page: q.Page, PageSize: q.PageSize})
+		result := struct {
+			Candidates []AppearanceCandidateResult `json:"candidates"`
+			Total      int                         `json:"total"`
+		}{Candidates: []AppearanceCandidateResult{}, Total: page.Total}
+		for _, c := range page.Candidates {
+			result.Candidates = append(result.Candidates, AppearanceCandidateResult{Resource: resourceResult(c.Resource), MatchingTags: c.MatchingTags, DescriptionComplete: c.DescriptionComplete})
+		}
+		return result, err
+	})
 	register(server, "get_model_configuration", "Read complete allowed tag IDs, explicit appearance overrides (false differs from absent), and confirmed appearance rules before editing a model.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q IDInput) (any, error) {
 		c, err := s.Specifications.ModelConfiguration(ctx, p, q.ID)
 		result := ModelConfigurationResult{ModelID: q.ID, TagIDs: append([]string{}, c.Specification.AllowedTagIDs...), AppearanceOverrides: c.Specification.AppearanceOverrides, Defaults: []AppearanceRuleResult{}}

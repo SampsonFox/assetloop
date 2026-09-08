@@ -72,10 +72,19 @@ func registerQueries(server *sdk.Server, s Services) {
 		return s.Catalog.Categories(ctx, p)
 	})
 	register(server, "search_product_models", "Search existing models before choosing or creating a model.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q ModelQuery) (any, error) {
-		return s.Catalog.ListModelsPage(ctx, p, application.ModelListOptions{Query: q.Query, CategoryID: q.CategoryID, TagID: q.TagID, Sort: q.Sort, Direction: q.Direction, Page: q.Page, PageSize: q.PageSize})
+		page, err := s.Catalog.ListModelsPage(ctx, p, application.ModelListOptions{Query: q.Query, CategoryID: q.CategoryID, TagID: q.TagID, Sort: q.Sort, Direction: q.Direction, Page: q.Page, PageSize: q.PageSize})
+		result := struct {
+			Models []ModelResult `json:"models"`
+			Total  int           `json:"total"`
+		}{Models: []ModelResult{}, Total: page.Total}
+		for _, model := range page.Models {
+			result.Models = append(result.Models, modelResult(model))
+		}
+		return result, err
 	})
 	register(server, "get_product_model", "Read model details by stable ID.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q IDInput) (any, error) {
-		return s.Specifications.Model(ctx, p, q.ID)
+		model, err := s.Specifications.Model(ctx, p, q.ID)
+		return modelResult(model), err
 	})
 	register(server, "list_tag_types", "Read typed specification dimensions and reference counts.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q TagQuery) (any, error) {
 		return s.Specifications.ListTypes(ctx, p, application.SpecificationListOptions{Query: q.Query, Status: q.Status, Page: q.Page, PageSize: q.PageSize})
@@ -99,15 +108,30 @@ func registerQueries(server *sdk.Server, s Services) {
 		return s.Lifecycle.PortfolioSummary(ctx, p)
 	})
 	register(server, "list_3d_resources", "Search existing 3D resources; file upload remains in Web.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q ResourceQuery) (any, error) {
-		return s.Media.ListResources(ctx, p, application.Model3DResourceListOptions{Query: q.Query, Page: q.Page, PageSize: q.PageSize})
+		page, err := s.Media.ListResources(ctx, p, application.Model3DResourceListOptions{Query: q.Query, Page: q.Page, PageSize: q.PageSize})
+		result := struct {
+			Resources []ResourceResult `json:"resources"`
+			Total     int              `json:"total"`
+		}{Resources: []ResourceResult{}, Total: page.Total}
+		for _, resource := range page.Resources {
+			result.Resources = append(result.Resources, resourceResult(resource))
+		}
+		return result, err
 	})
 	register(server, "get_3d_resource", "Read existing 3D resource metadata.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q IDInput) (any, error) {
-		return s.Media.GetResource(ctx, p, q.ID)
+		resource, err := s.Media.GetResource(ctx, p, q.ID)
+		return resourceResult(resource), err
 	})
 	register(server, "get_3d_references", "Read references before changing or deleting a resource.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q IDInput) (any, error) {
 		return s.Media.References(ctx, p, q.ID)
 	})
 	register(server, "get_asset_appearance", "Read the effective resource and source of an asset appearance.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q IDInput) (any, error) {
-		return s.Specifications.EffectiveForAsset(ctx, p, q.ID)
+		appearance, err := s.Specifications.EffectiveForAsset(ctx, p, q.ID)
+		result := AppearanceResult{Source: appearance.Source, Conflict: appearance.Conflict, RuleIDs: append([]string{}, appearance.RuleIDs...)}
+		if appearance.Resource != nil {
+			resource := resourceResult(*appearance.Resource)
+			result.Resource = &resource
+		}
+		return result, err
 	})
 }

@@ -83,7 +83,7 @@ func testManagementBinding(t *testing.T, store application.ManagementStore, owne
 	}
 
 	identity := transport.Identity{Principal: owner, Scopes: []string{transport.ScopeRead, transport.ScopeCatalog}}
-	host := httptest.NewServer(transport.NewHandler(transport.Services{Media: media, Management: manager}, func(context.Context, *http.Request) (transport.Identity, error) { return identity, nil }))
+	host := httptest.NewServer(transport.NewHandler(transport.Services{Media: media, Management: manager, Catalog: application.NewCatalogService(store), Specifications: application.NewSpecificationService(store)}, func(context.Context, *http.Request) (transport.Identity, error) { return identity, nil }))
 	defer host.Close()
 	client, err := sdk.NewClient(&sdk.Implementation{Name: "media-test", Version: "1"}, nil).Connect(ctx, &sdk.StreamableClientTransport{Endpoint: host.URL}, nil)
 	if err != nil {
@@ -106,6 +106,33 @@ func testManagementBinding(t *testing.T, store application.ManagementStore, owne
 		return data
 	}
 	query := transport.BindingInput{Kind: "asset", TargetID: asset.ID}
+	for _, read := range []struct {
+		name string
+		args any
+	}{
+		{"get_product_model", transport.IDInput{ID: model.ID}},
+		{"search_product_models", transport.ModelQuery{Query: model.Name}},
+		{"get_3d_resource", transport.IDInput{ID: r.ID}},
+		{"list_3d_resources", transport.ResourceQuery{Query: r.Name}},
+		{"get_asset_appearance", transport.IDInput{ID: asset.ID}},
+	} {
+		data := call(read.name, read.args, false)
+		for _, private := range []string{r.ObjectKey, "ObjectKey", "object_key", "StoreID", "store_id", "SHA256"} {
+			if strings.Contains(string(data), private) {
+				t.Fatalf("%s exposed private storage metadata", read.name)
+			}
+		}
+		if !strings.Contains(string(data), r.ID) {
+			t.Fatalf("%s lost resource identity: %s", read.name, data)
+		}
+	}
+	var resourceMetadata struct{ Data transport.ResourceResult }
+	if err := json.Unmarshal(call("get_3d_resource", transport.IDInput{ID: r.ID}, false), &resourceMetadata); err != nil {
+		t.Fatal(err)
+	}
+	if resourceMetadata.Data.Name != r.Name || resourceMetadata.Data.SizeBytes != r.SizeBytes || resourceMetadata.Data.Status != "ready" {
+		t.Fatal("public resource metadata lost")
+	}
 	read := func(explicit string) {
 		t.Helper()
 		data := call("get_3d_binding", query, false)

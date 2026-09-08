@@ -29,6 +29,7 @@ func registerCatalog(server *sdk.Server, s Services) {
 		return s.Management.UpdateCategory(ctx, p, q.RequestKey, application.UpdateCategory{ID: q.ID, Name: q.Name, IconKey: q.IconKey})
 	})
 	register(server, "create_product_model", "Create a confirmed product model under an existing category. Search existing models first. Reuse request_key on retry.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q CreateModelInput) (any, error) {
-		return s.Management.CreateModel(ctx, p, q.RequestKey, application.CreateModel{CategoryID: q.CategoryID, Name: q.Name})
+		model, err := s.Management.CreateModel(ctx, p, q.RequestKey, application.CreateModel{CategoryID: q.CategoryID, Name: q.Name})
+		return modelResult(model), err
 	})
 }
