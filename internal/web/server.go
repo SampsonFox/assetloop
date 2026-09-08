@@ -44,6 +44,8 @@ type Options struct {
 	DisabledPrincipal application.Principal
 	ModelMedia        *application.ModelMediaService
 	Specifications    *application.SpecificationService
+	OAuth             *application.OAuthService
+	OAuthIssuer       string
 }
 
 type Server struct {
@@ -151,6 +153,8 @@ type pageData struct {
 	ResourceCategories     []tagChoice
 	ReferenceURLs          map[string]string
 	Appearance             appearancePageData
+	OAuth                  oauthPageData
+	OAuthEnabled           bool
 }
 
 type eventFormData struct {
@@ -174,6 +178,9 @@ type eventTypeFormData struct {
 }
 
 func New(auth *application.AuthService, catalog *application.CatalogService, lifecycle *application.LifecycleService, db Pinger, options Options) (*Server, error) {
+	if options.OAuth != nil && options.AuthMode != "local" {
+		return nil, errors.New("OAuth requires account authentication")
+	}
 	if options.Specifications == nil {
 		return nil, fmt.Errorf("specification service is required")
 	}
@@ -247,7 +254,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/resources.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -259,6 +266,12 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	if s.options.OAuth != nil {
+		mux.HandleFunc("GET /oauth/authorize", s.oauthAuthorize)
+		mux.HandleFunc("POST /oauth/authorize", s.oauthAuthorize)
+		mux.HandleFunc("GET /account/clients", s.oauthClients)
+		mux.HandleFunc("POST /account/clients/{id}/revoke", s.oauthRevoke)
+	}
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /{$}", s.assetsPage)
 	mux.HandleFunc("GET /overview", s.dashboard)
@@ -1618,6 +1631,7 @@ func (s *Server) localeForRequest(r *http.Request, principal *application.Princi
 }
 
 func (s *Server) render(w http.ResponseWriter, status int, name string, data pageData) {
+	data.OAuthEnabled = s.options.OAuth != nil
 	if data.Principal != nil {
 		data.Locale = data.Principal.Locale
 		data.Theme = data.Principal.Theme

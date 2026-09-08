@@ -24,7 +24,8 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `internal/web/shared_rename.test.mjs` | Conditional shared-name confirmation, no-JS confirmation fallback and unified resource editor form coverage |
 | `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons; consistent compact catalog/tag/resource/event-type row actions and drawer controls; accessible-label/layout regression checks |
 | `internal/web/model_configuration.go`, `model_configuration.test.mjs`, `templates/catalog_drawers.html` | Unified model metadata/tag/appearance submission and transactional save; management drawers share `data-management-drawer` fixed heading actions and independent scrolling, covered by `management_ui.test.mjs` |
-| `internal/mcp/` | Streamable HTTP semantic query adapter calling application services; SDK HTTP regression tests; not mounted until OAuth wiring is complete |
+| `internal/mcp/` | Opt-in Streamable HTTP semantic query adapter calling application services; SDK HTTP regression tests; mounted alongside Web by the existing serve entry point |
+| `internal/web/oauth.go`, `templates/oauth.html`, `oauth_test.go` | Account-authenticated consent and per-user authorized-client revocation; native forms reuse CSRF and login continuation; bilingual content inherits existing theme |
 | `internal/mcp/oauth.go`, `oauth_test.go` | OAuth discovery/token/revocation HTTP formatting, configured-origin/Host guard and bearer resolver; real SQLite HTTP exchange/revocation tests; consent UI and runtime mounting pending |
 | `internal/web/login_return_test.go` | Safe login continuation for OAuth consent, preserving retries and existing sessions while rejecting external and encoded redirect bypasses |
 | `internal/scheduler/` | Refresh-job entry adapters |

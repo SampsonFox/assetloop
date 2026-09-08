@@ -1,0 +1,41 @@
+{{define "content"}}
+{{$en := eq .Locale "en"}}
+<section class="auth-card">
+  {{if .OAuth.Management}}
+  <h1>{{if $en}}Authorized clients{{else}}已授权客户端{{end}}</h1>
+  <div class="stack">
+  {{range .OAuth.Grants}}
+    <section>
+      <h2>{{.ClientID}}</h2>
+      <p>{{.Scope}}</p>
+      {{if .Revoked}}<p>{{if $en}}Revoked{{else}}已撤销{{end}}</p>{{else}}
+      <form method="post" action="/account/clients/{{.ID}}/revoke">
+        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+        <button type="submit" class="secondary">{{if $en}}Revoke access{{else}}撤销授权{{end}}</button>
+      </form>{{end}}
+    </section>
+  {{else}}<p>{{if $en}}No clients authorized yet.{{else}}尚未授权任何客户端。{{end}}</p>{{end}}
+  </div>
+  {{else}}
+  <h1>{{if $en}}Authorize client{{else}}授权客户端{{end}}</h1>
+  <p><strong>{{.OAuth.Client}}</strong></p>
+  <p>{{.Principal.Username}} · {{.Principal.TenantName}}</p>
+  <ul>{{range .OAuth.Scopes}}<li>{{if eq . "assets:read"}}{{if $en}}Read items, history and costs{{else}}读取物品、历史和成本{{end}}{{else if eq . "assets:catalog"}}{{if $en}}Manage items, catalog and 3D resources{{else}}管理物品、类型和 3D 资源{{end}}{{else}}{{if $en}}Record and correct lifecycle events{{else}}记录及更正生命周期事件{{end}}{{end}}</li>{{end}}</ul>
+  <p>{{if $en}}Authorize only a client you trust. You can revoke access at any time.{{else}}仅授权你信任的客户端。你可以随时撤销授权。{{end}}</p>
+  <form method="post" action="/oauth/authorize" class="stack">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="response_type" value="code">
+    <input type="hidden" name="client_id" value="{{.OAuth.Command.ClientID}}">
+    <input type="hidden" name="redirect_uri" value="{{.OAuth.Command.RedirectURI}}">
+    <input type="hidden" name="resource" value="{{.OAuth.Command.Resource}}">
+    <input type="hidden" name="scope" value="{{.OAuth.Command.Scope}}">
+    <input type="hidden" name="code_challenge" value="{{.OAuth.Command.Challenge}}">
+    <input type="hidden" name="code_challenge_method" value="{{.OAuth.Command.ChallengeMethod}}">
+    <input type="hidden" name="state" value="{{.OAuth.State}}">
+    <button type="submit" name="decision" value="allow">{{if $en}}Allow access{{else}}允许访问{{end}}</button>
+    <button type="submit" name="decision" value="deny" class="secondary">{{if $en}}Deny{{else}}拒绝{{end}}</button>
+  </form>
+  {{end}}
+  <p><a href="/">{{if $en}}Back to items{{else}}返回物品{{end}}</a></p>
+</section>
+{{end}}

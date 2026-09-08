@@ -18,6 +18,7 @@ import (
 	aliyunblob "github.com/SampsonFox/assetloop/internal/blob/aliyun"
 	localblob "github.com/SampsonFox/assetloop/internal/blob/local"
 	"github.com/SampsonFox/assetloop/internal/config"
+	mcptransport "github.com/SampsonFox/assetloop/internal/mcp"
 	"github.com/SampsonFox/assetloop/internal/store"
 	postgresstore "github.com/SampsonFox/assetloop/internal/store/postgres"
 	sqlitestore "github.com/SampsonFox/assetloop/internal/store/sqlite"
@@ -88,6 +89,7 @@ func run(args []string) error {
 			application.LifecycleStore
 			application.ModelMediaStore
 			application.SpecificationStore
+			application.OAuthStore
 		}
 		if cfg.Database.Driver == "sqlite" {
 			appStore = sqlitestore.New(db)
@@ -111,6 +113,18 @@ func run(args []string) error {
 		}
 		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
 		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore)}
+		var oauthHTTP *mcptransport.OAuthHTTP
+		if cfg.MCP.Enabled {
+			options.OAuth, err = application.NewOAuthService(appStore, cfg.MCP.Issuer+"/mcp", []application.OAuthClient{{ID: cfg.MCP.ClientID, Name: "Codex", RedirectURIs: []string{cfg.MCP.RedirectURI}}})
+			if err != nil {
+				return err
+			}
+			options.OAuthIssuer = cfg.MCP.Issuer
+			oauthHTTP, err = mcptransport.NewOAuthHTTP(options.OAuth, cfg.MCP.Issuer)
+			if err != nil {
+				return err
+			}
+		}
 		if cfg.AuthMode == "disabled" {
 			_, err := auth.EnsureDisabledPrincipal(context.Background())
 			if err != nil {
@@ -121,7 +135,19 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		return serve(cfg.HTTPAddr, webServer.Handler())
+		handler := webServer.Handler()
+		if oauthHTTP != nil {
+			mux := http.NewServeMux()
+			mux.Handle("/", handler)
+			for _, path := range []string{"/.well-known/oauth-authorization-server", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} {
+				mux.Handle(path, oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Metadata)))
+			}
+			mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
+			mux.Handle("/oauth/revoke", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Revoke)))
+			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia}, oauthHTTP.Authenticate)))
+			handler = mux
+		}
+		return serve(cfg.HTTPAddr, handler)
 	default:
 		return fmt.Errorf("unknown command %q; usage: assetloop <serve|migrate>", args[0])
 	}

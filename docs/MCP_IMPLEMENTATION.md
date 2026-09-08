@@ -102,3 +102,15 @@ local `return_to` through failed attempts, successful login and existing session
 `internal/web/login_return_test.go` first reproduced the lost continuation and
 now covers it plus external/encoded redirect rejection. The hidden field does not
 change the existing login page's visual layout. Consent integration remains open.
+
+Consent/runtime checkpoint: `MCP_ENABLED=true` now constructs the OAuth service
+and mounts metadata, token, revocation and MCP routes in the same `serve` process.
+Web exposes `/oauth/authorize` and `/account/clients`, with the latter linked from
+the account menu only when enabled. Consent uses the existing authenticated
+session and CSRF protection, validates the registered client before any redirect,
+shows requested permissions, and returns code/error with state and issuer.
+The authorization management list only contains the acting user's grants.
+`TestOAuthConsentAndRevocation` covers login continuation, rendered permissions,
+CSRF refusal, allow, deny, token exchange, grant listing and immediate revocation.
+No preview instance has been restarted. Browser visual QA and actual Codex OAuth
+acceptance are still pending; the checklist remains open until those are verified.
