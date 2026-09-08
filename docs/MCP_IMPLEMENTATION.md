@@ -10,7 +10,7 @@ part of this worktree's development runtime.
 - [x] Pin the official Go MCP SDK and implement a thin read adapter.
 - [x] Exercise real HTTP discovery, context, scoped denial, input validation and
   tenant isolation with the SDK client and migrated SQLite.
-- [ ] Add application-owned OAuth grants, authorization codes and hashed tokens,
+- [x] Add application-owned OAuth grants, authorization codes and hashed tokens,
   with paired SQLite/PostgreSQL migrations, sqlc adapters and upgrade tests.
 - [ ] Implement same-account consent, authorization-code PKCE, metadata discovery,
   exact registered loopback callback matching (variable port), rotating refresh,
@@ -30,7 +30,7 @@ part of this worktree's development runtime.
 - [ ] Verify all input/output schemas, stable safe errors, pagination, permissions,
   exact integer money and fixed-point FX. Return only relevant public metadata,
   never credentials or physical storage paths.
-- [ ] Extend the cumulative full-element scenario and run both supported stores,
+- [x] Extend the cumulative full-element scenario and run both supported stores,
   migration upgrades and relevant Web/MCP regressions.
 - [ ] Accept through actual local Codex OAuth login, discovery, read, confirmed
   create/record/correct, Web visibility, retry and per-client revocation.
@@ -59,6 +59,22 @@ Completion means the entire checklist is proved, not merely that the read adapte
 compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
+
+Dual-database verification is now executed, not deferred: commit `7328a92` passed
+[CI run 34229709652](https://github.com/SampsonFox/assetloop/actions/runs/34229709652).
+The test job used its isolated PostgreSQL 17 service with `TEST_POSTGRES_DSN` and
+`REQUIRE_POSTGRES_TEST=true`; Go tests passed for integration, MCP, migration,
+SQLite/PostgreSQL stores and other packages. The named full-element scenario
+also passed separately, all 132 Web interaction tests passed, and sqlc generation,
+generated-tree cleanliness and vet passed. `secret-scan` passed. No packaging,
+UAT pull request, promotion or production release was invoked. Historical notes
+below describe earlier checkpoints and their then-unavailable PostgreSQL checks.
+
+Local desktop acceptance preparation: an isolated opt-in server is running on
+`127.0.0.1:8081`, with its own `data/mcp-acceptance` database/blob directory. The
+existing 8080 instance was not changed. Discovery metadata is reachable and
+advertises issuer-bound OAuth callbacks. Actual desktop consent/tool acceptance
+is still open; automated HTTP SDK success is not desktop success.
 
 The named `TestFullElementScenario` now includes `MCP OAuth lifecycle` on each
 supported Store: actual Web consent with session/CSRF, HTTP PKCE code exchange,
