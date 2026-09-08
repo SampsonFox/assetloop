@@ -35,6 +35,7 @@ type ProductModel3D struct {
 }
 
 type Asset struct {
+	MarketItemID      string
 	Tags              []SpecificationTag
 	Model3DResourceID string
 	ID                string

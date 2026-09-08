@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -22,7 +23,13 @@ type Blob struct {
 
 type OSS struct{ Endpoint, Region, Bucket, AccessKeyID, AccessKeySecret, PathPrefix string }
 
+type Market struct {
+	Token          string
+	UnitsConfirmed bool
+}
+
 type Config struct {
+	Market      Market
 	Environment string
 	HTTPAddr    string
 	LogLevel    string
@@ -33,18 +40,24 @@ type Config struct {
 
 func Load(dotenvPath string) (Config, error) {
 	values := map[string]string{
-		"APP_ENV":                  "local",
-		"HTTP_ADDR":                "127.0.0.1:8080",
-		"LOG_LEVEL":                "info",
-		"AUTH_MODE":                "local",
-		"DB_DRIVER":                "sqlite",
-		"DB_DSN":                   "./data/assetloop.db",
-		"ATTACHMENT_DEFAULT_STORE": "local",
-		"ATTACHMENT_LOCAL_ROOT":    "./data/blobs",
-		"ALIYUN_OSS_ENDPOINT":      "", "ALIYUN_OSS_REGION": "", "ALIYUN_OSS_BUCKET": "",
+		"ZHUANZHUAN_MCP_TOKEN":            "",
+		"ZHUANZHUAN_PRICE_UNIT_CONFIRMED": "false",
+		"APP_ENV":                         "local",
+		"HTTP_ADDR":                       "127.0.0.1:8080",
+		"LOG_LEVEL":                       "info",
+		"AUTH_MODE":                       "local",
+		"DB_DRIVER":                       "sqlite",
+		"DB_DSN":                          "./data/assetloop.db",
+		"ATTACHMENT_DEFAULT_STORE":        "local",
+		"ATTACHMENT_LOCAL_ROOT":           "./data/blobs",
+		"ALIYUN_OSS_ENDPOINT":             "", "ALIYUN_OSS_REGION": "", "ALIYUN_OSS_BUCKET": "",
 		"ALIYUN_OSS_ACCESS_KEY_ID": "", "ALIYUN_OSS_ACCESS_KEY_SECRET": "", "ALIYUN_OSS_PATH_PREFIX": "",
 	}
 	if err := loadDotenv(dotenvPath, values); err != nil {
+		return Config{}, err
+	}
+	// A separate ignored provider file is useful for existing local installs.
+	if err := loadDotenv(filepath.Join(filepath.Dir(dotenvPath), ".env.zhuanzhuan.local"), values); err != nil {
 		return Config{}, err
 	}
 	for key := range values {
@@ -86,6 +99,7 @@ func Load(dotenvPath string) (Config, error) {
 	}
 
 	return Config{
+		Market:      Market{Token: strings.TrimSpace(values["ZHUANZHUAN_MCP_TOKEN"]), UnitsConfirmed: values["ZHUANZHUAN_PRICE_UNIT_CONFIRMED"] == "true"},
 		Environment: values["APP_ENV"],
 		HTTPAddr:    values["HTTP_ADDR"],
 		LogLevel:    values["LOG_LEVEL"],

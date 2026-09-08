@@ -31,7 +31,7 @@ The architecture optimizes for:
              |               |                |
              v               v                v
         Database Store   Attachment Store  Market/FX Sources
-        SQLite/Postgres  Local/Aliyun OSS  OneBound/others
+        SQLite/Postgres  Local/Aliyun OSS  Zhuanzhuan/Frankfurter
 ```
 
 The AI Harness interprets images and conversation and confirms every extracted field with the user before invoking a write MCP tool. A semantic MCP mutation therefore represents confirmed intent, but the application still validates identity, tenant scope, input shape, lifecycle invariants, money evidence, and transaction boundaries before writing.
@@ -51,7 +51,7 @@ Application services and ports
 Pure domain model
 
 Infrastructure adapters implement application ports:
-  SQLite | PostgreSQL | Local files | Aliyun OSS | OneBound
+  SQLite | PostgreSQL | Local files | Aliyun OSS | Zhuanzhuan / Frankfurter
 ```
 
 Dependencies point inward. Domain code has no knowledge of transports or infrastructure.
@@ -154,8 +154,8 @@ PostgreSQL live verification is still a required UAT gate.
   Migrated selections, assets, lifecycle history, resource metadata, effective item
   overrides and GLB bytes are preserved. Runtime adapters and HTTP maintenance no
   longer support the retired hierarchy.
-- Future market inputs use model identity plus configuration-tag snapshots,
-  condition, region and source. This transition adds no market polling or storage.
+- Market queries use explicitly confirmed keywords/configuration, region and source;
+  asset bindings share a tenant-scoped series without automatic model matching.
 
 ### Current persisted hierarchy
 
@@ -435,26 +435,31 @@ Migration 00011 expands existing metadata into resource references, retaining le
 
 ## 9. Market data architecture
 
-```text
-MarketDataProvider
-        |
-        v
-raw normalized listings
-        |
-match model + configuration-tag snapshot -> reject accessories/services -> deduplicate
-        |
-condition mapping -> outlier filter -> aggregate
-        |
-dated FX conversion -> persisted price point
-```
+MarketService -> MarketDataProvider.FetchQuote -> dated FX conversion -> MarketStore.
+Zhuanzhuan is the first adapter, calling market_price over Streamable HTTP MCP without
+an AI model. Providers map transport fields; application policy selects the provider's
+latest-period maximum completed-sale price. Listing aggregation, confidence scoring,
+OneBound and manual imports are deferred.
 
-Providers own transport mechanics only. The shared pipeline owns market meaning.
-Future price series use model identity, an immutable configuration-tag snapshot,
-condition, region and provider so sources and configurations cannot mix invisibly.
-Changing a shared display label must not reinterpret historical observations.
-This boundary does not add market tables, polling jobs or new MCP transports now.
+Tenant-scoped market_items identify immutable provider/query/configuration/region
+combinations. asset_market_bindings links existing assets without rebuilding their table.
+Composite tenant foreign keys prevent cross-tenant relations. Assets explicitly share a market item; mutable display names do not
+reinterpret history. market_prices retain one latest successful snapshot per Shanghai
+calendar day, original money, observed time, optional source date/sample count,
+provider version, calculation provenance and sanitized quote evidence. Missing source
+metadata stays unknown. Failed refreshes preserve prior valid observations.
 
-The initial provider is OneBound. Manual import is the second implementation used for testing and fallback. A versioned remote HTTP provider protocol is deferred until an external provider must run without recompiling the application.
+Frankfurter daily reference rates implement FXProvider. Exact fixed-point conversion
+preserves original money and actual rate date/source. Missing FX leaves the original
+observation pending conversion; no future rate or fabricated parity is used. A first
+market price locks tenant base currency just like a monetary lifecycle event.
+
+Web and CLI invoke application use cases. OS scheduled tasks call refresh-market at
+09:00 Asia/Shanghai, with database leases preventing overlapping workers. Only
+referenced enabled series refresh automatically; all-sold assets retain 90 days of
+refresh. Local startup catches up current observations, never backfills missed prices.
+Secrets remain environment or ignored local configuration. Unit confirmation gates
+production quote writes. Core costs remain derived only from lifecycle cashflows.
 
 ## 10. Configuration architecture
 

@@ -38,7 +38,8 @@ func (s *Store) GetAsset(ctx context.Context, tenantID, assetID string) (domain.
 		return domain.Asset{}, err
 	}
 	return domain.Asset{
-		ID: row.ID.String(), TenantID: row.TenantID.String(),
+		MarketItemID: row.MarketItemID,
+		ID:           row.ID.String(), TenantID: row.TenantID.String(),
 		CategoryID: row.CategoryID.String(), Category: row.CategoryName, CategoryIcon: row.CategoryIcon,
 		ModelID: row.ModelID.String(), Model: row.ModelName,
 		Model3DResourceID: optionalUUID(row.Model3dResourceID),

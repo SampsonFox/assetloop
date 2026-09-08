@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. General attachments, market, MCP, and scheduler paths continue as later slices.
+Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. Zhuanzhuan shared daily quotes, FX, settings and scheduled CLI are implemented with formal writes gated on unit verification. General attachments and the MCP server remain later slices.
 
 ## Authority map
 
@@ -18,14 +18,14 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 | Path | Responsibility |
 |---|---|
-| `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |
+| `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, `refresh-market`, `install-scheduler`, and Windows double-click launch handling |
 | `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, inherited GLB viewer, code-defined zh-CN/en language packs, account menu, semantic light/dark themes with user accent palettes, shared catalog drawers, inline custom lifecycle event types, and progressively disclosed FX evidence forms |
 | `internal/web/resources.go`, `resource_tags.go`, `resources_i18n.go`, `templates/resources.html`, `templates/resource.html` | Paged 3D library with shared list backdrop and wide preview/edit drawer; atomic metadata/tag save, attribution, reference navigation and deletion retry |
 | `internal/web/shared_rename.test.mjs` | Conditional shared-name confirmation, no-JS confirmation fallback and unified resource editor form coverage |
 | `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons; consistent compact catalog/tag/resource/event-type row actions and drawer controls; accessible-label/layout regression checks |
 | `internal/web/model_configuration.go`, `model_configuration.test.mjs`, `templates/catalog_drawers.html` | Unified model metadata/tag/appearance submission and transactional save; management drawers share `data-management-drawer` fixed heading actions and independent scrolling, covered by `management_ui.test.mjs` |
-| `internal/mcp/` | Semantic MCP tool transport |
-| `internal/scheduler/` | Refresh-job entry adapters |
+| `internal/mcp/` | Reserved placeholder; semantic MCP server not implemented |
+| `cmd/assetloop/market.go`, `market_scheduler.go` | Shared refresh CLI and Windows task installer; OS task invokes the same binary |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
 | `internal/domain/` | Pure catalog/lifecycle types plus the versioned ISO 4217 catalog, exact minor-unit money, and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
@@ -43,8 +43,8 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `internal/blob/local/` | Local filesystem BlobStore | blob port |
 | `internal/blob/aliyun/` | Aliyun OSS BlobStore | blob port, Aliyun SDK |
 | `internal/blob/key_mapper.go` | Shared tenant-scoped logical object keys | application key-mapper port |
-| `internal/market/onebound/` | OneBound request/response adapter | market port |
-| `internal/market/manual/` | Manual/imported market observations | market port |
+| `internal/market/zhuanzhuan/` | Streamable HTTP MCP market_price adapter and recorded quote fixture | MarketDataProvider |
+| `internal/market/frankfurter/` | v2 blended daily rates, prior-date selection and exact decimal mapping | FXProvider |
 | `migrations/sqlite/` | SQLite forward migrations | none |
 | `migrations/postgres/` | PostgreSQL forward migrations | none |
 
@@ -54,14 +54,18 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 |---|---|---|
 | `BlobStore` | `internal/application/ports.go` | Local, Aliyun OSS |
 | `ObjectKeyMapper` | `internal/blob/key_mapper.go` | one shared mapper |
-| `MarketDataProvider` | `internal/application/ports.go` | OneBound, Manual |
-| `FXProvider` | `internal/application/ports.go` | selected FX source |
+| `MarketDataProvider` | `internal/application/market_ports.go` | Zhuanzhuan |
+| `FXProvider` | `internal/application/market_ports.go` | Frankfurter v2 |
+| `MarketStore` | `internal/application/market_ports.go` | SQLite, PostgreSQL |
 | `AuthStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `CatalogStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `LifecycleStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `ModelMediaStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 
 ## Regression spine
+
+Market quotes: `internal/application/market.go` owns preview/create/bind/refresh, maximum-price policy, FX repair, daily selection and 90-day tail. Both Store `market.sql`/`market.go` adapters implement paired 00015 migrations and fenced leases. `storetest/market.go`, `market_migration_test.go` and the full-element scenario cover sharing, isolation, daily idempotency, failures, concurrency, locking and upgrade preservation. `internal/web/market.go`, `market_i18n.go`, `templates/market.html`, `market_summary.html` provide management and asset integration. Provider evidence and operation instructions: `docs/market-integration.md`.
+
 
 Specification-tag refactor: `internal/domain/specifications.go` owns optional typed selections, retained disabled values, per-model appearance overrides and deterministic confirmed-rule matching. Paired `00013` SQL files define the direct asset/model relation and typed associations; `internal/store/specification_upgrade.go` executes their DDL and Unicode-aware legacy backfill in one Goose transaction. `specification_migration_test.go` covers rollback/retry, old colors/descriptions, conflicting GLBs and preserved history. `internal/application/specifications.go`, `specification_queries.go` and `specification_ports.go` provide transactional tag/model/asset/resource maintenance, references, candidates and effective appearance resolution. Both Store `specifications.go` adapters use generated `specification.sql` queries and the shared tenant write lock. `storetest/specifications.go` tests these application paths over both adapters (PostgreSQL execution needs its test DSN). Tag Web integration and migrations 13–14 are deployed to local 8080; development evidence is recorded in `docs/specification-acceptance.md`; PostgreSQL live validation remains a UAT gate.
 
@@ -106,7 +110,7 @@ covers atomic rollback; Web transport retains ordinary form and drawer save path
 | Add database field | both migration directories | both sqlc query directories, Store conformance tests |
 | Add attachment behavior | blob port and key mapper | local and Aliyun adapters, attachment application service |
 | Change product 3D media | `internal/application/model_media.go` | resource library, model/appearance/asset bindings, Blob adapters, both Store mappings, Web asset/catalog/resource templates |
-| Add market provider | market port | provider adapter plus shared normalization pipeline |
+| Add market provider | market port | provider adapter plus application quote policy |
 | Change MCP tool | `internal/mcp/` | called application service; never inspect Store unless service contract changes |
 | Change Web screen | `internal/web/server.go` | affected template under `templates/`, then `static/app.css` or local `static/app.js`; called application service only when behavior changes |
 | Change locale or theme | `internal/web/i18n.go` | affected templates, semantic variables in `static/app.css`, then Web locale/theme tests |
@@ -146,7 +150,7 @@ Browser -> Web handler -> application use case -> Store
 
 Market refresh:
 Scheduler/CLI -> refresh use case -> MarketDataProvider
-              -> normalization -> FX conversion -> Store
+              -> quote policy -> dated FX conversion -> Store
 
 Attachment read:
 Web/MCP -> attachment use case -> attachment metadata Store
