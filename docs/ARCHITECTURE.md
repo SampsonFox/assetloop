@@ -120,6 +120,14 @@ application transactions, alongside the existing lifecycle receipts. Detailed
 scope, implementation status and acceptance evidence live in
 `docs/MCP_IMPLEMENTATION.md`.
 
+OAuth grants bind tenant membership, client, scopes and resource. Migration 00015
+stores only credential hashes with a tenant/grant foreign key; consumed codes and
+refresh tokens remain available for replay detection. Store adapters serialize
+short exchanges in a database transaction (SQLite write reservation; PostgreSQL
+transaction advisory lock). Replay-triggered grant revocation commits before an
+invalid-grant response. Token reads resolve current membership rather than a
+persisted role snapshot. No OAuth endpoint is enabled by adding these tables.
+
 ### 4.4 Infrastructure adapters
 
 - Stores translate application operations to SQLite or PostgreSQL.

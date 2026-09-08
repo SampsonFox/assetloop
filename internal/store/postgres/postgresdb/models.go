@@ -157,6 +157,29 @@ type ModelAppearanceDimension struct {
 	AffectsAppearance bool
 }
 
+type OauthCredential struct {
+	Hash        string
+	TenantID    uuid.UUID
+	GrantID     uuid.UUID
+	Kind        string
+	RedirectUri string
+	Challenge   string
+	ExpiresAt   time.Time
+	Consumed    bool
+}
+
+type OauthGrant struct {
+	ID        uuid.UUID
+	TenantID  uuid.UUID
+	UserID    uuid.UUID
+	ClientID  string
+	Scope     string
+	Resource  string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	Revoked   bool
+}
+
 type ProductModel struct {
 	ID                    uuid.UUID
 	TenantID              uuid.UUID

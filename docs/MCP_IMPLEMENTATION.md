@@ -74,5 +74,12 @@ registered loopback ports, audience/client checks, expiration, current roles,
 hash-only persistence, write rollback, code/refresh replay revocation, concurrent
 code exchange and client-scoped token revocation. Scope constants are shared with
 the MCP adapter. `go test ./internal/application ./internal/mcp -count=1` passes.
-Real Store implementations and HTTP consent/token endpoints remain incomplete;
-these policy tests are not a substitute for either database's compatibility run.
+Both Store implementations now use generated `oauth.sql` queries and paired
+migration 00015. SQLite real persistence and independent-connection exchange/replay
+tests pass. Schema-14 upgrade tests prove rollback after a DDL collision, retry
+and retained account data. The existing specification migration regression now
+expects latest schema 15 without removing its history-preservation assertions.
+PostgreSQL compiles but its live test is skipped because no TEST_POSTGRES_DSN is
+configured; the dual-database checklist item is deliberately still open. HTTP
+consent/token endpoints remain incomplete. These policy and SQLite tests are not
+a substitute for PostgreSQL execution.
