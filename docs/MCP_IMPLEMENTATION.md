@@ -60,6 +60,17 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+Supporting edit queries: `get_model_configuration` returns all allowed tag IDs,
+explicit appearance overrides (including false, distinct from absent), and
+confirmed appearance rules. `get_resource_configuration` returns descriptive
+tag/category associations; `get_specification_references` pages tag/type usage.
+All three delegate to application projections of the existing tenant-scoped
+specification snapshot, not transport-owned business queries. SDK discovery now
+contains 38 tools. `mcp_configuration_test.go` verifies actual saved configuration,
+rule identity/conditions, explicit false overrides, resource associations,
+reference totals/paging and denied scopes/other tenants. The MCP, integration and
+application package tests pass with SQLite; this is not live PostgreSQL evidence.
+
 Recoverable deletion checkpoint: `delete_3d_resource` reuses the media service's
 guarded preparation and cleanup. Its management receipt atomically records the
 pending deletion and immutable object identity; success is returned only after

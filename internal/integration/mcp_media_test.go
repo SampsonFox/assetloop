@@ -153,6 +153,7 @@ func testManagementBinding(t *testing.T, store application.ManagementStore, owne
 		t.Fatal("HTTP deletion did not remove resource")
 	}
 	testManagementDeletion(t, store, owner, media, local, model.ID)
+	testConfigurationQueries(t, store, owner, manager, model.ID, r.ID, category)
 }
 
 type retryDeleteBlob struct {
