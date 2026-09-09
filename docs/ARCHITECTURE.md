@@ -464,6 +464,28 @@ normalizes to integer fen. Application services validate ISO currency and operat
 on normalized minor units without platform-specific currency checks or user unit
 confirmation. Core costs remain derived only from lifecycle cashflows.
 
+### Product discovery and quote confirmation
+
+ProductDiscoveryProvider adds SearchProducts and GetProductDetail beside MarketDataProvider.
+The Zhuanzhuan adapter uses the same remote MCP client for all three tools and maps both
+JSON and text details; multiple quote payloads are rejected instead of field-merged.
+MarketService owns candidate selection, explicit-specification prefill, reference-scope
+confirmation and the shared per-service request limiter/retries. No model API is involved.
+
+Principal-scoped, opaque discovery drafts keep search tuples and confirmed previews in
+process for 30 minutes (24 per principal, 256 total); restart/expiry requires a fresh search.
+Web forms never supply trusted provider evidence. Save re-fetches the selected product,
+compares its actual specification snapshot and verifies the confirmed quote model. Changes
+invalidate confirmation and require review. No external call holds a database transaction.
+
+Paired migration 00016 adds nullable market_items.selection_json: the immutable selection
+snapshot holds source/product reference, title, returned specifications and retrieval time.
+Telemetry and page cursors stay ephemeral. Product IDs are not market model IDs. Exact-query
+reuse preserves the existing snapshot; scheduled refresh depends only on the fixed quote
+query, so a sold or removed listing does not stop the series. Product asking prices never
+enter market_prices. The UI distinguishes product specifications from quote model scope
+and permits incomplete quote scope only with explicit acceptance.
+
 ## 10. Configuration architecture
 
 Deployment configuration comes from defaults, optional `.env`, and real environment variables, with real environment variables taking precedence.

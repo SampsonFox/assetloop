@@ -136,73 +136,52 @@ func (p *Provider) rpc(ctx context.Context, method string, params any, id int, s
 	}
 	return out, nil
 }
-func (p *Provider) FetchQuote(ctx context.Context, q application.MarketQuery) (application.MarketQuote, error) {
-	var zero application.MarketQuote
+func (p *Provider) callTool(ctx context.Context, name string, args any) (json.RawMessage, string, error) {
 	session := ""
 	init, e := p.rpc(ctx, "initialize", map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "assetloop", "version": "1"}}, 1, &session, "")
 	if e != nil {
-		return zero, e
+		return nil, "", e
 	}
 	var hello struct {
 		ProtocolVersion string
 		ServerInfo      struct{ Version string }
 	}
 	if json.Unmarshal(init, &hello) != nil || hello.ProtocolVersion == "" {
-		return zero, application.ErrMarketInvalid
+		return nil, "", application.ErrMarketInvalid
 	}
 	if _, e = p.rpc(ctx, "notifications/initialized", nil, 0, &session, hello.ProtocolVersion); e != nil {
-		return zero, e
+		return nil, "", e
 	}
-	result, e := p.rpc(ctx, "tools/call", map[string]any{"name": "market_price", "arguments": map[string]string{"keyword": q.Keyword, "filterCriteria": q.FilterCriteria}}, 2, &session, hello.ProtocolVersion)
+	result, e := p.rpc(ctx, "tools/call", map[string]any{"name": name, "arguments": args}, 2, &session, hello.ProtocolVersion)
 	if e != nil {
-		return zero, e
+		return nil, "", e
 	}
-	return p.parseQuote(result, hello.ServerInfo.Version)
+	return result, hello.ServerInfo.Version, nil
+}
+func (p *Provider) FetchQuote(ctx context.Context, q application.MarketQuery) (application.MarketQuote, error) {
+	result, version, err := p.callTool(ctx, "market_price", map[string]string{"keyword": q.Keyword, "filterCriteria": q.FilterCriteria})
+	if err != nil {
+		return application.MarketQuote{}, err
+	}
+	return p.parseQuote(result, version)
 }
 func (p *Provider) parseQuote(b []byte, version string) (application.MarketQuote, error) {
-	var result struct {
-		IsError           bool
-		StructuredContent json.RawMessage
-		Content           []struct{ Type, Text string }
-	}
 	invalid := application.ErrMarketInvalid
-	if json.Unmarshal(b, &result) != nil || result.IsError {
-		return application.MarketQuote{}, invalid
+	values, text, err := toolData(b)
+	if err != nil {
+		return application.MarketQuote{}, err
 	}
-	values := map[string]json.RawMessage{}
-	ingest := func(raw []byte) bool {
-		var obj map[string]json.RawMessage
-		if json.Unmarshal(raw, &obj) != nil {
-			return false
-		}
-		if code, ok := obj["code"]; ok && string(code) != "0" {
-			return false
-		}
-		if data, ok := obj["data"]; ok {
-			if json.Unmarshal(data, &obj) != nil {
-				return false
-			}
-		}
-		for k, v := range obj {
-			values[k] = v
-		}
-		return true
-	}
-	if len(result.StructuredContent) > 0 {
-		ingest(result.StructuredContent)
-	}
-	for _, c := range result.Content {
-		if c.Type != "text" {
-			continue
-		}
-		if ingest([]byte(c.Text)) {
-			continue
-		}
-		for _, line := range strings.Split(c.Text, "\n") {
+	if values == nil {
+		values = map[string]json.RawMessage{}
+		for _, line := range strings.Split(text, "\n") {
 			k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
-			if ok {
-				values[k], _ = json.Marshal(strings.TrimSpace(v))
+			if !ok {
+				continue
 			}
+			if _, exists := values[k]; exists {
+				return application.MarketQuote{}, invalid
+			}
+			values[k], _ = json.Marshal(strings.TrimSpace(v))
 		}
 	}
 	field := func(k string) string {

@@ -1,11 +1,11 @@
 -- name: GetMarketItem :one
-SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST(sqlc.arg(tenant) AS TEXT) AND id=sqlc.arg(id);
+SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until,selection_json FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST(sqlc.arg(tenant) AS TEXT) AND id=sqlc.arg(id);
 -- name: ListMarketItems :many
-SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST(sqlc.arg(tenant) AS TEXT) ORDER BY name,id;
+SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until,selection_json FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST(sqlc.arg(tenant) AS TEXT) ORDER BY name,id;
 -- name: ListMarketTenants :many
 SELECT DISTINCT CAST(tenant_id AS TEXT) AS tenant FROM market_items ORDER BY tenant;
 -- name: CreateMarketItem :exec
-INSERT INTO market_items(id,tenant_id,name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_success) VALUES(sqlc.arg(id),CAST(CAST(sqlc.arg(tenant) AS TEXT) AS UUID),sqlc.arg(name),sqlc.arg(provider),sqlc.arg(keyword),sqlc.arg(filter_criteria),sqlc.arg(model_desc),sqlc.arg(region),sqlc.narg(external_id),sqlc.arg(enabled),sqlc.arg(created_at),sqlc.arg(last_success));
+INSERT INTO market_items(id,tenant_id,name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_success,selection_json) VALUES(sqlc.arg(id),CAST(CAST(sqlc.arg(tenant) AS TEXT) AS UUID),sqlc.arg(name),sqlc.arg(provider),sqlc.arg(keyword),sqlc.arg(filter_criteria),sqlc.arg(model_desc),sqlc.arg(region),sqlc.narg(external_id),sqlc.arg(enabled),sqlc.arg(created_at),sqlc.arg(last_success),sqlc.narg(selection_json));
 -- name: UpdateMarketItem :execrows
 UPDATE market_items SET name=sqlc.arg(name),enabled=sqlc.arg(enabled) WHERE CAST(tenant_id AS TEXT)=CAST(sqlc.arg(tenant) AS TEXT) AND id=sqlc.arg(id);
 -- name: BindAssetMarket :exec

@@ -52,7 +52,7 @@ func (q *Queries) ClaimMarketLease(ctx context.Context, arg ClaimMarketLeasePara
 }
 
 const createMarketItem = `-- name: CreateMarketItem :exec
-INSERT INTO market_items(id,tenant_id,name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_success) VALUES($1,CAST(CAST($2 AS TEXT) AS UUID),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+INSERT INTO market_items(id,tenant_id,name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_success,selection_json) VALUES($1,CAST(CAST($2 AS TEXT) AS UUID),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 `
 
 type CreateMarketItemParams struct {
@@ -68,6 +68,7 @@ type CreateMarketItemParams struct {
 	Enabled        int64
 	CreatedAt      int64
 	LastSuccess    int64
+	SelectionJson  sql.NullString
 }
 
 func (q *Queries) CreateMarketItem(ctx context.Context, arg CreateMarketItemParams) error {
@@ -84,6 +85,7 @@ func (q *Queries) CreateMarketItem(ctx context.Context, arg CreateMarketItemPara
 		arg.Enabled,
 		arg.CreatedAt,
 		arg.LastSuccess,
+		arg.SelectionJson,
 	)
 	return err
 }
@@ -115,7 +117,7 @@ func (q *Queries) FinishMarketLease(ctx context.Context, arg FinishMarketLeasePa
 }
 
 const getMarketItem = `-- name: GetMarketItem :one
-SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST($1 AS TEXT) AND id=$2
+SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until,selection_json FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST($1 AS TEXT) AND id=$2
 `
 
 type GetMarketItemParams struct {
@@ -140,6 +142,7 @@ type GetMarketItemRow struct {
 	LastError      string
 	LeaseToken     string
 	LeaseUntil     int64
+	SelectionJson  sql.NullString
 }
 
 func (q *Queries) GetMarketItem(ctx context.Context, arg GetMarketItemParams) (GetMarketItemRow, error) {
@@ -162,12 +165,13 @@ func (q *Queries) GetMarketItem(ctx context.Context, arg GetMarketItemParams) (G
 		&i.LastError,
 		&i.LeaseToken,
 		&i.LeaseUntil,
+		&i.SelectionJson,
 	)
 	return i, err
 }
 
 const listMarketItems = `-- name: ListMarketItems :many
-SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST($1 AS TEXT) ORDER BY name,id
+SELECT id, CAST(tenant_id AS TEXT) AS tenant_id, name,provider,keyword,filter_criteria,model_desc,region,external_id,enabled,created_at,last_attempt,last_success,last_error,lease_token,lease_until,selection_json FROM market_items WHERE CAST(tenant_id AS TEXT)=CAST($1 AS TEXT) ORDER BY name,id
 `
 
 type ListMarketItemsRow struct {
@@ -187,6 +191,7 @@ type ListMarketItemsRow struct {
 	LastError      string
 	LeaseToken     string
 	LeaseUntil     int64
+	SelectionJson  sql.NullString
 }
 
 func (q *Queries) ListMarketItems(ctx context.Context, tenant string) ([]ListMarketItemsRow, error) {
@@ -215,6 +220,7 @@ func (q *Queries) ListMarketItems(ctx context.Context, tenant string) ([]ListMar
 			&i.LastError,
 			&i.LeaseToken,
 			&i.LeaseUntil,
+			&i.SelectionJson,
 		); err != nil {
 			return nil, err
 		}

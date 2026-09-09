@@ -16,10 +16,14 @@ var (
 	ErrMarketTemporary = errors.New("market.temporary")
 	ErrMarketInvalid   = errors.New("market.invalid_response")
 
-	ErrMarketUnavailable = errors.New("market.unconfigured")
-	ErrMarketMismatch    = errors.New("market.model_changed")
-	ErrMarketBusy        = errors.New("market.busy")
-	ErrMarketFX          = errors.New("market.fx_pending")
+	ErrMarketUnavailable      = errors.New("market.unconfigured")
+	ErrMarketMismatch         = errors.New("market.model_changed")
+	ErrMarketBusy             = errors.New("market.busy")
+	ErrMarketFX               = errors.New("market.fx_pending")
+	ErrMarketProductGone      = errors.New("market.product_gone")
+	ErrMarketDraft            = errors.New("market.draft_expired")
+	ErrMarketSelectionChanged = errors.New("market.selection_changed")
+	ErrMarketScope            = errors.New("market.accept_scope")
 )
 var MarketLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
 
@@ -28,6 +32,7 @@ func MarketDate(t time.Time) string { return t.In(MarketLocation).Format("2006-0
 type MarketOptions struct {
 	Now         func() time.Time
 	MinInterval time.Duration
+	Discovery   ProductDiscoveryProvider
 }
 type MarketService struct {
 	store    MarketStore
@@ -36,13 +41,18 @@ type MarketService struct {
 	options  MarketOptions
 	mu       sync.Mutex
 	next     time.Time
+	draftMu  sync.Mutex
+	drafts   map[string]*marketDiscoveryDraft
 }
 
 func NewMarketService(store MarketStore, p MarketDataProvider, fx FXProvider, o MarketOptions) *MarketService {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	return &MarketService{store: store, provider: p, fx: fx, options: o}
+	if o.Discovery == nil {
+		o.Discovery, _ = p.(ProductDiscoveryProvider)
+	}
+	return &MarketService{drafts: make(map[string]*marketDiscoveryDraft), store: store, provider: p, fx: fx, options: o}
 }
 func (s *MarketService) Configured() bool { return s.provider != nil }
 func marketQuery(q MarketQuery) (MarketQuery, error) {
@@ -68,40 +78,20 @@ func (s *MarketService) fetch(ctx context.Context, q MarketQuery) (MarketQuote, 
 	if s.provider == nil {
 		return MarketQuote{}, ErrMarketUnavailable
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for attempt := 0; attempt < 3; attempt++ {
-		wait := time.Until(s.next)
-		if wait > 0 {
-			timer := time.NewTimer(wait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return MarketQuote{}, ctx.Err()
-			case <-timer.C:
-			}
-		}
-		s.next = time.Now().Add(s.options.MinInterval)
+	return marketExternal(ctx, s, func() (MarketQuote, error) {
 		quote, e := s.provider.FetchQuote(ctx, q)
-		if e == nil {
-			currency, currencyErr := domain.NormalizeCurrency(quote.Currency)
-			if strings.TrimSpace(quote.Provider) == "" || currencyErr != nil || currency != quote.Currency || quote.MaxMinor <= 0 || strings.TrimSpace(quote.ModelDesc) == "" || quote.ObservedAt.IsZero() || quote.ObservedAt.After(s.options.Now().Add(time.Minute)) {
-				return MarketQuote{}, ErrMarketInvalid
-			}
-			if quote.MinMinor != nil && (*quote.MinMinor <= 0 || *quote.MinMinor > quote.MaxMinor) {
-				return MarketQuote{}, ErrMarketInvalid
-			}
-			return quote, nil
-		}
-		if !errors.Is(e, ErrMarketTemporary) && !errors.Is(e, ErrMarketRateLimit) {
+		if e != nil {
 			return MarketQuote{}, e
 		}
-		if attempt == 2 {
-			return MarketQuote{}, e
+		currency, currencyErr := domain.NormalizeCurrency(quote.Currency)
+		if strings.TrimSpace(quote.Provider) == "" || currencyErr != nil || currency != quote.Currency || quote.MaxMinor <= 0 || strings.TrimSpace(quote.ModelDesc) == "" || quote.ObservedAt.IsZero() || quote.ObservedAt.After(s.options.Now().Add(time.Minute)) {
+			return MarketQuote{}, ErrMarketInvalid
 		}
-		s.next = time.Now().Add(time.Duration(attempt+1) * time.Second)
-	}
-	return MarketQuote{}, ErrMarketTemporary
+		if quote.MinMinor != nil && (*quote.MinMinor <= 0 || *quote.MinMinor > quote.MaxMinor) {
+			return MarketQuote{}, ErrMarketInvalid
+		}
+		return quote, nil
+	})
 }
 
 type CreateMarketItem struct {
@@ -112,6 +102,9 @@ type CreateMarketItem struct {
 }
 
 func (s *MarketService) Create(ctx context.Context, a Principal, cmd CreateMarketItem) (domain.MarketItem, error) {
+	return s.create(ctx, a, cmd, "")
+}
+func (s *MarketService) create(ctx context.Context, a Principal, cmd CreateMarketItem, selectionJSON string) (domain.MarketItem, error) {
 	if e := a.Require(CapabilityManageCatalog); e != nil {
 		return domain.MarketItem{}, e
 	}
@@ -137,7 +130,7 @@ func (s *MarketService) Create(ctx context.Context, a Principal, cmd CreateMarke
 	if e != nil {
 		return domain.MarketItem{}, e
 	}
-	item := domain.MarketItem{ID: newID(), TenantID: a.TenantID, Name: name, Provider: quote.Provider, Keyword: q.Keyword, FilterCriteria: q.FilterCriteria, ModelDesc: quote.ModelDesc, Region: "CN", Enabled: true, CreatedAt: s.options.Now().UTC(), LastSuccess: quote.ObservedAt}
+	item := domain.MarketItem{SelectionJSON: selectionJSON, ID: newID(), TenantID: a.TenantID, Name: name, Provider: quote.Provider, Keyword: q.Keyword, FilterCriteria: q.FilterCriteria, ModelDesc: quote.ModelDesc, Region: "CN", Enabled: true, CreatedAt: s.options.Now().UTC(), LastSuccess: quote.ObservedAt}
 	price := s.price(item, quote, base)
 	s.convert(ctx, &price)
 	e = s.store.WithMarketWrite(ctx, a.TenantID, func(st MarketStore) error {
@@ -363,7 +356,7 @@ func (s *MarketService) refresh(ctx context.Context, tenant, id string) (result 
 	})
 }
 func MarketErrorCode(e error) string {
-	for _, known := range []error{ErrMarketAuth, ErrMarketRateLimit, ErrMarketTemporary, ErrMarketInvalid, ErrMarketUnavailable, ErrMarketMismatch, ErrMarketBusy, ErrMarketFX} {
+	for _, known := range []error{ErrMarketAuth, ErrMarketRateLimit, ErrMarketTemporary, ErrMarketInvalid, ErrMarketUnavailable, ErrMarketMismatch, ErrMarketBusy, ErrMarketFX, ErrMarketProductGone, ErrMarketDraft, ErrMarketSelectionChanged, ErrMarketScope} {
 		if errors.Is(e, known) {
 			return known.Error()
 		}

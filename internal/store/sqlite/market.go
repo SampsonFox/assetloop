@@ -64,7 +64,7 @@ func marketStringPtr(v sql.NullString) *string {
 	return &v.String
 }
 func marketItem(r dbq.GetMarketItemRow) domain.MarketItem {
-	return domain.MarketItem{ID: r.ID, TenantID: r.TenantID, Name: r.Name, Provider: r.Provider, Keyword: r.Keyword, FilterCriteria: r.FilterCriteria, ModelDesc: r.ModelDesc, Region: r.Region, ExternalID: r.ExternalID.String, Enabled: r.Enabled == 1, CreatedAt: marketTime(r.CreatedAt), LastAttempt: marketTime(r.LastAttempt), LastSuccess: marketTime(r.LastSuccess), LastError: r.LastError, LeaseToken: r.LeaseToken, LeaseUntil: marketTime(r.LeaseUntil)}
+	return domain.MarketItem{SelectionJSON: r.SelectionJson.String, ID: r.ID, TenantID: r.TenantID, Name: r.Name, Provider: r.Provider, Keyword: r.Keyword, FilterCriteria: r.FilterCriteria, ModelDesc: r.ModelDesc, Region: r.Region, ExternalID: r.ExternalID.String, Enabled: r.Enabled == 1, CreatedAt: marketTime(r.CreatedAt), LastAttempt: marketTime(r.LastAttempt), LastSuccess: marketTime(r.LastSuccess), LastError: r.LastError, LeaseToken: r.LeaseToken, LeaseUntil: marketTime(r.LeaseUntil)}
 }
 func (s *Store) GetMarketItem(ctx context.Context, tenant, id string) (domain.MarketItem, error) {
 	r, e := s.queries().GetMarketItem(ctx, dbq.GetMarketItemParams{Tenant: tenant, ID: id})
@@ -89,7 +89,7 @@ func (s *Store) CreateMarketItem(ctx context.Context, m domain.MarketItem) error
 	if m.Enabled {
 		enabled = 1
 	}
-	return s.queries().CreateMarketItem(ctx, dbq.CreateMarketItemParams{ID: m.ID, Tenant: m.TenantID, Name: m.Name, Provider: m.Provider, Keyword: m.Keyword, FilterCriteria: m.FilterCriteria, ModelDesc: m.ModelDesc, Region: m.Region, ExternalID: sql.NullString{String: m.ExternalID, Valid: m.ExternalID != ""}, Enabled: enabled, CreatedAt: m.CreatedAt.Unix(), LastSuccess: m.LastSuccess.Unix()})
+	return s.queries().CreateMarketItem(ctx, dbq.CreateMarketItemParams{SelectionJson: sql.NullString{String: m.SelectionJSON, Valid: m.SelectionJSON != ""}, ID: m.ID, Tenant: m.TenantID, Name: m.Name, Provider: m.Provider, Keyword: m.Keyword, FilterCriteria: m.FilterCriteria, ModelDesc: m.ModelDesc, Region: m.Region, ExternalID: sql.NullString{String: m.ExternalID, Valid: m.ExternalID != ""}, Enabled: enabled, CreatedAt: m.CreatedAt.Unix(), LastSuccess: m.LastSuccess.Unix()})
 }
 func (s *Store) UpdateMarketItem(ctx context.Context, m domain.MarketItem) error {
 	var enabled int64

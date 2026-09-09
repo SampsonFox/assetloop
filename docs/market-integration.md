@@ -130,3 +130,32 @@ The local Windows daily task is installed and Ready, with its next execution at
 a Unicode-path regression. The refresh CLI exits successfully with zero eligible
 records; users can now create and bind real quotes. Existing application data and
 UAT/production delivery gates remain unchanged.
+
+## Candidate discovery and specification review (2026-09-09)
+
+Read-only live search returned multiple iPhone 15 Pro 256G products. The selected
+product detail used MCP text records (spec=name|value), explicitly returning
+storage 256G, blue titanium, China retail channel and condition 95B; RAM and a
+separate model field were absent. Both this text format and documented JSON
+specifications/options are supported. Fixtures remove links/telemetry and replace
+product IDs and pagination tokens with synthetic references.
+
+The default drawer now searches candidates and fetches details only on selection;
+direct model queries remain available. Configuration prefill comes only from
+explicit specifications. Preview separates product information, submitted query
+and returned market model scope. In the live browser, the full configuration
+query returned the broader iPhone 15 Pro description: the UI exposed this scope
+and required explicit acceptance rather than inventing configuration precision.
+No real quote or asset was created during browser verification.
+
+Selection snapshots use paired 00016 migrations. PostgreSQL 17 isolated live
+conformance, 14-to-current and 15-to-16 upgrades, and the full-element shared
+quote/FX scenario passed. SQLite counterparts and Web handlers passed. The local
+preview upgraded its original database with all old rows and existing GLB bytes
+preserved. Search, lazy detail loading, actual-spec prefill, and quote preview
+also completed against Zhuanzhuan through the local Web application.
+
+Drafts expire after 30 minutes or process restart. Provider references stay in
+principal-scoped memory; final save rechecks details and the matched quote model.
+Changes return to review. Same-query reuse preserves the original selection;
+automatic daily refresh does not query the listing. No UAT or production promotion.

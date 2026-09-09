@@ -21,6 +21,29 @@ type MarketQuote struct {
 type MarketDataProvider interface {
 	FetchQuote(context.Context, MarketQuery) (MarketQuote, error)
 }
+
+type ProductReference struct{ ID, Metric, BusinessType string }
+type ProductSearchQuery struct{ Keyword, FilterCriteria, PageToken string }
+type MarketProduct struct {
+	Reference                 ProductReference
+	Provider, Title, Currency string
+	PriceMinor                *int64
+}
+type ProductSearchResult struct {
+	Items         []MarketProduct
+	PageNo        int
+	HasNext       bool
+	NextPageToken string
+}
+type MarketProductDetail struct {
+	Selection  domain.MarketSelection
+	Currency   string
+	PriceMinor *int64
+}
+type ProductDiscoveryProvider interface {
+	SearchProducts(context.Context, ProductSearchQuery) (ProductSearchResult, error)
+	GetProductDetail(context.Context, ProductReference) (MarketProductDetail, error)
+}
 type FXRate struct {
 	Scaled       int64
 	Date, Source string

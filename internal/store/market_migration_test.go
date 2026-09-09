@@ -48,7 +48,7 @@ func TestMarketUpgradeFromV14PreservesData(t *testing.T) {
 			for table, n := range counts {
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM "+table, n)
 			}
-			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 15)
+			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 16)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM market_items", 0)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM asset_events WHERE base_amount_minor=-12345", 1)
 			var key string

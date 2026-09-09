@@ -3,23 +3,27 @@ package storetest
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/domain"
 	"github.com/google/uuid"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
 
 type quoteFixture struct {
-	now     *time.Time
-	calls   int
-	err     error
-	model   string
-	max     int64
-	entered chan struct{}
-	release chan struct{}
+	now         *time.Time
+	calls       int
+	detailCalls int
+	detailColor string
+	err         error
+	model       string
+	max         int64
+	entered     chan struct{}
+	release     chan struct{}
 }
 
 func (p *quoteFixture) FetchQuote(ctx context.Context, q application.MarketQuery) (application.MarketQuote, error) {
@@ -76,7 +80,42 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 	}
 	one, two := asset("First market device"), asset("Second market device")
 	cmd := application.CreateMarketItem{Name: "Shared phone", Query: application.MarketQuery{Keyword: "phone", FilterCriteria: "256GB"}, ConfirmedModel: p.model, AssetID: one.ID}
-	item, e := svc.Create(ctx, actor, cmd)
+	draft, e := svc.NewMarketDiscovery(ctx, actor, cmd.Query, false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	draft, e = svc.SearchProducts(ctx, actor, draft.ID, cmd.Query, false)
+	if e != nil || len(draft.Results.Items) != 2 {
+		t.Fatal(draft, e)
+	}
+	if p.detailCalls != 0 {
+		t.Fatal("search eagerly fetched details")
+	}
+	if _, e = svc.GetProductDetail(ctx, actor, draft.ID, 9); e == nil {
+		t.Fatal("unknown candidate accepted")
+	}
+	draft, e = svc.GetProductDetail(ctx, actor, draft.ID, 1)
+	if e != nil {
+		t.Fatal(e)
+	}
+	draft, e = svc.EditMarketDiscovery(ctx, actor, draft.ID, "use")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !strings.Contains(draft.Query.FilterCriteria, "256G") || !strings.Contains(draft.Query.FilterCriteria, "蓝色") {
+		t.Fatal(draft.Query)
+	}
+	draft, e = svc.PreviewMarketDiscovery(ctx, actor, draft.ID, cmd.Query)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = svc.SaveMarketDiscovery(ctx, actor, draft.ID, cmd.Name, false); !errors.Is(e, application.ErrMarketScope) {
+		t.Fatal("scope confirmation missing", e)
+	}
+	item, e := svc.SaveMarketDiscovery(ctx, actor, draft.ID, cmd.Name, true)
+	if e == nil {
+		e = svc.Bind(ctx, actor, one.ID, item.ID)
+	}
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -91,8 +130,34 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 	if e != nil || !got.LastSuccess.Equal(now) {
 		t.Fatalf("initial status: %+v %v", got, e)
 	}
+	var snapshot domain.MarketSelection
+	if e = json.Unmarshal([]byte(got.SelectionJSON), &snapshot); e != nil || snapshot.ProductID != "102" || len(snapshot.Specifications) != 2 {
+		t.Fatal("selection snapshot lost", got.SelectionJSON, e)
+	}
+	if p.detailCalls != 2 {
+		t.Fatal("selection must be rechecked at save", p.detailCalls)
+	}
+	alien := actor
+	alien.TenantID = "another-tenant"
+	if _, e = svc.MarketDiscovery(ctx, alien, draft.ID); !errors.Is(e, application.ErrMarketDraft) {
+		t.Fatal("cross-tenant discovery", e)
+	}
+	alien = actor
+	alien.Role = application.RoleViewer
+	if _, e = svc.SearchProducts(ctx, alien, draft.ID, cmd.Query, false); !errors.Is(e, application.ErrForbidden) {
+		t.Fatal("viewer discovery", e)
+	}
+	p.detailColor = "黑色"
+	if _, e = svc.SaveMarketDiscovery(ctx, actor, draft.ID, cmd.Name, true); !errors.Is(e, application.ErrMarketSelectionChanged) {
+		t.Fatal("changed detail accepted", e)
+	}
+	changed, _ := svc.MarketDiscovery(ctx, actor, draft.ID)
+	if changed.Quote != nil || changed.Step != "detail" {
+		t.Fatal("stale preview remained")
+	}
+	p.detailColor = ""
 	other, e := svc.Create(ctx, actor, cmd)
-	if e != nil || other.ID != item.ID {
+	if e != nil || other.ID != item.ID || other.SelectionJSON != item.SelectionJSON {
 		t.Fatalf("dedup: %+v %v", other, e)
 	}
 	cmd.Query.FilterCriteria = "512GB"
@@ -138,7 +203,11 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 	p.model = "phone 256GB"
 	now = now.AddDate(0, 0, 1)
 	calls := p.calls
+	detailCalls := p.detailCalls
 	n, e := svc.RefreshDue(ctx, actor.TenantID, "")
+	if p.detailCalls != detailCalls {
+		t.Fatal("daily refresh called product detail")
+	}
 	if e != nil || n != 1 || p.calls != calls+1 {
 		t.Fatalf("shared daily refresh: %d %v %d", n, e, p.calls-calls)
 	}
@@ -277,4 +346,19 @@ func RunMarket(t *testing.T, first, second Store, db *sql.DB, driver string) {
 	if len(repaired) != 2 || repaired[1].BaseMinor == nil || *repaired[1].BaseMinor != 91000 || repaired[1].FX.RateDate.Format("2006-01-02") != oldDate {
 		t.Fatalf("historical FX repair: %+v", repaired)
 	}
+}
+
+func (p *quoteFixture) SearchProducts(ctx context.Context, q application.ProductSearchQuery) (application.ProductSearchResult, error) {
+	return application.ProductSearchResult{Items: []application.MarketProduct{{Reference: application.ProductReference{ID: "101", Metric: "first"}, Provider: "zhuanzhuan", Title: "First"}, {Reference: application.ProductReference{ID: "102", Metric: "second"}, Provider: "zhuanzhuan", Title: "Second"}}, PageNo: 1}, nil
+}
+func (p *quoteFixture) GetProductDetail(ctx context.Context, ref application.ProductReference) (application.MarketProductDetail, error) {
+	p.detailCalls++
+	color := p.detailColor
+	if color == "" {
+		color = "蓝色"
+	}
+	if ref.ID != "102" || ref.Metric != "second" {
+		return application.MarketProductDetail{}, application.ErrMarketInvalid
+	}
+	return application.MarketProductDetail{Selection: domain.MarketSelection{Provider: "zhuanzhuan", ProductID: ref.ID, Title: "Phone", ObservedAt: *p.now, Specifications: []domain.MarketSpecification{{Name: "存储容量", Value: "256G"}, {Name: "颜色", Value: color}}}, Currency: "CNY"}, nil
 }

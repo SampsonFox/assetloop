@@ -130,6 +130,7 @@ type MarketItem struct {
 	LastError      string
 	LeaseToken     string
 	LeaseUntil     int64
+	SelectionJson  sql.NullString
 }
 
 type MarketPrice struct {

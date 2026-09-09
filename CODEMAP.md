@@ -64,6 +64,8 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 ## Regression spine
 
+Market discovery: `internal/application/market_discovery.go` owns principal-scoped drafts, candidate/detail selection, explicit specification prefill, quote-scope acceptance and save-time revalidation; `ProductDiscoveryProvider` is implemented by `internal/market/zhuanzhuan/discovery.go`. JSON/text fixtures cover live search and specification details. Paired 00016 adds immutable optional selection snapshots; `market_selection_migration_test.go` verifies old-price and binding preservation. Web management uses the existing market drawer through `/admin/market/discover`.
+
 Market quotes: `internal/application/market.go` owns preview/create/bind/refresh, maximum-price policy, FX repair, daily selection and 90-day tail. Both Store `market.sql`/`market.go` adapters implement paired 00015 migrations and fenced leases. `storetest/market.go`, `market_migration_test.go` and the full-element scenario cover sharing, isolation, daily idempotency, failures, concurrency, locking and upgrade preservation. `internal/web/market.go`, `market_i18n.go`, `templates/market.html`, `market_summary.html` provide management and asset integration. Both database scenarios and 14→15 upgrades have executed successfully; PostgreSQL used an isolated temporary 17-alpine container. Provider evidence and operation instructions: `docs/market-integration.md`.
 
 
