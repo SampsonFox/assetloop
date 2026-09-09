@@ -15,9 +15,13 @@ import (
 	"time"
 )
 
-type webQuoteFixture struct{ err error }
+type webQuoteFixture struct {
+	err   error
+	calls int
+}
 
 func (p *webQuoteFixture) FetchQuote(context.Context, application.MarketQuery) (application.MarketQuote, error) {
+	p.calls++
 	return application.MarketQuote{ModelDesc: "Phone 256GB", Provider: "zhuanzhuan", ProviderVersion: "fixture", Currency: "CNY", MaxMinor: 645800, ObservedAt: time.Date(2026, 9, 8, 2, 0, 0, 0, time.UTC), Evidence: "{}"}, p.err
 }
 func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
@@ -52,6 +56,9 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 	if page.Code != 200 || !strings.Contains(page.Body.String(), "暂无二手物品") {
 		t.Fatal(page.Code, page.Body.String())
 	}
+	if strings.Contains(page.Body.String(), `name="q"`) {
+		t.Fatal("empty collection must not show a list filter")
+	}
 	form := url.Values{"csrf_token": {csrf.Value}, "name": {"Phone"}, "keyword": {"Phone"}, "filter_criteria": {"256GB"}}
 	preview := request(t, h, "POST", "/admin/market/preview", form, cookies)
 	if preview.Code != 200 || !strings.Contains(preview.Body.String(), "Phone 256GB") || !strings.Contains(preview.Body.String(), "6458.00") {
@@ -65,6 +72,26 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 	items, e := market.List(ctx, cred.Principal)
 	if e != nil || len(items) != 1 {
 		t.Fatal(items, e)
+	}
+	calls := p.calls
+	for _, tc := range []struct {
+		query string
+		found bool
+	}{{"phone", true}, {"256gb", true}, {"missing", false}} {
+		page = request(t, h, "GET", "/admin/market?q="+tc.query, nil, cookies)
+		body := page.Body.String()
+		if page.Code != 200 || !strings.Contains(body, "筛选已添加的行情") || !strings.Contains(body, `name="q"`) {
+			t.Fatal("missing saved quote filter", page.Code)
+		}
+		if strings.Contains(body, `class="market-actions"`) != tc.found {
+			t.Fatal("incorrect saved quote results", tc.query)
+		}
+		if !tc.found && (!strings.Contains(body, "没有匹配的行情") || strings.Contains(body, "暂无二手物品")) {
+			t.Fatal("filtered empty state must differ from first use")
+		}
+	}
+	if p.calls != calls {
+		t.Fatal("list filtering must not call the provider")
 	}
 	cat, e := catalog.CreateCategory(ctx, cred.Principal, application.CreateCategory{Name: "Devices"})
 	if e != nil {

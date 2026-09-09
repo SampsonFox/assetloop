@@ -13,6 +13,7 @@ type marketPageData struct {
 	Preview                      *application.MarketQuote
 	Name, Keyword, Filter, Model string
 	Configured                   bool
+	HasItems                     bool
 	Latest                       *domain.MarketPrice
 }
 
@@ -35,6 +36,7 @@ func (s *Server) renderMarket(w http.ResponseWriter, r *http.Request, a applicat
 	}
 	data := pageData{Title: textFor(a.Locale, "market.title"), Principal: &a, CSRFToken: s.ensureCSRF(w, r), ReturnTo: "/admin/market", CanManageCatalog: a.Can(application.CapabilityManageCatalog), Error: message}
 	data.Market = marketPageData{Items: items, Preview: preview, Name: r.FormValue("name"), Keyword: r.FormValue("keyword"), Filter: r.FormValue("filter_criteria"), Configured: s.options.Market.Configured()}
+	data.Market.HasItems = len(items) > 0
 	if preview != nil {
 		data.Market.Model = preview.ModelDesc
 	}

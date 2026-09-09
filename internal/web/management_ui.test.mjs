@@ -13,7 +13,7 @@ test('appearance reset has separation from transfer panels', () => {
   assert.match(read('./static/app.css'), /\.transfer-heading \{[^}]*margin-bottom:16px/);
 });
 test('icon actions retain accessible names and tooltips while tabs retain text', () => {
-  for (const name of ['specifications', 'resources', 'resource', 'event_types', 'catalog_drawers', 'appearance']) {
+  for (const name of ['specifications', 'resources', 'resource', 'event_types', 'catalog_drawers', 'appearance', 'market']) {
     const html = read(`./templates/${name}.html`);
     const actions = [...html.matchAll(/<(?:a|button)\b([^>]+)>{{template "ui-icon" "[^"]+"}}/g)];
     assert.ok(actions.length >= 2, name);
