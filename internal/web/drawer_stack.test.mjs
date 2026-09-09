@@ -103,7 +103,7 @@ function fragment() {
     ]),
   ]);
 }
-function harness({reducedMotion=true}={}) {
+function harness({reducedMotion=true,initialDrawer=null}={}) {
   const body = el('body'), requests = [], closeCalls = [], initializations = [], observers = [];
   const document = el('document'); document.body = body; document.documentElement = {lang: 'en'};
   document.getElementById = () => null; // This harness has no settings root to refresh.
@@ -125,6 +125,7 @@ function harness({reducedMotion=true}={}) {
     FormData: class extends URLSearchParams { constructor(form) { super(); for (const n of form.querySelectorAll('[name]')) if (!n.disabled) this.append(n.name, n.value); } },
     fetch(url, options) { return new Promise((resolve, reject) => requests.push({url, options, resolve, reject})); },
   };
+  if(initialDrawer)body.append(initialDrawer);
   vm.runInNewContext(source, context, {filename: 'drawer-stack.js'});
   function respond(index, {status = 200, tree = fragment(), json, readonly = false} = {}) {
     const key = 'fixture-' + ++pageID; const page = el('document', {}, [tree]); pages.set(key, page);
@@ -433,4 +434,13 @@ test('market creation selects a reused quote in a standalone asset form without 
  const pending=h.api.open(link);h.respond(0);await pending;const child=h.remote();submit(h,child.querySelector('form'));
  h.respond(1,{json:{kind:'market-item',id:'shared',name:'Shared',enabled:true}});await settle();
  assert.equal(select.value,'shared');assert.equal(select.options.length,1);assert.equal(child.isConnected,false);
+});
+
+test('an already-open SSR market drawer registers before its first submit', async()=>{
+ const dialog=fragment();dialog.id='market-editor';dialog.open=true;
+ const form=dialog.querySelector('form');form.method='post';form.action='/admin/market/discover';form.setAttribute('data-drawer-step','');
+ const h=harness({initialDrawer:dialog});const button=el('button',{name:'action'});button.value='find';form.append(button);
+ assert.equal(h.api.submit({target:form,submitter:button,preventDefault(){}}),true);
+ assert.equal(h.requests.length,1);assert.equal(h.requests[0].options.body.get('action'),'find');
+ h.respond(0,{tree:fragment()});await settle();assert.equal(dialog.open,true);
 });

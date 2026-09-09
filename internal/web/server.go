@@ -194,7 +194,8 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 				Strings map[string]string
 			}{editor, values}
 		},
-		"money": domain.FormatMinor, "eventClass": eventClass,
+		"optionSelected": func(v *int) bool { return v != nil && *v == 1 },
+		"money":          domain.FormatMinor, "eventClass": eventClass,
 		"currencyOptions":    domain.SelectableCurrencyCodes,
 		"currencyMinorUnits": domain.CurrencyMinorUnits,
 		"accentOptions": func() []application.Accent {
@@ -323,6 +324,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/event-types", s.eventTypesPage)
 	mux.HandleFunc("GET /admin/market", s.marketPage)
 	mux.HandleFunc("POST /admin/market/preview", s.marketPreview)
+	mux.HandleFunc("POST /admin/market/discover", s.marketDiscover)
 	mux.HandleFunc("POST /admin/market", s.marketCreate)
 	mux.HandleFunc("POST /admin/market/{id}", s.marketUpdate)
 	mux.HandleFunc("POST /admin/market/{id}/refresh", s.marketRefresh)

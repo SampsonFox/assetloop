@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   {{if eq .Theme "dark"}}<meta name="theme-color" content="#111714">{{else if eq .Theme "light"}}<meta name="theme-color" content="#f7f8f5">{{else}}<meta name="theme-color" content="#f7f8f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111714" media="(prefers-color-scheme: dark)">{{end}}
   <title>{{.Title}} · {{t $s "app.name"}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=market-1">
-  <script src="/static/app.js?v=event-type-create-option-1" defer></script>
-  <script src="/static/drawer-stack.js?v=market-1" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=market-discovery-2">
+  <script src="/static/app.js?v=market-discovery-2" defer></script>
+  <script src="/static/drawer-stack.js?v=market-discovery-2" defer></script>
   <script type="module" src="/static/tag-transfer.js"></script>
   {{if .SettingsSection}}<script src="/static/settings.js" defer></script>{{end}}
 </head>

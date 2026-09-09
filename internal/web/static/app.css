@@ -667,3 +667,14 @@ dialog .asset-editor-fields { grid-template-columns:repeat(auto-fit,minmax(min(1
 }
 
 .market-reference{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-block:16px;font-variant-numeric:tabular-nums}.market-reference img{flex:none}.market-reference time{font-size:.85rem;color:var(--muted)}.market-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.market-actions form{margin:0}.market-preview{border-block:1px solid var(--line);padding-block:12px}
+
+.market-candidates { display:grid; gap:0; }
+.market-candidate { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:16px; border-bottom:1px solid var(--line); }
+.market-candidate > div { min-width:0; overflow-wrap:anywhere; }
+.market-candidate p { margin:6px 0 0; }
+.market-specs { display:grid; gap:12px; }
+.market-specs > div { display:grid; grid-template-columns:minmax(90px,1fr) minmax(0,2fr); gap:12px; }
+.market-specs dt { color:var(--muted); }
+.market-specs dd { margin:0; overflow-wrap:anywhere; }
+.market-specs details { margin-top:8px; font-size:.85rem; }
+.market-selection h3,.market-preview h3 { margin-top:0; }

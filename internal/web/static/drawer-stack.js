@@ -137,7 +137,7 @@
       const response=await fetch(url,{credentials:'same-origin'});if(!response.ok)return;
       const next=new DOMParser().parseFromString(await response.text(),'text/html').getElementById('settings-content');
       if(!next||serial!==refreshSerial||location.href!==url||!root.isConnected)return;
-      const selector=':scope > .table-card, :scope > .pagination, :scope > p.muted, :scope > .empty-state';
+      const selector=':scope > .table-card, :scope > .pagination, :scope > p.muted, :scope > .empty-state'+(new URL(url).pathname==='/admin/market'?', :scope > .management-filters':'');
       const old=[...root.querySelectorAll(selector)],fresh=[...next.querySelectorAll(selector)];
       const x=scrollX,y=scrollY,anchor=old[0]||root.querySelector(':scope > dialog');
       for(const item of fresh)root.insertBefore(item,anchor);for(const item of old)item.remove();
@@ -208,4 +208,5 @@
     }
   }
   window.assetloopDrawers={submit,open,beforeClose,opened(dialog){if(!order.includes(dialog))order.push(dialog);layout();}};
+  layout(); // Register drawers opened by the earlier app.js initialization.
 })();

@@ -5,19 +5,22 @@ import (
 	"errors"
 	"github.com/SampsonFox/assetloop/internal/application"
 	"github.com/SampsonFox/assetloop/internal/config"
+	"github.com/SampsonFox/assetloop/internal/domain"
 	basestore "github.com/SampsonFox/assetloop/internal/store"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
 
 type webQuoteFixture struct {
-	err   error
-	calls int
+	err         error
+	calls       int
+	detailCalls int
 }
 
 func (p *webQuoteFixture) FetchQuote(context.Context, application.MarketQuery) (application.MarketQuote, error) {
@@ -60,11 +63,58 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 		t.Fatal("empty collection must not show a list filter")
 	}
 	form := url.Values{"csrf_token": {csrf.Value}, "name": {"Phone"}, "keyword": {"Phone"}, "filter_criteria": {"256GB"}}
+	draftID := func(body string) string {
+		t.Helper()
+		m := regexp.MustCompile(`name="draft_id" value="([^"]+)"`).FindStringSubmatch(body)
+		if len(m) != 2 {
+			t.Fatal("missing discovery draft")
+		}
+		return m[1]
+	}
+	opened := request(t, h, "GET", "/admin/market?dialog=market-editor&keyword=Phone&filter_criteria=256GB", nil, cookies)
+	if !strings.Contains(opened.Body.String(), "搜索转转商品") || !strings.Contains(opened.Body.String(), "直接按型号查询") {
+		t.Fatal("missing default discovery or direct path")
+	}
+	form.Set("draft_id", draftID(opened.Body.String()))
+	form.Set("market_action", "find")
+	found := request(t, h, "POST", "/admin/market/discover", form, cookies)
+	if found.Code != 200 || !strings.Contains(found.Body.String(), "Second candidate") || !strings.Contains(found.Body.String(), "在售价") || p.detailCalls != 0 {
+		t.Fatal("search candidates", found.Code)
+	}
+	form.Set("market_action", "detail")
+	form.Set("candidate", "1")
+	selected := request(t, h, "POST", "/admin/market/discover", form, cookies)
+	if selected.Code != 200 || !strings.Contains(selected.Body.String(), "蓝色") || !strings.Contains(selected.Body.String(), "运行内存") || !strings.Contains(selected.Body.String(), "未提供") {
+		t.Fatal("missing selected specs", selected.Code)
+	}
+	if strings.Contains(selected.Body.String(), "fixture-second-metric") {
+		t.Fatal("provider tuple exposed in HTML")
+	}
+	form.Set("market_action", "use")
+	used := request(t, h, "POST", "/admin/market/discover", form, cookies)
+	if used.Code != 200 || !strings.Contains(used.Body.String(), "颜色:蓝色") {
+		t.Fatal("missing prefilled conditions", used.Code)
+	}
+	form.Del("market_action")
+	form.Del("candidate")
 	preview := request(t, h, "POST", "/admin/market/preview", form, cookies)
 	if preview.Code != 200 || !strings.Contains(preview.Body.String(), "Phone 256GB") || !strings.Contains(preview.Body.String(), "6458.00") {
 		t.Fatal(preview.Code, preview.Body.String())
 	}
+	if !strings.Contains(preview.Body.String(), "所选商品规格") || !strings.Contains(preview.Body.String(), "成交行情范围") {
+		t.Fatal("product and quote scopes are not distinct")
+	}
+	rejected := request(t, h, "POST", "/admin/market", form, cookies)
+	if rejected.Code != 422 {
+		t.Fatal("scope acceptance was optional")
+	}
 	form.Set("confirmed_model", "Phone 256GB")
+	draftMatch := regexp.MustCompile(`name="draft_id" value="([^"]+)"`).FindStringSubmatch(preview.Body.String())
+	if len(draftMatch) != 2 {
+		t.Fatal("missing preview draft")
+	}
+	form.Set("draft_id", draftMatch[1])
+	form.Set("accept_scope", "1")
 	created := request(t, h, "POST", "/admin/market", form, cookies)
 	if created.Code != 303 {
 		t.Fatal(created.Code, created.Body.String())
@@ -92,6 +142,24 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 	}
 	if p.calls != calls {
 		t.Fatal("list filtering must not call the provider")
+	}
+	if items[0].SelectionJSON == "" || p.detailCalls != 2 {
+		t.Fatal("selection not rechecked or saved")
+	}
+	direct := url.Values{"csrf_token": {csrf.Value}, "keyword": {"Phone"}, "filter_criteria": {"256GB"}, "name": {"Direct"}}
+	directPage := request(t, h, "POST", "/admin/market/preview", direct, cookies)
+	if directPage.Code != 200 || strings.Contains(directPage.Body.String(), "<h3>所选商品规格</h3>") {
+		t.Fatal("direct query path")
+	}
+	direct.Set("draft_id", draftID(directPage.Body.String()))
+	direct.Set("query_again", "1")
+	edited := request(t, h, "POST", "/admin/market/preview", direct, cookies)
+	if edited.Code != 200 || strings.Contains(edited.Body.String(), `name="accept_scope"`) {
+		t.Fatal("old preview not invalidated")
+	}
+	direct.Set("accept_scope", "1")
+	if stale := request(t, h, "POST", "/admin/market", direct, cookies); stale.Code != 422 {
+		t.Fatal("stale preview accepted")
 	}
 	cat, e := catalog.CreateCategory(ctx, cred.Principal, application.CreateCategory{Name: "Devices"})
 	if e != nil {
@@ -132,7 +200,7 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 	if page.Code != 200 || strings.Contains(page.Body.String(), "确认型号并保存") {
 		t.Fatal("viewer mutation UI")
 	}
-	for _, target := range []string{"/admin/market", "/admin/market/preview", "/admin/market/" + items[0].ID, "/admin/market/" + items[0].ID + "/refresh"} {
+	for _, target := range []string{"/admin/market", "/admin/market/preview", "/admin/market/discover", "/admin/market/" + items[0].ID, "/admin/market/" + items[0].ID + "/refresh"} {
 		r := request(t, h, "POST", target, form, viewerCookies)
 		if r.Code != 403 {
 			t.Fatal(target, r.Code)
@@ -145,4 +213,16 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 	if !errors.Is(p.err, application.ErrMarketAuth) {
 		t.Fatal("fixture changed")
 	}
+}
+
+func (p *webQuoteFixture) SearchProducts(context.Context, application.ProductSearchQuery) (application.ProductSearchResult, error) {
+	n := int64(10000)
+	return application.ProductSearchResult{Items: []application.MarketProduct{{Reference: application.ProductReference{ID: "1", Metric: "first"}, Provider: "zhuanzhuan", Title: "First candidate", Currency: "CNY", PriceMinor: &n}, {Reference: application.ProductReference{ID: "2", Metric: "fixture-second-metric"}, Provider: "zhuanzhuan", Title: "Second candidate", Currency: "CNY", PriceMinor: &n}}}, nil
+}
+func (p *webQuoteFixture) GetProductDetail(ctx context.Context, ref application.ProductReference) (application.MarketProductDetail, error) {
+	p.detailCalls++
+	if ref.ID != "2" || ref.Metric != "fixture-second-metric" {
+		return application.MarketProductDetail{}, application.ErrMarketInvalid
+	}
+	return application.MarketProductDetail{Selection: domain.MarketSelection{Provider: "zhuanzhuan", ProductID: ref.ID, Title: "Phone 256GB", ObservedAt: time.Now(), Specifications: []domain.MarketSpecification{{Name: "颜色", Value: "蓝色"}, {Name: "存储容量", Value: "256GB"}}}, Currency: "CNY"}, nil
 }

@@ -264,10 +264,11 @@
         resetForm(mediaForm);
         mediaForm.dataset.dirty = "false";
       }
-      form.action = opener.dataset.action;
+      if (opener.dataset.action) form.action = opener.dataset.action;
       const title = dialog.querySelector("[data-dialog-title]");
       if (title) title.textContent = opener.dataset.title;
       for (const [dataKey, fieldName] of Object.entries(fields)) {
+        if (form.hasAttribute?.("data-drawer-step")) continue;
         if (fieldName === "event_type" && !opener.dataset[dataKey]) continue;
         const field = form.elements.namedItem(fieldName);
         if (field) field.value = opener.dataset[dataKey] || "";
