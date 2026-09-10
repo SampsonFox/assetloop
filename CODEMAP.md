@@ -66,6 +66,13 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 ## Core ports
 
+`internal/application/model_import.go` owns confirmed URL import and receipt/upload
+orchestration through `ModelDownloader`. `internal/modeldownload/` implements
+bounded public HTTPS retrieval and DNS/IP/redirect defenses. `internal/mcp/import.go`
+exposes import without binding or physical storage metadata. Tests: downloader
+policy/limits, `internal/integration/model_import_test.go` (both Store adapters via
+catalog transaction suite), and the expanded full-element MCP import walkthrough.
+
 | Symbol | Expected location | Implementations |
 |---|---|---|
 | `BlobStore` | `internal/application/ports.go` | Local, Aliyun OSS |

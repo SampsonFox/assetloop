@@ -153,6 +153,25 @@ adding a state table, or introducing an external transaction coordinator.
 
 ### 4.4 Infrastructure adapters
 
+The approved URL-import increment adds an application `ModelDownloader` port and
+an outbound `modeldownload` HTTPS adapter. MCP supplies a confirmed public URL;
+it never performs network/storage I/O itself. The adapter uses no environment
+proxy or credentials, validates every redirect, rejects special/private DNS
+answers and dials a validated IP without resolving the hostname again. TLS still
+verifies the original hostname. Downloads are bounded to 25 MiB/30 seconds;
+the application limits concurrent imports to two with a 45-second operation
+deadline. Initial/redirect URLs permit HTTPS port 443 only.
+
+`ModelImportService` checks authorization and existing management receipts before
+downloading, then reuses the shared GLB upload validation/BlobStore path. A short
+management transaction creates the resource and receipt atomically; neither
+network nor Blob I/O holds that transaction. Concurrent replay returns the winner
+and cleans only the losing uncommitted blob using existing rollback probing.
+Ambiguous commits preserve possibly referenced bytes, as Web upload already does.
+No schema, queue, second process or automatic binding is introduced. Download URLs
+are included only in the command fingerprint, not persisted verbatim in receipts;
+source attribution remains a separate user-confirmed metadata field.
+
 - Stores translate application operations to SQLite or PostgreSQL.
 - Blob stores translate logical object keys to local files or Aliyun OSS.
 - Market providers translate external APIs into normalized observation DTOs.

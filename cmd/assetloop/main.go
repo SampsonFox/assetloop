@@ -19,6 +19,7 @@ import (
 	localblob "github.com/SampsonFox/assetloop/internal/blob/local"
 	"github.com/SampsonFox/assetloop/internal/config"
 	mcptransport "github.com/SampsonFox/assetloop/internal/mcp"
+	"github.com/SampsonFox/assetloop/internal/modeldownload"
 	"github.com/SampsonFox/assetloop/internal/store"
 	postgresstore "github.com/SampsonFox/assetloop/internal/store/postgres"
 	sqlitestore "github.com/SampsonFox/assetloop/internal/store/sqlite"
@@ -145,7 +146,9 @@ func run(args []string) error {
 			}
 			mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
 			mux.Handle("/oauth/revoke", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Revoke)))
-			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: application.NewManagementService(appStore, blobStores)}, oauthHTTP.Authenticate)))
+			management := application.NewManagementService(appStore, blobStores)
+			importer := application.NewModelImportService(management, modelMedia, modeldownload.New())
+			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: management, Import: importer}, oauthHTTP.Authenticate)))
 			handler = mux
 		}
 		return serve(cfg.HTTPAddr, handler)

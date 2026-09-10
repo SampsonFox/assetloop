@@ -92,6 +92,7 @@ func TestCatalogTransactionRollback(t *testing.T) {
 				other = postgres.New(second)
 			}
 			testManagementConcurrentReplay(t, store.(application.ManagementStore), other, account.Principal)
+			testModelImport(t, store.(application.ManagementStore), other, account.Principal)
 		})
 	}
 }

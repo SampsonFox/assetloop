@@ -29,6 +29,7 @@ type Services struct {
 	Lifecycle      *application.LifecycleService
 	Media          *application.ModelMediaService
 	Management     *application.ManagementService
+	Import         *application.ModelImportService
 }
 
 type identityKey struct{}
@@ -53,6 +54,7 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	registerEventTypes(server, services)
 	registerMedia(server, services)
 	registerConfiguration(server, services)
+	registerImport(server, services)
 	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, &sdk.StreamableHTTPOptions{Stateless: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")

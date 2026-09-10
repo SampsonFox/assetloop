@@ -64,7 +64,7 @@ Codex configuration is not a substitute for server-side revocation.
 ## Permissions and tools
 
 Client scopes never grant more authority than the signed-in account. Tool inputs
-cannot supply the acting tenant or user. All 39 tools remain discoverable, but
+cannot supply the acting tenant or user. All 40 tools remain discoverable, but
 unauthorized calls fail. Ask for only the scopes needed for the intended workflow.
 
 | Scope | Tools |
@@ -75,6 +75,7 @@ unauthorized calls fail. Ask for only the scopes needed for the intended workflo
 | `assets:read` — 3D | `list_3d_resources`, `get_3d_resource`, `get_3d_references`, `get_asset_appearance`, `get_3d_binding`, `search_appearance_candidates` |
 | `assets:catalog` | `create_category`, `update_category`, `create_product_model`, `save_tag_type`, `save_specification_tag`, `save_model_configuration`, `save_asset`, `save_appearance_default`, `delete_appearance_default`, `save_3d_resource_metadata`, `bind_3d_resource`, `delete_3d_resource` |
 | `assets:lifecycle` | `create_event_type`, `update_event_type`, `set_event_type_enabled`, `record_event`, `correct_event` |
+| `assets:catalog` — URL import | `import_3d_resource_from_url` |
 
 Paged queries use `page` and `page_size`, normalize invalid/nonpositive values,
 and cap page size at 200. Read all required pages before selecting IDs. Complete
@@ -84,6 +85,29 @@ default; explicit `false` overrides it. Resource descriptions/candidates never
 automatically bind a resource. Uploads remain in Web.
 
 ## Confirmed mutations and retries
+
+### Server-side GLB import
+
+`import_3d_resource_from_url` requires `assets:catalog` and catalog capability.
+Inputs: `url`, `name`, `source_url`, `author`, `license`, `request_key`.
+Only supply user-confirmed publicly downloadable HTTPS links and permitted models.
+`source_url` is public attribution, not a credential-bearing download link.
+No Cookie/header/file path input is accepted. The server downloads at most 25 MiB,
+with a 30-second network deadline, up to three redirects, HTTPS port 443 only,
+no environment proxy and no private/special IP destinations (including DNS answers).
+Two imports may run concurrently; saturation returns retryable `unavailable`.
+
+Content is checked by the existing GLB validator, including external resource URI
+restrictions. A successful result is ordinary public resource metadata, not a
+BlobStore path. Import does not create an appearance rule or binding: query the
+resource and confirm asset/model/rule scope before invoking existing binding tools.
+Same-key successful retries return the same result without downloading again;
+changing any input needs a new command key, not a retry. Bad URL/size/encoding/GLB
+errors are `invalid_input`; network/status/timeouts return sanitized `unavailable`.
+No ZIP, webpage extraction, client file upload or authenticated-site downloading.
+HTTP security primitives follow [Go net/http](https://pkg.go.dev/net/http#Transport).
+
+### Existing write rules
 
 - Confirm screenshot-derived fields with the user before writing.
 - Every mutation requires a nonempty printable `request_key` of at most 128

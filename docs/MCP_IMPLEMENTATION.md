@@ -62,6 +62,21 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+2026-09-10 approved follow-up: `import_3d_resource_from_url` extends discovery to
+40 tools. Public HTTPS downloading is infrastructure behind an application port;
+the application reuses shared GLB/Blob upload and management receipts, with I/O
+outside transactions. Import does not bind. Downloader tests cover special IPs,
+DNS answer pinning/mixed-address denial, redirects, size, compression and timeout.
+The dual-Store-defined import scenario covers authorization, bad input, receipt
+failure rollback/cleanup, simultaneous same-key import and replay without download.
+The named full-element scenario now imports its resource through MCP using a
+deterministic download-port fixture, then exercises existing binding/deletion.
+Local SQLite regressions pass; PostgreSQL execution and native Codex import/preview
+remain to be verified for this new increment. Earlier 39-tool evidence is historical.
+The new binary is running on the retained 8081 database/blob directories and
+existing native MCP `get_context` still succeeds. New-tool discovery in the
+current task requires a client tool-catalog reload; no fresh OAuth login is needed.
+
 2026-09-10 current outcome: the user accepted a complete MCP-only business flow as
 the desktop acceptance criterion. The current conversation loaded all 39 tools
 and directly completed category/model/item creation, CNY 1000 purchase, CNY 100

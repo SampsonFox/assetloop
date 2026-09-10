@@ -25,6 +25,14 @@ import (
 
 type bearerTransport struct{ token string }
 
+// Network behavior is tested by modeldownload; this port fixture keeps the
+// cumulative dual-store MCP scenario deterministic and offline.
+type modelDownloadFixture struct{}
+
+func (modelDownloadFixture) Download(context.Context, string) ([]byte, error) {
+	return fullElementGLB(), nil
+}
+
 func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	copy := r.Clone(r.Context())
 	copy.Header.Set("Authorization", "Bearer "+b.token)
@@ -53,12 +61,8 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	}
 	blobs := blob.Registry{"local": local}
 	media := application.NewModelMediaService(store, blobs, blob.ObjectKeyMapper{}, "local")
-	// Upload is intentionally a fixture: MCP has no upload tool. All supported
-	// catalog, configuration, binding and deletion operations below go over HTTP.
-	resource, err := media.Upload(ctx, session.Principal, application.UploadModel3DResource{Name: "MCP walkthrough GLB", File: fullElementGLB()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	management := application.NewManagementService(store.(application.ManagementStore), blobs)
+	importer := application.NewModelImportService(management, media, modelDownloadFixture{})
 	web, err := webtransport.New(auth, catalog, lifecycle, db, webtransport.Options{AuthMode: "local", Specifications: specs, OAuth: oauth, OAuthIssuer: issuer})
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +70,7 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	mux := http.NewServeMux()
 	mux.Handle("/", web.Handler())
 	mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
-	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Media: media, Management: application.NewManagementService(store.(application.ManagementStore), blobs)}, oauthHTTP.Authenticate)))
+	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Media: media, Management: management, Import: importer}, oauthHTTP.Authenticate)))
 	host.Config.Handler = mux
 	host.Start()
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -129,7 +133,7 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	}
 	defer mcpClient.Close()
 	list, err := mcpClient.ListTools(ctx, &sdk.ListToolsParams{})
-	if err != nil || len(list.Tools) != 39 {
+	if err != nil || len(list.Tools) != 40 {
 		t.Fatal("OAuth MCP discovery failed")
 	}
 	called := map[string]bool{}
@@ -145,6 +149,14 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 		}
 		called[name] = true
 		t.Logf("HTTP tools/call PASS %s", name)
+	}
+	var imported struct{ Data struct{ ID string } }
+	importInput := transport.ImportResourceInput{URL: "https://models.example/model.glb", Name: "MCP walkthrough GLB", License: "test fixture", RequestKey: "full-mcp-import"}
+	call("import_3d_resource_from_url", importInput, &imported)
+	resource := struct{ ID string }{imported.Data.ID}
+	call("import_3d_resource_from_url", importInput, &imported)
+	if resource.ID == "" || imported.Data.ID != resource.ID {
+		t.Fatal("import replay changed identity")
 	}
 	var asset struct{ Data domain.Asset }
 	assetInput := transport.SaveAssetInput{RequestKey: "full-mcp-asset", ModelID: modelID, DisplayName: "MCP confirmed full element", TagIDs: []string{}}
