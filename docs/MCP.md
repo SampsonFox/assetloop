@@ -4,6 +4,8 @@ AssetLoop exposes opt-in Streamable HTTP at `/mcp` in the existing Go server.
 It uses the same application services, database and authorization rules as Web.
 No model API key, second service or stdio process is needed. Development evidence
 and remaining acceptance items are in [MCP implementation](MCP_IMPLEMENTATION.md).
+The verified Windows Codex setup sequence, failure modes and native-tool lifecycle
+evidence are in [Codex acceptance notes](CODEX_MCP_ACCEPTANCE.md).
 
 ## Enable locally
 

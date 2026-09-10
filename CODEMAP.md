@@ -127,6 +127,7 @@ covers atomic rollback; Web transport retains ordinary form and drawer save path
 | Add market provider | market port | provider adapter plus shared normalization pipeline |
 | Change MCP tool | `internal/mcp/` | called application service; never inspect Store unless service contract changes |
 | Configure/use MCP | `docs/MCP.md` | `docs/MCP_IMPLEMENTATION.md` for current verification evidence and remaining acceptance |
+| Codex MCP setup/troubleshooting and skill source notes | `docs/CODEX_MCP_ACCEPTANCE.md` | Verified native-tool lifecycle, authentication/connection layers, Windows process lifetime and remaining cleanup |
 | Change Web screen | `internal/web/server.go` | affected template under `templates/`, then `static/app.css` or local `static/app.js`; called application service only when behavior changes |
 | Change locale or theme | `internal/web/i18n.go` | affected templates, semantic variables in `static/app.css`, then Web locale/theme tests |
 | Change deployment config | `internal/config/` | `.env.example`, README deployment section |

@@ -32,9 +32,11 @@ part of this worktree's development runtime.
   never credentials or physical storage paths.
 - [x] Extend the cumulative full-element scenario and run both supported stores,
   migration upgrades and relevant Web/MCP regressions.
-- [ ] Accept through actual local Codex OAuth login, discovery, read, confirmed
-  create/record/correct, Web visibility, retry and per-client revocation.
-- [ ] Document configuration, client setup, scope/tool contracts and final evidence.
+- [x] User-approved 2026-09-10 native Codex MCP-only lifecycle acceptance:
+  OAuth login, discovery, read, create/purchase/repair/correct/sale, durable retry,
+  conflict refusal, preserved history and exact cost/aggregate verification.
+- [ ] Remaining separate operational checks: live per-client revocation and cleanup.
+- [x] Document configuration, client setup, scope/tool contracts and direct evidence.
 - [ ] Commit/push independently verified checkpoints; verify each secret-scan.
 
 ## Contract and boundaries
@@ -60,6 +62,18 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+2026-09-10 current outcome: the user accepted a complete MCP-only business flow as
+the desktop acceptance criterion. The current conversation loaded all 39 tools
+and directly completed category/model/item creation, CNY 1000 purchase, CNY 100
+repair corrected to CNY 80, and CNY 700 sale. Exact final cost was CNY 380;
+original repair remained voided, retries returned original identities, conflicting
+payloads failed, and portfolio deltas matched. No Web/REST/SQL/SDK business
+operations substituted for the native tools in this run. Setup, pitfalls and
+evidence are recorded in [Codex acceptance notes](CODEX_MCP_ACCEPTANCE.md).
+This supersedes historical statements below that current-conversation acceptance
+was incomplete, not their separate revocation/cleanup caveats. Test data remains.
+No UAT promotion or production release is implied.
+
 2026-09-10 OAuth interoperability follow-up: live diagnostics confirmed that
 Codex sends `scope` during refresh. The HTTP adapter previously rejected every
 non-empty scope before reaching the grant policy. Refresh now accepts an
@@ -77,8 +91,8 @@ The disposable local instance was initialized through Web on 2026-09-09.
 Codex CLI OAuth login succeeded; a separately authorized official SDK client
 called all 39 tools on that same live instance, replayed mutations and checked
 persisted values. Web confirmed the corrected CNY cost; GLB upload used Web,
-not an MCP tool. Current-conversation direct tool acceptance, final revocation
-and cleanup remain incomplete. Do not treat the earlier cleanup record below
+not an MCP tool. At that checkpoint current-conversation direct tool acceptance,
+final revocation and cleanup were incomplete. Do not treat the earlier cleanup record below
 as the state of this retained September 9 test instance.
 
 Contract audit: `internal/mcp/contract_test.go` checks all discovered input/output
