@@ -23,6 +23,7 @@ const (
 
 var ErrOAuthRequest = errors.New("invalid OAuth request")
 var ErrOAuthGrant = errors.New("invalid or expired OAuth grant")
+var ErrOAuthScope = errors.New("invalid OAuth scope")
 
 // OAuthStore implementations serialize credential exchanges in a transaction.
 // Consumed credentials are retained until grant expiry for replay detection.
@@ -57,7 +58,7 @@ type OAuthClient struct {
 	RedirectURIs []string
 }
 type OAuthAuthorization struct{ ClientID, RedirectURI, Resource, Scope, Challenge, ChallengeMethod string }
-type OAuthTokenRequest struct{ ClientID, Resource, Code, RedirectURI, Verifier, RefreshToken string }
+type OAuthTokenRequest struct{ ClientID, Resource, Code, RedirectURI, Verifier, RefreshToken, Scope string }
 type OAuthTokens struct {
 	AccessToken  string `json:"access_token"`
 	TokenType    string `json:"token_type"`
@@ -186,6 +187,14 @@ func (s *OAuthService) exchange(ctx context.Context, cmd OAuthTokenRequest, refr
 		}
 		if !refresh && (credential.RedirectURI != cmd.RedirectURI || !verifyOAuthPKCE(cmd.Verifier, credential.Challenge)) {
 			return ErrOAuthGrant
+		}
+		if refresh && cmd.Scope != "" {
+			requested, err := oauthScopes(cmd.Scope)
+			// Refresh retains the consented scope. Explicitly repeating it is
+			// valid; a different scope must not be silently ignored or granted.
+			if err != nil || len(strings.Fields(cmd.Scope)) == 0 || !slices.Equal(requested, strings.Fields(grant.Scope)) {
+				return ErrOAuthScope
+			}
 		}
 		if credential.Consumed {
 			// Commit revocation before reporting replay; returning an error here

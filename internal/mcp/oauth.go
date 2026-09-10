@@ -83,19 +83,13 @@ func (o *OAuthHTTP) Token(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	request := application.OAuthTokenRequest{ClientID: form.Get("client_id"), Resource: form.Get("resource"), Code: form.Get("code"), RedirectURI: form.Get("redirect_uri"), Verifier: form.Get("code_verifier"), RefreshToken: form.Get("refresh_token")}
+	request := application.OAuthTokenRequest{ClientID: form.Get("client_id"), Resource: form.Get("resource"), Code: form.Get("code"), RedirectURI: form.Get("redirect_uri"), Verifier: form.Get("code_verifier"), RefreshToken: form.Get("refresh_token"), Scope: form.Get("scope")}
 	var tokens application.OAuthTokens
 	var err error
 	switch form.Get("grant_type") {
 	case "authorization_code":
 		tokens, err = o.service.Exchange(r.Context(), request)
 	case "refresh_token":
-		// First phase retains the consented scope; do not silently ignore a
-		// client's requested scope change during refresh.
-		if form.Get("scope") != "" {
-			oauthJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_scope"})
-			return
-		}
 		tokens, err = o.service.Refresh(r.Context(), request)
 	default:
 		oauthJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
@@ -182,6 +176,8 @@ func oauthForm(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
 func oauthError(w http.ResponseWriter, err error) {
 	code, status := "server_error", http.StatusInternalServerError
 	switch {
+	case errors.Is(err, application.ErrOAuthScope):
+		code, status = "invalid_scope", http.StatusBadRequest
 	case errors.Is(err, application.ErrOAuthGrant):
 		code, status = "invalid_grant", http.StatusBadRequest
 	case errors.Is(err, application.ErrOAuthRequest):

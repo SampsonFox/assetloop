@@ -60,6 +60,27 @@ compiles. UAT packaging/promotion and production remain separate user approvals.
 
 ## Development evidence
 
+2026-09-10 OAuth interoperability follow-up: live diagnostics confirmed that
+Codex sends `scope` during refresh. The HTTP adapter previously rejected every
+non-empty scope before reaching the grant policy. Refresh now accepts an
+explicit repeat of the original normalized scope set; changes remain rejected
+with `invalid_scope` before consuming the refresh credential. Application-owned
+grant, resource, current-role and rotation checks remain unchanged. The HTTP
+regression failed with 400 before the fix and now covers same-scope refresh,
+duplicate scope normalization, omitted scope, escalation/unknown-scope denial,
+rotation, refreshed bearer authentication and revocation. Application, MCP and
+Web package tests pass. Native consent forms also now use `same-origin`
+Referrer-Policy, retaining strict Origin validation without an opaque POST
+Origin. Temporary diagnostics were removed from application code.
+
+The disposable local instance was initialized through Web on 2026-09-09.
+Codex CLI OAuth login succeeded; a separately authorized official SDK client
+called all 39 tools on that same live instance, replayed mutations and checked
+persisted values. Web confirmed the corrected CNY cost; GLB upload used Web,
+not an MCP tool. Current-conversation direct tool acceptance, final revocation
+and cleanup remain incomplete. Do not treat the earlier cleanup record below
+as the state of this retained September 9 test instance.
+
 Contract audit: `internal/mcp/contract_test.go` checks all discovered input/output
 envelopes, every mutation's required string request key (nested for correction),
 and integer money/FX schema types. Real SDK HTTP error tests cover all mapped

@@ -81,6 +81,31 @@ func TestOAuthHTTPExchangeAndRevoke(t *testing.T) {
 		t.Fatal("query credential accepted")
 	}
 	r.URL.RawQuery = ""
+	refresh := url.Values{"grant_type": {"refresh_token"}, "client_id": {"test"}, "resource": {cmd.Resource}, "refresh_token": {tokens.RefreshToken}}
+	for _, scope := range []string{ScopeRead + " " + ScopeCatalog, "unknown"} {
+		refresh.Set("scope", scope)
+		w = post("/oauth/token", refresh, o.Token)
+		if w.Code != 400 || !strings.Contains(w.Body.String(), "invalid_scope") {
+			t.Fatal("refresh accepted unauthorized scopes")
+		}
+	}
+	for _, scope := range []string{ScopeRead, ScopeRead + " " + ScopeRead, ""} {
+		refresh.Set("scope", scope)
+		refresh.Set("refresh_token", tokens.RefreshToken)
+		w = post("/oauth/token", refresh, o.Token)
+		if w.Code != 200 {
+			t.Fatalf("same-scope refresh rejected: %d", w.Code)
+		}
+		var rotated application.OAuthTokens
+		if json.Unmarshal(w.Body.Bytes(), &rotated) != nil || rotated.Scope != ScopeRead || rotated.RefreshToken == tokens.RefreshToken || rotated.AccessToken == "" {
+			t.Fatal("refresh failed to rotate with original scope")
+		}
+		tokens = rotated
+	}
+	r.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	if _, err := o.Authenticate(ctx, r); err != nil {
+		t.Fatal("refreshed access token rejected")
+	}
 	w = post("/oauth/revoke", url.Values{"client_id": {"test"}, "token": {tokens.RefreshToken}}, o.Revoke)
 	if w.Code != 200 {
 		t.Fatalf("revoke: %d", w.Code)

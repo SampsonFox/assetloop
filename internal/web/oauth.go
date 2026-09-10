@@ -20,7 +20,8 @@ type oauthPageData struct {
 
 func (s *Server) oauthRequest(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	// Native POSTs need a non-opaque Origin; never send referrers to callbacks.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	u, err := url.Parse(s.options.OAuthIssuer)
 	if err != nil || u.Host == "" || r.Host != u.Host || len(r.Header.Values("Origin")) > 1 || r.Header.Get("Origin") != "" && r.Header.Get("Origin") != s.options.OAuthIssuer {
 		http.Error(w, "Invalid origin", 403)

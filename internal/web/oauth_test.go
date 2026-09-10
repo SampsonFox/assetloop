@@ -17,6 +17,24 @@ import (
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
 )
 
+func TestOAuthOriginBoundary(t *testing.T) {
+	const issuer = "http://127.0.0.1:8081"
+	s := &Server{options: Options{OAuthIssuer: issuer}}
+	for _, origin := range []string{issuer, "null", "http://untrusted.example"} {
+		t.Run(origin, func(t *testing.T) {
+			r := httptest.NewRequest("POST", issuer+"/oauth/authorize", nil)
+			r.Header.Set("Origin", origin)
+			w := httptest.NewRecorder()
+			if got := s.oauthRequest(w, r); got != (origin == issuer) {
+				t.Fatalf("origin acceptance = %v", got)
+			}
+			if w.Header().Get("Referrer-Policy") != "same-origin" {
+				t.Fatal("OAuth forms must preserve same-origin POST provenance")
+			}
+		})
+	}
+}
+
 func TestOAuthRepeatedResource(t *testing.T) {
 	s := &Server{options: Options{OAuthIssuer: "http://127.0.0.1:8081"}}
 	for _, tc := range []struct {
@@ -87,6 +105,9 @@ func TestOAuthConsentAndRevocation(t *testing.T) {
 		t.Fatalf("consent: %d %s", page.Code, page.Body.String())
 	}
 	csrf := responseCookie(t, page, csrfCookie)
+	if page.Header().Get("Referrer-Policy") != "same-origin" {
+		t.Fatal("native OAuth POST must preserve its same-origin Origin without leaking referrers to callbacks")
+	}
 	if !strings.Contains(page.Header().Get("Content-Security-Policy"), "form-action 'self' http://127.0.0.1:49152;") {
 		t.Fatal("consent CSP blocks the registered loopback callback")
 	}
