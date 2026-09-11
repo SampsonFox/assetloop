@@ -16,6 +16,14 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 ## Entry points
 
+Model images: `internal/application/model_images.go` owns validation, import,
+immutable blob revisions and active model binding. `internal/web/model_images.go`
+and `templates/model_image.html` expose upload/replace/detach and HTTPS import;
+`internal/store/{sqlite,postgres}/images.{go,sql}` implement tenant-scoped storage.
+Migration 00017 adds images independently of 3D and lifecycle events.
+Regression coverage: `model_images_test.go` in application, Web and integration;
+the named full-element scenario calls the shared image scenario on both databases.
+
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |

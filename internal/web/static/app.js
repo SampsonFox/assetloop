@@ -274,6 +274,11 @@
       }
       if (dialog.id === "model-drawer") {
         const modelId = opener.dataset.editModelId || "";
+        const image = dialog.querySelector("[data-model-image]");
+        if (image) {
+          image.hidden = !modelId;
+          image.querySelector("[data-model-image-link]").href = `/admin/catalog/models/${modelId}/image`;
+        }
         const library = dialog.querySelector("[data-model-library]");
         if (library) {
           library.hidden = !modelId;

@@ -450,6 +450,29 @@ a localized generic message.
 
 ## 8. Blob media architecture
 
+### Model image fallback
+
+Product-model images are independent of 3D resources and monetary events.
+`ModelImageService` accepts PNG, JPEG and WebP up to 8 MiB and 16 million pixels,
+requiring a complete decode before publication. Web handlers call this service;
+all bytes pass through BlobStore and ObjectKeyMapper. The dedicated logical key
+is `tenants/{tenant_id}/model-images/{image_id}/{sha256}.img`; its actual validated
+content type is stored separately and returned with nosniff.
+
+Migration 00017 adds tenant/model-scoped immutable image revisions and a unique
+active revision per model. Replacement atomically detaches the previous revision;
+clear detaches without erasing historical metadata or blobs. File garbage collection
+and revision restoration UI are not part of this slice. A changed default storage
+backend does not affect reads of existing revisions. Authenticated GET revalidates
+private caches so replacement and clear do not leave a stale active image.
+
+The server-side HTTPS image downloader reuses the GLB downloader's public-address,
+redirect, timeout and no-credential policies with an 8 MiB response limit. A domain
+resolved to reserved/fake-IP space is rejected; browser download plus file upload is
+the explicit fallback, not an SSRF exception. A source page is attribution only and
+is never used as the stored blob location. This image slice currently exposes Web
+actions; image-specific MCP tools have not yet been added.
+
 ```text
 Attachment or product-model media use case
        |

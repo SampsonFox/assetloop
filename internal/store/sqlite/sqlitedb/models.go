@@ -160,6 +160,19 @@ type ModelAppearanceDimension struct {
 	AffectsAppearance int64
 }
 
+type ModelImage struct {
+	ID          string
+	TenantID    string
+	ModelID     string
+	StoreID     string
+	ObjectKey   string
+	Sha256      string
+	ContentType string
+	SizeBytes   int64
+	SourceUrl   string
+	Active      int64
+}
+
 type OauthCredential struct {
 	Hash        string
 	TenantID    string

@@ -43,6 +43,8 @@ type Options struct {
 	SecureCookies     bool
 	DisabledPrincipal application.Principal
 	ModelMedia        *application.ModelMediaService
+	ModelImages       *application.ModelImageService
+	ImageDownloader   application.ImageDownloader
 	Specifications    *application.SpecificationService
 	OAuth             *application.OAuthService
 	OAuthIssuer       string
@@ -60,6 +62,8 @@ type Server struct {
 }
 
 type pageData struct {
+	ImageURLs              map[string]string
+	ModelImage             *application.ModelImage
 	Title                  string
 	Locale                 application.Locale
 	Theme                  application.Theme
@@ -226,7 +230,6 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 			return value.Name
 		},
 		"statusLabel":   func(values map[string]string, value string) string { return values["status."+value] },
-		"productImage":  productImage,
 		"costChart":     costChart,
 		"costPercent":   costPercent,
 		"localDate":     func(value time.Time) string { return value.Local().Format("2006-01-02") },
@@ -254,7 +257,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth", "model_image"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/resources.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -266,6 +269,9 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /admin/catalog/models/{id}/image", s.modelImagePage)
+	mux.HandleFunc("POST /admin/catalog/models/{id}/image", s.saveModelImage)
+	mux.HandleFunc("GET /models/{id}/image", s.serveModelImage)
 	if s.options.OAuth != nil {
 		mux.HandleFunc("GET /oauth/authorize", s.oauthAuthorize)
 		mux.HandleFunc("POST /oauth/authorize", s.oauthAuthorize)
@@ -804,7 +810,7 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		}
 	}
 	s.render(w, status, "asset", pageData{
-		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
+		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(), ImageURLs: s.imageURLs(r.Context(), principal, []domain.Asset{asset}),
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: result.Events,
 		Summary: result.Summary, Cost: cost, BaseCurrency: result.Summary.BaseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           nowValue,
@@ -868,13 +874,6 @@ func eventTypeFormFromRequest(r *http.Request) eventTypeFormData {
 		form.Cashflow = r.FormValue("cashflow")
 	}
 	return form
-}
-
-func productImage(asset *domain.Asset) string {
-	if asset != nil && asset.Model == "iPhone 17 Pro" {
-		return "/static/product-demo-iphone-17-pro-deep-blue.jpg"
-	}
-	return ""
 }
 
 func (s *Server) recordEventFromForm(r *http.Request, principal application.Principal, assetID string, eventType domain.AssetEventType) (application.RecordEvent, error) {
@@ -1000,7 +999,7 @@ func (s *Server) renderAssetForm(w http.ResponseWriter, r *http.Request, status 
 		returnTo = r.URL.RequestURI()
 	}
 	data := pageData{
-		Title: textFor(principal.Locale, titleKey), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: returnTo,
+		Title: textFor(principal.Locale, titleKey), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: returnTo, ImageURLs: s.imageURLs(r.Context(), principal, []domain.Asset{asset}),
 		Categories: snapshot.Categories, Models: snapshot.Models, Asset: &asset,
 		CanManageCatalog: true, CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
 		AssetFormAction: action, AssetFormEditing: editing,
@@ -1096,7 +1095,7 @@ func (s *Server) renderAssets(w http.ResponseWriter, r *http.Request, status int
 	}
 	s.render(w, status, "assets", pageData{
 		Title: textFor(principal.Locale, "title.assets"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
-		Assets: assetRows, AssetSummaries: summaries, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
+		Assets: assetRows, ImageURLs: s.imageURLs(r.Context(), principal, assetRows), AssetSummaries: summaries, CanManageCatalog: principal.Can(application.CapabilityManageCatalog),
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle), AssetView: view,
 		AssetQuery: query, AssetStatus: statusFilter, AssetSort: sortKey, AssetDirection: direction, AssetSortURLs: sortURLs,
 		AssetTotal: result.Total, AssetPage: page, AssetTotalPages: totalPages,

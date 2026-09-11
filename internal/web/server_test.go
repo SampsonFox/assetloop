@@ -438,7 +438,7 @@ func TestAssetEditorCreatesMissingTypeWithoutLeavingEditor(t *testing.T) {
 	if reopened.Code != http.StatusOK || !strings.Contains(reopened.Body.String(), `>手机 / iPhone 17 Pro</option>`) {
 		t.Fatalf("new type was not available to the reopened asset form: status=%d body=%s", reopened.Code, reopened.Body.String())
 	}
-	if !regexp.MustCompile(`<option value="`+regexp.QuoteMeta(modelID)+`"[^>]* selected>`).MatchString(reopened.Body.String()) {
+	if !regexp.MustCompile(`<option value="` + regexp.QuoteMeta(modelID) + `"[^>]* selected>`).MatchString(reopened.Body.String()) {
 		t.Fatalf("new specification was not selected in the asset editor: %s", reopened.Body.String())
 	}
 }
@@ -649,8 +649,12 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 			t.Fatalf("restore %s: status=%d body=%s", restore.path, response.Code, response.Body.String())
 		}
 	}
+	imageUpload := uploadTestModelImage(t, handler, modelID, ownerSession, csrf, testModelPNG(t), "")
+	if imageUpload.Code != http.StatusSeeOther {
+		t.Fatalf("upload image: %d", imageUpload.Code)
+	}
 	detail := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/static/product-demo-iphone-17-pro-deep-blue.jpg`, `width="1728" height="912"`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以所选规格为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `data-cost-dashboard`, `日均持有成本`, `class="cost-metrics"`, `class="compact-timeline"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-event-type-create hidden disabled`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-positive-pattern=`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
+	for _, want := range []string{"我的主力手机", "iPhone 17 Pro", "256GB", "WEB-SERIAL-001", "官方商城", "Web 全要素目录记录", `class="card asset-profile"`, `class="asset-product-visual"`, `class="asset-product-image"`, `/models/` + modelID + `/image?v=`, `decoding="async" fetchpriority="high"`, `型号示意图；具体颜色以所选规格为准。`, `class="asset-profile-content"`, `class="asset-details-grid"`, `class="asset-notes"`, `data-cost-dashboard`, `日均持有成本`, `class="cost-metrics"`, `class="compact-timeline"`, `class="timeline-heading"`, `class="icon-button" id="add-event"`, `aria-label="新增生命周期记录" title="新增生命周期记录"`, `<path d="M12 5v14M5 12h14"/>`, `data-dialog-open="event-drawer"`, `id="event-drawer"`, `id="event-form"`, `data-event-type-create hidden disabled`, `id="event-type-drawer"`, `action="/admin/event-types"`, `data-event-type-select`, `data-cashflow="expense"`, `class="money-input-group"`, `class="currency-suffix"`, `list="event-currencies"`, `aria-label="原始货币"`, `data-positive-pattern=`, `<option value="AED"></option>`, `<option value="BHD"></option>`, `<option value="ZWG"></option>`, `data-currency-select`, `data-base-currency="CNY"`, `data-fx-field hidden`, `data-fx-required`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("asset detail missing %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}
@@ -1032,6 +1036,7 @@ func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) appli
 	}
 	modelMedia := application.NewModelMediaService(adapter, blob.Registry{"local": testBlob}, blob.ObjectKeyMapper{}, "local")
 	options := Options{AuthMode: "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(adapter)}
+	options.ModelImages = application.NewModelImageService(adapter, blob.Registry{"local": testBlob}, blob.ObjectKeyMapper{}, "local")
 	server, err := New(auth, catalog, lifecycle, db, options)
 	if err != nil {
 		t.Fatal(err)

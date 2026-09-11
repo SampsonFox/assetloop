@@ -31,6 +31,7 @@ type scenarioStore interface {
 	application.CatalogStore
 	application.LifecycleStore
 	application.ModelMediaStore
+	application.ModelImageStore
 	application.SpecificationStore
 }
 
@@ -160,6 +161,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		t.Fatal(err)
 	}
 	modelMedia := application.NewModelMediaService(store, blob.Registry{"local": localStore}, blob.ObjectKeyMapper{}, "local")
+	runImageScenario(t, store, localStore, owner, viewerSession.Principal, model.ID)
 	glb := fullElementGLB()
 	media, err := modelMedia.Update(ctx, owner, application.UpdateProductModel3D{ModelID: model.ID, File: glb, SourceURL: "https://example.com/source", License: "CC0"})
 	if err != nil {

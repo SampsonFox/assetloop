@@ -109,6 +109,14 @@ func dialResolved(ctx context.Context, network, address string, lookup func(cont
 	return nil, application.ErrModel3DUnavailable
 }
 func (d *Downloader) Download(ctx context.Context, raw string) ([]byte, error) {
+	return d.download(ctx, raw, application.MaxProductModel3DBytes, "model/gltf-binary, application/octet-stream")
+}
+
+func (d *Downloader) DownloadImage(ctx context.Context, raw string) ([]byte, error) {
+	return d.download(ctx, raw, application.MaxModelImageBytes, "image/png, image/jpeg, image/webp")
+}
+
+func (d *Downloader) download(ctx context.Context, raw string, limit int64, accept string) ([]byte, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, application.NewInputError("validation.model_import_url")
@@ -120,7 +128,7 @@ func (d *Downloader) Download(ctx context.Context, raw string) ([]byte, error) {
 	if err != nil {
 		return nil, application.NewInputError("validation.model_import_url")
 	}
-	req.Header.Set("Accept", "model/gltf-binary, application/octet-stream")
+	req.Header.Set("Accept", accept)
 	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := d.client.Do(req)
 	if err != nil {
@@ -133,14 +141,14 @@ func (d *Downloader) Download(ctx context.Context, raw string) ([]byte, error) {
 	if resp.Header.Get("Content-Encoding") != "" && resp.Header.Get("Content-Encoding") != "identity" {
 		return nil, application.NewInputError("validation.model_import_encoding")
 	}
-	if resp.ContentLength > application.MaxProductModel3DBytes {
+	if resp.ContentLength > limit {
 		return nil, application.NewInputError("validation.model_import_size")
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, application.MaxProductModel3DBytes+1))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, application.ErrModel3DUnavailable
 	}
-	if int64(len(b)) > application.MaxProductModel3DBytes {
+	if int64(len(b)) > limit {
 		return nil, application.NewInputError("validation.model_import_size")
 	}
 	return b, nil

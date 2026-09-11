@@ -16,6 +16,24 @@ import (
 
 type roundTrip func(*http.Request) (*http.Response, error)
 
+func TestImageDownloadUsesImageLimitAndPublicPolicy(t *testing.T) {
+	d := New()
+	calls := 0
+	d.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if !strings.Contains(r.Header.Get("Accept"), "image/webp") {
+			t.Fatal("missing image accept")
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), ContentLength: application.MaxModelImageBytes + 1, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})
+	if _, err := d.DownloadImage(context.Background(), "https://127.0.0.1/image"); err == nil || calls != 0 {
+		t.Fatal("private image URL fetched")
+	}
+	if _, err := d.DownloadImage(context.Background(), "https://example.com/image"); err == nil || calls != 1 {
+		t.Fatal("oversized image accepted")
+	}
+}
+
 func TestDNSPinnedAndMixedAnswersDenied(t *testing.T) {
 	calls := 0
 	dials := 0

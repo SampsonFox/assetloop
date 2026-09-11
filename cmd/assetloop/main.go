@@ -89,6 +89,7 @@ func run(args []string) error {
 			application.CatalogStore
 			application.LifecycleStore
 			application.ModelMediaStore
+			application.ModelImageStore
 			application.SpecificationStore
 			application.OAuthStore
 			application.ManagementStore
@@ -115,6 +116,8 @@ func run(args []string) error {
 		}
 		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
 		options := webtransport.Options{AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore)}
+		options.ModelImages = application.NewModelImageService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
+		options.ImageDownloader = modeldownload.New()
 		var oauthHTTP *mcptransport.OAuthHTTP
 		if cfg.MCP.Enabled {
 			options.OAuth, err = application.NewOAuthService(appStore, cfg.MCP.Issuer+"/mcp", []application.OAuthClient{{ID: cfg.MCP.ClientID, Name: "Codex", RedirectURIs: []string{cfg.MCP.RedirectURI}}})
