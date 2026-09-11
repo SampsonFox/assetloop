@@ -9,7 +9,7 @@ import (
 
 type CreateEventTypeInput struct {
 	RequestKey string `json:"request_key"`
-	Name       string `json:"name"`
+	Name       string `json:"name" jsonschema:"Name of a reusable lifecycle action category, not a product or service name. Specific purchased items and service names belong in event notes."`
 	Cashflow   string `json:"cashflow" jsonschema:"expense, income or neutral"`
 }
 type UpdateEventTypeInput struct {
@@ -23,7 +23,7 @@ type EnableEventTypeInput struct {
 }
 
 func registerEventTypes(server *sdk.Server, s Services) {
-	register(server, "create_event_type", "Create a confirmed custom lifecycle type. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, q CreateEventTypeInput) (any, error) {
+	register(server, "create_event_type", "Create a reusable custom lifecycle action category only when list_event_types has no suitable enabled type and the user explicitly confirms creating a category. Recording a purchase does not authorize catalog expansion. Product and service names belong in event notes, not type names. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, q CreateEventTypeInput) (any, error) {
 		return s.Management.CreateEventType(ctx, p, q.RequestKey, application.CreateAssetEventType{Name: q.Name, Cashflow: domain.AssetEventCashflow(q.Cashflow)})
 	})
 	register(server, "update_event_type", "Rename a custom lifecycle type; changing cashflow is forbidden after use. Built-in types cannot change. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, q UpdateEventTypeInput) (any, error) {

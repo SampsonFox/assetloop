@@ -98,7 +98,7 @@ func registerQueries(server *sdk.Server, s Services) {
 	register(server, "get_event", "Read one lifecycle event and its preserved economic evidence.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q IDInput) (any, error) {
 		return s.Lifecycle.GetEvent(ctx, p, q.ID)
 	})
-	register(server, "list_event_types", "Read system and custom event types and their enabled states.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q TagQuery) (any, error) {
+	register(server, "list_event_types", "Read system and custom event types and their enabled states. Types are reusable action categories (purchase, repair, sale), not product or service names. Reuse a matching enabled type and put individual purchase details in event notes.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q TagQuery) (any, error) {
 		return s.Lifecycle.EventTypePage(ctx, p, application.EventTypeListOptions{Query: q.Query, Status: q.Status, Page: q.Page, PageSize: q.PageSize})
 	})
 	register(server, "get_asset_cost", "Calculate full lifecycle cost, unaffected by event list filters; no market valuation.", ScopeRead, application.CapabilityView, func(ctx context.Context, p application.Principal, q IDInput) (any, error) {

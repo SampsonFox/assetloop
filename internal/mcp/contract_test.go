@@ -15,9 +15,10 @@ import (
 )
 
 type schemaContract struct {
-	Type       string
-	Required   []string
-	Properties map[string]json.RawMessage
+	Type        string
+	Description string
+	Required    []string
+	Properties  map[string]json.RawMessage
 }
 
 func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
@@ -35,6 +36,32 @@ func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
 		return schema
 	}
 	input, output := decode(tool.InputSchema), decode(tool.OutputSchema)
+	// These are client-visible instructions from tools/list, not source comments.
+	assertMeaning := func(description string, concepts ...string) {
+		t.Helper()
+		for _, concept := range concepts {
+			if !strings.Contains(description, concept) {
+				t.Errorf("%s discovery description missing %q: %s", tool.Name, concept, description)
+			}
+		}
+	}
+	switch tool.Name {
+	case "record_event":
+		assertMeaning(tool.Description, "list_event_types", "notes", "purchase")
+		assertMeaning(decode(input.Properties["type_id"]).Description, "reusable", "not a product")
+		assertMeaning(decode(input.Properties["notes"]).Description, "product or service", "purchase")
+	case "correct_event":
+		assertMeaning(tool.Description, "does not change", "event type")
+		replacement := decode(input.Properties["replacement"])
+		assertMeaning(decode(replacement.Properties["notes"]).Description, "product or service")
+	case "create_event_type":
+		assertMeaning(tool.Description, "list_event_types", "explicitly", "notes")
+		assertMeaning(decode(input.Properties["name"]).Description, "reusable", "not a product")
+	case "update_event_type":
+		assertMeaning(decode(input.Properties["name"]).Description, "reusable", "not a product")
+	case "list_event_types":
+		assertMeaning(tool.Description, "reusable", "notes")
+	}
 	if input.Type != "object" || output.Type != "object" || output.Properties["data"] == nil || output.Properties["error"] == nil {
 		t.Fatalf("%s has an invalid input/result envelope", tool.Name)
 	}

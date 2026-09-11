@@ -86,6 +86,27 @@ automatically bind a resource. Uploads remain in Web.
 
 ## Confirmed mutations and retries
 
+### Event type versus event notes / 事件类型与备注
+
+These meanings are shipped in the MCP `tools/list` descriptions and JSON Schema
+field descriptions, so a new client does not need prior chat history or a personal
+skill to discover them.
+
+- `type_id` identifies a reusable action category: purchase (买入), repair (维修),
+  or sale (卖出). Query `list_event_types` and reuse a matching enabled type.
+- `notes` describes the individual event: the product or service name and context.
+  For example, buying an extended-warranty service uses 买入, with 延保服务 in
+  `notes`; the service name is not a new lifecycle type.
+- `create_event_type.name` names a reusable action category, not a purchased item.
+  Create a custom type only if no suitable enabled type exists and the user
+  explicitly confirms adding that category. Permission to record a purchase is
+  not permission to expand the type catalog.
+- `correct_event` preserves the original asset and type. It cannot reclassify an
+  event; never rename a shared type as a workaround for one incorrect record.
+
+中文：事件类型回答“发生了什么行为”，备注回答“具体买了什么、有什么补充”。
+购买服务也可以使用已有“买入”类型，把服务商品名写在备注，不要一单一类型。
+
 ### Server-side GLB import
 
 `import_3d_resource_from_url` requires `assets:catalog` and catalog capability.

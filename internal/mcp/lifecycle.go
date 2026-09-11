@@ -19,13 +19,13 @@ type EventFields struct {
 	FXRateSource      string `json:"fx_rate_source,omitempty"`
 	FXConfirmed       bool   `json:"fx_confirmed,omitempty"`
 	ExternalReference string `json:"external_reference,omitempty"`
-	Notes             string `json:"notes,omitempty"`
+	Notes             string `json:"notes,omitempty" jsonschema:"Details of this individual event: product or service name and relevant context. For a purchased service use the existing purchase type and put the service name here; do not create a type named after the service."`
 }
 
 type EventInput struct {
 	EventFields
 	AssetID string `json:"asset_id"`
-	TypeID  string `json:"type_id" jsonschema:"Existing enabled event type ID from list_event_types."`
+	TypeID  string `json:"type_id" jsonschema:"Existing enabled event type ID from list_event_types. A type is a reusable action category (purchase, repair, sale), not a product or service name. Prefer an existing matching type; put purchase details in notes."`
 }
 
 type CorrectEventInput struct {
@@ -52,7 +52,7 @@ func (input EventFields) command() (application.RecordEvent, error) {
 }
 
 func registerLifecycle(server *sdk.Server, s Services) {
-	register(server, "record_event", "Persist a user-confirmed lifecycle event using existing event types. Confirm screenshot-derived fields with the user before calling. Asset creation is a separate command. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, input EventInput) (any, error) {
+	register(server, "record_event", "Persist a user-confirmed lifecycle event. First use list_event_types and reuse a matching enabled action category. Buying a product or service is a purchase; put its specific name in notes, not a new event type. Confirm screenshot-derived fields with the user before calling. Asset creation is a separate command. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, input EventInput) (any, error) {
 		cmd, err := input.command()
 		if err != nil {
 			return nil, err
@@ -60,7 +60,7 @@ func registerLifecycle(server *sdk.Server, s Services) {
 		cmd.AssetID, cmd.TypeID = input.AssetID, input.TypeID
 		return s.Lifecycle.Record(ctx, p, cmd)
 	})
-	register(server, "correct_event", "Correct a user-confirmed event by atomically voiding the original and appending its replacement. Never overwrites history. Reuse the replacement request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, input CorrectEventInput) (any, error) {
+	register(server, "correct_event", "Correct a user-confirmed event by atomically voiding the original and appending its replacement. Never overwrites history; this does not change the original asset or event type. Do not use it to reclassify an event or rename a shared type to correct one record. Reuse the replacement request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, input CorrectEventInput) (any, error) {
 		cmd, err := input.Replacement.command()
 		if err != nil {
 			return nil, err
