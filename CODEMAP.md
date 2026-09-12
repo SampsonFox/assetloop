@@ -273,3 +273,14 @@ Migration tests cover old market 15/16, accepted MCP 17, rollback and retry.
 `internal/integration/mcp_market_test.go` extends the same OAuth full-element
 scenario to all 50 tools, Web-visible prices and unchanged lifecycle costs;
 the transaction suite covers failed receipts, cross-connection replay and policy.
+
+
+Three-role permissions: application/auth.go separates item writes from shared catalog
+management; auth Store adapters serialize role changes and last-administrator checks.
+Web renders capability flags centrally and protects settings routes, while authenticated
+/resources/{id} previews support item selection. OAuth scope names remain compatible.
+Whole-item deletion: application SpecificationService.DeleteAsset calls paired Store
+asset_deletion.go adapters; migrations 00020 preserve ordinary append-only protection.
+Web asset_deletion.go and templates/asset_delete.html implement explicit confirmation.
+Regression spine: permissions_deletion_test.go in Web and integration, MCP permissions_test.go,
+plus the named full-element scenario and V19 upgrade preservation scenario.

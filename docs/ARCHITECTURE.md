@@ -245,7 +245,7 @@ in tags, never as duplicated resource columns or free-form item color fields.
 Category-specific condition schemes remain separate from configuration descriptions.
 
 Transactions group related cash and lifecycle effects, while asset events remain the append-only lifecycle record.
-Confirmed events cannot be updated or deleted at either Store or database level. A correction
+Confirmed events cannot ordinarily be updated or deleted at either Store or database level. The sole deletion exception is an administrator-confirmed whole-item purge through the application service. A correction
 atomically appends a zero-value void event plus a replacement economic event that references the
 original; the original row remains unchanged and queryable.
 User-facing lifecycle collections never render the technical void row as a separate event. Their
@@ -374,8 +374,8 @@ Users are global identities. `tenant_memberships` binds a user to a tenant with 
 of three roles:
 
 - `owner`: manages members and tenant settings and has all tenant business capabilities;
-- `editor`: maintains catalog, assets, attachments, and lifecycle records;
-- `viewer`: reads tenant data without mutating it.
+- `editor` (Worker): creates and edits concrete assets, selects existing shared definitions/resources/market series, and records or corrects lifecycle events; cannot maintain shared configuration or open settings;
+- `viewer` (Visitor): reads assets and their details without business mutations or settings access.
 
 Platform operations are not a tenant role. The first version has no cross-tenant super-admin
 screen and no platform identity implicitly gains access to tenant business data.
@@ -690,3 +690,32 @@ Migration 19 retains an existing selection column or adds it for older instances
 SQLite retains its pre-upgrade backup; ambiguous/partial legacy schemas fail
 rather than dropping data. Tests cover market 15/16, MCP 17 and rollback/retry on
 both adapters. No existing preview database is implicitly replaced or downgraded.
+
+
+### Three-role administration and whole-item deletion (2026-09-12)
+
+The persisted roles remain owner/editor/viewer; UI labels are Administrator/Worker/Visitor.
+Initial setup and loopback-only disabled authentication retain the administrator default;
+new members default to Worker and existing memberships are not rewritten. Membership
+role changes recheck the actor and protect the last administrator under the tenant write
+lock, with an atomic security audit. Web sessions and OAuth resolve current membership.
+Settings and all /admin routes require administrator access, including drawer fragments.
+Item selectors and /resources/{id} previews remain authenticated reads outside settings.
+Personal appearance/language preferences and client consent/revocation remain account actions.
+OAuth scope names stay compatible: catalog scope permits item writes only when current
+role capabilities allow them; shared writes additionally require catalog capability.
+
+The administrator-confirmed whole-item purge is an explicit exception to append-only
+retention. It deletes owned events (including voids/replacements), drafts, tag selections,
+market binding and the item. Transactions are removed only when no remaining event or
+draft references them. Shared definitions, model images, 3D library objects and price
+series survive; tenant currency locking is preserved. Current schemas have no item-owned
+blob objects, so this use case does not perform blob I/O or introduce an attachment system.
+
+Paired migration 00020 adds minimal deletion tombstones and deleted lifecycle request
+keys. Upgrades do not purge existing data. The purge transaction uses the existing tenant
+write lock, checks current administrator membership, and records a tenant/item marker
+before deleting events. The database still rejects ordinary event changes and prevents
+reinserting a deleted item ID. Matching management result receipts are redacted; removed
+lifecycle request keys remain unusable, so retries cannot restore deleted business data.
+Failures roll back the complete database operation; repeated confirmed deletion is safe.

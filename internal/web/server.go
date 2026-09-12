@@ -83,6 +83,9 @@ type pageData struct {
 	Assets                 []domain.Asset
 	AssetSummaries         map[string]domain.AssetSummary
 	Asset                  *domain.Asset
+	CanManageAssets        bool
+	CanDeleteAssets        bool
+	CanManageSettings      bool
 	CanManageCatalog       bool
 	Events                 []domain.AssetEvent
 	Summary                domain.AssetSummary
@@ -268,7 +271,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth", "model_image", "market"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "asset_delete", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth", "model_image", "market"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/market_summary.html", "templates/resources.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -301,6 +304,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /locale", s.updateLocale)
 	mux.HandleFunc("GET /admin/members", s.members)
 	mux.HandleFunc("POST /admin/members", s.addMember)
+	mux.HandleFunc("POST /admin/members/{id}/role", s.changeMemberRole)
 	mux.HandleFunc("GET /catalog", s.legacyCatalog)
 	mux.HandleFunc("GET /settings", s.settingsPage)
 	mux.HandleFunc("GET /admin/catalog", s.catalogPage)
@@ -331,10 +335,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /assets/{id}/edit", s.editAssetForm)
 	mux.HandleFunc("POST /assets/{id}", s.saveDrawerAsset)
 	mux.HandleFunc("GET /assets/{id}", s.assetDetail)
+	mux.HandleFunc("GET /assets/{id}/delete", s.assetDeletePage)
+	mux.HandleFunc("POST /assets/{id}/delete", s.deleteAsset)
 	mux.HandleFunc("GET /assets/{id}/model.glb", s.assetModel3D)
 	mux.HandleFunc("GET /admin/3d", s.resourcesPage)
 	mux.HandleFunc("POST /admin/3d", s.uploadResource)
 	mux.HandleFunc("GET /admin/3d/{id}", s.resourcePage)
+	mux.HandleFunc("GET /resources/{id}", s.resourcePage)
+	mux.HandleFunc("GET /resources/{id}/model.glb", s.resourceGLB)
 	mux.HandleFunc("GET /admin/3d/{id}/model.glb", s.resourceGLB)
 	mux.HandleFunc("POST /admin/3d/{id}", s.updateResource)
 	mux.HandleFunc("POST /admin/3d/{id}/tags", s.saveResourceTags)
@@ -554,7 +562,7 @@ func (s *Server) newAssetForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !principal.Can(application.CapabilityManageCatalog) {
+	if !principal.Can(application.CapabilityManageAssets) {
 		s.renderForbidden(w, principal, "error.forbidden_asset")
 		return
 	}
@@ -583,7 +591,7 @@ func (s *Server) editAssetForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !principal.Can(application.CapabilityManageCatalog) {
+	if !principal.Can(application.CapabilityManageAssets) {
 		s.renderForbidden(w, principal, "error.forbidden_asset")
 		return
 	}
@@ -1609,6 +1617,10 @@ func (s *Server) principal(r *http.Request) (application.Principal, error) {
 func (s *Server) requirePrincipal(w http.ResponseWriter, r *http.Request) (application.Principal, bool) {
 	principal, err := s.principal(r)
 	if err == nil {
+		if (r.URL.Path == "/settings" || strings.HasPrefix(r.URL.Path, "/admin/")) && !principal.Can(application.CapabilityManageSettings) {
+			s.renderForbidden(w, principal, "error.forbidden_catalog")
+			return application.Principal{}, false
+		}
 		return principal, true
 	}
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -1667,6 +1679,11 @@ func (s *Server) localeForRequest(r *http.Request, principal *application.Princi
 func (s *Server) render(w http.ResponseWriter, status int, name string, data pageData) {
 	data.OAuthEnabled = s.options.OAuth != nil
 	if data.Principal != nil {
+		data.CanManageAssets = data.Principal.Can(application.CapabilityManageAssets)
+		data.CanDeleteAssets = data.Principal.Can(application.CapabilityDeleteAssets)
+		data.CanManageSettings = data.Principal.Can(application.CapabilityManageSettings)
+		data.CanManageCatalog = data.Principal.Can(application.CapabilityManageCatalog)
+		data.CanManageLifecycle = data.Principal.Can(application.CapabilityManageLifecycle)
 		data.Locale = data.Principal.Locale
 		data.Theme = data.Principal.Theme
 		data.Accent = data.Principal.Accent
@@ -1692,7 +1709,7 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if fragment, ok := w.(*drawerResponse); ok && (status < 400 || status == http.StatusUnprocessableEntity) {
-		if !data.CanManageCatalog && !data.CanManageLifecycle {
+		if !data.CanManageAssets && !data.CanManageCatalog && !data.CanManageLifecycle {
 			w.Header().Set("X-Assetloop-Readonly", "true")
 		}
 		target := "fragment-" + fragment.target
@@ -1886,4 +1903,19 @@ func assetTitle(asset domain.Asset) string {
 		return name
 	}
 	return asset.Model
+}
+
+func (s *Server) changeMemberRole(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.requirePrincipal(w, r)
+	if !ok {
+		return
+	}
+	if !s.verifyCSRF(w, r) {
+		return
+	}
+	if err := s.auth.ChangeMemberRole(r.Context(), actor, r.PathValue("id"), application.Role(r.FormValue("role"))); err != nil {
+		s.renderError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/members", http.StatusSeeOther)
 }

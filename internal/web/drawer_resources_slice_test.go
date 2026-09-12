@@ -183,7 +183,7 @@ func TestResourceSliceBindingIndependentSave(t *testing.T) {
 	login := post("/login", url.Values{"username": {"reader"}, "password": {"reader secure password"}})
 	cookies = []*http.Cookie{responseCookie(t, login, sessionCookie), cookies[1]}
 	viewerPage := send("GET", path, "binding-editor", nil)
-	if viewerPage.Code != 200 || strings.Contains(viewerPage.Body.String(), `name="resource_id"`) {
+	if viewerPage.Code != 403 || strings.Contains(viewerPage.Body.String(), `name="resource_id"`) {
 		t.Fatal("viewer sees binding mutation", viewerPage.Code)
 	}
 	if denied := send("POST", path, "binding-editor", url.Values{"csrf_token": {csrf}, "resource_id": {id}}); denied.Code != 403 {
@@ -214,7 +214,7 @@ func TestResourceSliceFragmentHasNoScriptsAndViewerIsReadOnly(t *testing.T) {
 	if upload.Code != http.StatusSeeOther {
 		t.Fatal("upload failed", upload.Code)
 	}
-	path := upload.Header().Get("Location")
+	path := strings.Replace(upload.Header().Get("Location"), "/admin/3d/", "/resources/", 1)
 	fragment := func() string {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		r.Header.Set("X-Assetloop-Drawer", "resource-editor")

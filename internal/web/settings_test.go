@@ -47,8 +47,8 @@ func TestSettingsNavigationAndPermissions(t *testing.T) {
 	login := request(t, h, "POST", "/login", url.Values{"csrf_token": {csrf.Value}, "username": {"reader"}, "password": {"reader secure password"}}, []*http.Cookie{csrf})
 	viewer := []*http.Cookie{csrf, responseCookie(t, login, sessionCookie)}
 	start = request(t, h, "GET", "/settings", nil, viewer)
-	if start.Code != 303 || start.Header().Get("Location") != "/admin/tags" {
-		t.Fatal("viewer landing")
+	if start.Code != 403 {
+		t.Fatal("viewer settings must be forbidden")
 	}
 	page := request(t, h, "GET", "/admin/tags", nil, viewer)
 	if strings.Contains(page.Body.String(), `data-settings-tab="catalog"`) || strings.Contains(page.Body.String(), `href="/admin/members"`) {

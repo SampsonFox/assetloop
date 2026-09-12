@@ -16,7 +16,7 @@ func (s *Server) saveDrawerAsset(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !actor.Can(application.CapabilityManageCatalog) {
+	if !actor.Can(application.CapabilityManageAssets) {
 		s.renderForbidden(w, actor, "error.forbidden_asset")
 		return
 	}

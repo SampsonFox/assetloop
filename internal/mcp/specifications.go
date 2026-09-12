@@ -85,7 +85,7 @@ func registerSpecifications(server *sdk.Server, s Services) {
 		err := s.Management.SaveModel(ctx, p, q.RequestKey, cmd)
 		return map[string]string{"model_id": q.ModelID}, err
 	})
-	register(server, "save_asset", "Create/update confirmed item metadata and complete selected tags. This does not record a purchase; record_event is a separate committed command. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q SaveAssetInput) (any, error) {
+	register(server, "save_asset", "Create/update confirmed item metadata and complete selected tags. This does not record a purchase; record_event is a separate committed command. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageAssets, func(ctx context.Context, p application.Principal, q SaveAssetInput) (any, error) {
 		return s.Management.SaveAsset(ctx, p, q.RequestKey, application.SaveSpecificationAsset{ID: q.ID, ModelID: q.ModelID, DisplayName: q.DisplayName, SerialNumber: q.SerialNumber, PurchaseChannel: q.PurchaseChannel, Notes: q.Notes, TagIDs: q.TagIDs, ResourceID: q.ResourceID})
 	})
 	register(server, "save_appearance_default", "Create/update a user-confirmed model appearance rule using an existing 3D resource and complete tag conditions. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q SaveAppearanceInput) (any, error) {

@@ -20,6 +20,7 @@ type AuthStore interface {
 	CreateMember(context.Context, User, Membership, SecurityEvent) error
 	ListMembers(context.Context, string, MemberListOptions) (MemberListResult, error)
 	RecordSecurityEvent(context.Context, SecurityEvent) error
+	ChangeMemberRole(context.Context, Principal, string, Role, SecurityEvent) error
 }
 
 type CatalogStore interface {

@@ -260,7 +260,7 @@ func (s *LifecycleService) EventTypes(ctx context.Context, actor Principal) ([]d
 }
 
 func (s *LifecycleService) CreateEventType(ctx context.Context, actor Principal, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {
-	if err := actor.Require(CapabilityManageLifecycle); err != nil {
+	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return domain.AssetEventTypeDefinition{}, err
 	}
 	var result domain.AssetEventTypeDefinition
@@ -273,7 +273,7 @@ func (s *LifecycleService) CreateEventType(ctx context.Context, actor Principal,
 }
 
 func (s *LifecycleService) createEventType(ctx context.Context, actor Principal, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {
-	if err := actor.Require(CapabilityManageLifecycle); err != nil {
+	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return domain.AssetEventTypeDefinition{}, err
 	}
 	name, err := catalogText("event type", cmd.Name, 80, true)

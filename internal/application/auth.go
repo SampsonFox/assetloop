@@ -56,6 +56,8 @@ const (
 type Capability string
 
 const (
+	CapabilityManageAssets    Capability = "manage_assets"
+	CapabilityDeleteAssets    Capability = "delete_assets"
 	CapabilityView            Capability = "view"
 	CapabilityManageCatalog   Capability = "manage_catalog"
 	CapabilityManageLifecycle Capability = "manage_lifecycle"
@@ -86,7 +88,7 @@ func (p Principal) Can(capability Capability) bool {
 	case RoleOwner:
 		return true
 	case RoleEditor:
-		return capability == CapabilityView || capability == CapabilityManageCatalog || capability == CapabilityManageLifecycle
+		return capability == CapabilityView || capability == CapabilityManageAssets || capability == CapabilityManageLifecycle
 	case RoleViewer:
 		return capability == CapabilityView
 	default:
@@ -467,4 +469,19 @@ func verifyPassword(encoded, password string) bool {
 func tokenHash(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+// ChangeMemberRole serializes authorization, last-admin protection and the audit.
+func (s *AuthService) ChangeMemberRole(ctx context.Context, actor Principal, userID string, role Role) error {
+	if err := actor.Require(CapabilityManageMembers); err != nil {
+		return err
+	}
+	if !validRole(role) {
+		return NewInputError("validation.role_invalid")
+	}
+	if err := validID("user ID", userID); err != nil {
+		return err
+	}
+	event := SecurityEvent{ID: newID(), TenantID: actor.TenantID, ActorUserID: actor.UserID, TargetUserID: userID, Action: "membership.role_changed", Detail: string(role), OccurredAt: s.now().UTC()}
+	return s.store.ChangeMemberRole(ctx, actor, userID, role, event)
 }

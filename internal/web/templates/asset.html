@@ -1,6 +1,6 @@
-{{define "content"}}{{template "asset-detail-content" .}}{{end}}
+{{define "content"}}{{template "asset-detail-content" .}}{{if .CanDeleteAssets}}<section class="card stack"><h2>{{t .Strings "asset.delete"}}</h2><p class="muted">{{t .Strings "asset.delete_warning"}}</p><a class="button danger auto" href="/assets/{{.Asset.ID}}/delete">{{t .Strings "asset.delete"}}</a></section>{{end}}{{end}}
 {{define "fragment-asset-detail"}}{{$s := .Strings}}
-<dialog data-management-drawer class="drawer" id="asset-detail" aria-labelledby="asset-detail-title"><div class="drawer-panel"><header class="drawer-heading"><h2 id="asset-detail-title">{{assetTitle .Asset}}</h2><div class="drawer-heading-actions"><button type="button" class="secondary auto" data-dialog-close>{{t $s "common.close"}}</button>{{if .CanManageCatalog}}<a class="button auto" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor">{{t $s "assets.edit"}}</a>{{end}}</div></header><div class="drawer-body">{{template "asset-detail-profile" .}}</div></div></dialog>
+<dialog data-management-drawer class="drawer" id="asset-detail" aria-labelledby="asset-detail-title"><div class="drawer-panel"><header class="drawer-heading"><h2 id="asset-detail-title">{{assetTitle .Asset}}</h2><div class="drawer-heading-actions"><button type="button" class="secondary auto" data-dialog-close>{{t $s "common.close"}}</button>{{if .CanManageAssets}}<a class="button auto" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor">{{t $s "assets.edit"}}</a>{{end}}</div></header><div class="drawer-body">{{template "asset-detail-profile" .}}</div></div></dialog>
 {{end}}
 {{define "asset-detail-content"}}{{$s := .Strings}}
 <div class="page-heading asset-detail-heading">
@@ -9,7 +9,7 @@
 		<a class="icon-button" href="/" aria-label="{{t $s "common.back_assets"}}" title="{{t $s "common.back_assets"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
 		</a>
-		{{if .CanManageCatalog}}<a class="icon-button" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor" aria-label="{{t $s "assets.edit"}}" title="{{t $s "assets.edit"}}">
+		{{if .CanManageAssets}}<a class="icon-button" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor" aria-label="{{t $s "assets.edit"}}" title="{{t $s "assets.edit"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>
 		</a>{{end}}
 	</div>
@@ -85,7 +85,7 @@
     {{if .Error}}<p class="error wide" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="request_key" value="{{.EventForm.RequestKey}}">
-    <div class="form-field"><label for="event-type-select">{{t $s "asset.event_type"}}</label><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}{{if .Enabled}}<option value="{{.ID}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .ID}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}{{end}}{{if .CanManageLifecycle}}<option value="__create__" data-event-type-create hidden disabled>{{t $s "asset.event_type_add"}}…</option>{{end}}</select>{{if .CanManageLifecycle}}<noscript><a href="/admin/event-types?dialog=event-type-manage">{{t $s "asset.event_type_add"}}</a></noscript>{{end}}</div>
+    <div class="form-field"><label for="event-type-select">{{t $s "asset.event_type"}}</label><select id="event-type-select" name="event_type" required data-event-type-select data-dialog-initial-focus>{{range .EventTypes}}{{if .Enabled}}<option value="{{.ID}}" data-cashflow="{{.Cashflow}}" {{if eq $.EventForm.Type .ID}}selected{{end}}>{{eventTypeLabel $s .}}</option>{{end}}{{end}}{{if .CanManageCatalog}}<option value="__create__" data-event-type-create hidden disabled>{{t $s "asset.event_type_add"}}…</option>{{end}}</select>{{if .CanManageLifecycle}}<noscript>{{if $.CanManageCatalog}}<a href="/admin/event-types?dialog=event-type-manage">{{t $s "asset.event_type_add"}}</a>{{end}}</noscript>{{end}}</div>
     <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_at" value="{{.EventForm.OccurredAt}}" required></label>
     <div class="form-field" data-money-field>
       <label for="event-amount">{{t $s "asset.amount"}}</label>
@@ -105,7 +105,7 @@
     <footer class="drawer-footer"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button><button class="auto" type="submit">{{t $s "asset.append"}}</button></footer>
   </form>
 </dialog>
-<dialog class="drawer" id="event-type-drawer" aria-labelledby="event-type-drawer-title">
+{{if .CanManageCatalog}}<dialog class="drawer" id="event-type-drawer" aria-labelledby="event-type-drawer-title">
   <form class="drawer-panel" action="/admin/event-types" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
     <header class="drawer-heading"><h2 id="event-type-drawer-title" data-dialog-title>{{t $s "asset.event_type_create"}}</h2><button class="icon-button" type="button" data-dialog-close aria-label="{{t $s "common.close"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
     <div class="drawer-body stack">
@@ -118,6 +118,6 @@
     </div>
     <footer class="drawer-footer"><button class="secondary auto" type="button" data-dialog-close>{{t $s "common.cancel"}}</button><button class="auto" type="submit">{{t $s "asset.event_type_create"}}</button></footer>
   </form>
-</dialog>
+</dialog>{{end}}
 {{end}}
 {{end}}

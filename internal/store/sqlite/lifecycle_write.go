@@ -42,6 +42,13 @@ func (s *Store) WithLifecycleWrite(ctx context.Context, tenantID string, fn func
 }
 
 func (s *Store) FindLifecycleRequest(ctx context.Context, tenantID, userID, key string) (application.LifecycleRequest, bool, error) {
+	deleted, err := s.queries().DeletedLifecycleRequestExists(ctx, sqlitedb.DeletedLifecycleRequestExistsParams{TenantID: tenantID, UserID: userID, RequestKey: key})
+	if err != nil {
+		return application.LifecycleRequest{}, false, err
+	}
+	if deleted != 0 {
+		return application.LifecycleRequest{}, false, application.NewInputError("validation.asset_deleted")
+	}
 	row, err := s.queries().FindLifecycleRequest(ctx, sqlitedb.FindLifecycleRequestParams{TenantID: tenantID, UserID: userID, RequestKey: key})
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.LifecycleRequest{}, false, nil

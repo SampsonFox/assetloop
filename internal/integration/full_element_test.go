@@ -441,6 +441,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		runMCPFullElement(t, db, store, ownerSession, model.ID)
 	})
 	t.Run("shared market quotes and FX", func(t *testing.T) { storetest.RunMarket(t, store, store, db, driver) })
+	t.Run("permissions and permanent deletion", func(t *testing.T) { runPermissionsDeletion(t, db, store, owner, driver) })
 }
 
 func fullElementGLB() []byte {

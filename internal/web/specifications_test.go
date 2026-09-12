@@ -255,7 +255,7 @@ func TestSpecificationManagementHTTP(t *testing.T) {
 	}
 	viewerCookies := []*http.Cookie{{Name: sessionCookie, Value: viewerCredential.Token}, csrf}
 	viewerPage := request(t, handler, "GET", "/admin/tags", nil, viewerCookies)
-	if viewerPage.Code != 200 || !strings.Contains(viewerPage.Body.String(), "128GB") || strings.Contains(viewerPage.Body.String(), `id="tag-editor"`) {
+	if viewerPage.Code != 403 || strings.Contains(viewerPage.Body.String(), `id="tag-editor"`) {
 		t.Fatalf("viewer page: %d %s", viewerPage.Code, viewerPage.Body.String())
 	}
 	response = request(t, handler, "POST", "/admin/tags/values/"+tag.ID, create, viewerCookies)
@@ -280,7 +280,7 @@ func TestAppearanceConflictNoticeIsEditorOnly(t *testing.T) {
 	for _, canManage := range []bool{true, false} {
 		p := application.Principal{TenantID: "tenant", Role: application.RoleViewer, Locale: application.LocaleZhCN}
 		if canManage {
-			p.Role = application.RoleEditor
+			p.Role = application.RoleOwner
 		}
 		w := httptest.NewRecorder()
 		s.render(w, 200, "asset", pageData{Principal: &p, Asset: &domain.Asset{ID: "item", ModelID: "model", DisplayName: "Phone"}, CanManageCatalog: canManage, Binding: &application.Model3DBinding{Conflict: true}, BaseCurrency: "CNY"})

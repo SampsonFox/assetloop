@@ -23,7 +23,7 @@ func TestOAuthUpgradeFrom14(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider, err := goose.NewProvider(goose.DialectSQLite3, db, files,
-		goose.WithExcludeNames([]string{specificationMigrationName, specificationContractMigrationName, "00015_oauth.sql", "00016_management_requests.sql", "00017_model_images.sql", "00018_market_quotes.sql", "00019_market_selection.sql"}),
+		goose.WithExcludeNames([]string{specificationMigrationName, specificationContractMigrationName, "00015_oauth.sql", "00016_management_requests.sql", "00017_model_images.sql", "00018_market_quotes.sql", "00019_market_selection.sql", "00020_asset_deletion.sql"}),
 		goose.WithGoMigrations(specificationMigration("sqlite"), specificationContractMigration("sqlite")))
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestOAuthUpgradeFrom14(t *testing.T) {
 	if err := db.QueryRow("SELECT name FROM tenants WHERE id='upgrade-tenant'").Scan(&name); err != nil || name != "Retained account" {
 		t.Fatal("existing account changed")
 	}
-	if err := db.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil || version != 19 {
+	if err := db.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil || version != 20 {
 		t.Fatal("upgrade not committed")
 	}
 }

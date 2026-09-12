@@ -18,7 +18,7 @@ func TestAssetListIconControlsAndCardContent(t *testing.T) {
 		for _, editable := range []bool{false, true} {
 			data := pageData{
 				Strings: messages[locale], Principal: &application.Principal{TenantName: "Test"},
-				AssetView: "grid", CanManageCatalog: editable, CanManageLifecycle: editable,
+				AssetView: "grid", CanManageAssets: editable, CanManageCatalog: editable, CanManageLifecycle: editable,
 				AssetAdvanced: true, AssetHasFilters: true, AssetQuery: "phone",
 				Assets:         []domain.Asset{{ID: "sample", DisplayName: "Personal phone", Category: "Phone", Model: "Model", TagSummary: "256GB", SerialNumber: "SERIAL-001"}},
 				AssetSummaries: map[string]domain.AssetSummary{"sample": {BaseCurrency: "CNY", ExpenseMinor: 1010000, NetCashflowMinor: 40000}},

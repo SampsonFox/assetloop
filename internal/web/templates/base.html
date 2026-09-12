@@ -23,7 +23,7 @@
       <div class="account-menu-panel">
         <div class="account-identity"><span class="account-avatar">{{userInitial .Principal.Username}}</span><span><strong>{{.Principal.Username}}</strong><small>{{roleLabel $s .Principal.Role}}</small></span></div>
         <nav aria-label="{{t $s "menu.label"}}">
-          <a class="menu-item" href="/settings" {{if .SettingsSection}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "settings.title"}}</span></a>
+          {{if .CanManageSettings}}<a class="menu-item" href="/settings" {{if .SettingsSection}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "settings.title"}}</span></a>{{end}}
           {{if .OAuthEnabled}}<a class="menu-item" href="/account/clients">{{template "icon-grid"}}<span>{{if eq .Locale "en"}}Authorized clients{{else}}已授权客户端{{end}}</span></a>{{end}}
           {{if eq .Principal.Role "owner"}}<a class="menu-item" href="/admin/members" {{if .NavMembers}}aria-current="page"{{end}}>{{template "icon-users"}}<span>{{t $s "menu.members"}}</span></a>{{end}}
         </nav>

@@ -59,6 +59,7 @@ AGENTS.md > docs/ARCHITECTURE.md > docs/PROJECT_PLAN.md > CODEMAP.md > code comm
 ### 6. Preserve lifecycle history
 
 - Confirmed asset events are append-only.
+- Exception: an administrator-confirmed whole-item permanent deletion may remove that item and its owned lifecycle data in one tenant-scoped application transaction. Shared catalog/media/market data remain. This does not permit individual event deletion, in-place corrections, or destructive upgrades.
 - Corrections MUST void and replace; they MUST NOT overwrite the original economic event.
 - Transactions may group events, but asset events remain the lifecycle source of truth.
 

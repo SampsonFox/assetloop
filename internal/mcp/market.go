@@ -225,7 +225,7 @@ func registerMarket(server *sdk.Server, s Services) {
 		item, err := s.Management.UpdateMarketItem(ctx, p, q.RequestKey, q.ID, q.Name, q.Enabled)
 		return marketItemResult(item), err
 	})
-	register(server, "bind_asset_market", "Explicitly bind an asset to a saved shared market series, or pass empty market_item_id to unbind. Does not record purchase/sale or alter costs.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q BindMarketInput) (any, error) {
+	register(server, "bind_asset_market", "Explicitly bind an asset to a saved shared market series, or pass empty market_item_id to unbind. Does not record purchase/sale or alter costs.", ScopeCatalog, application.CapabilityManageAssets, func(ctx context.Context, p application.Principal, q BindMarketInput) (any, error) {
 		if s.Management == nil {
 			return nil, application.ErrMarketUnavailable
 		}

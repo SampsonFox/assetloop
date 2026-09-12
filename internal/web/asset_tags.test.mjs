@@ -16,7 +16,7 @@ test('searchable resource choice changes only the parent draft and previews the 
   vm.runInNewContext(`${block}\ninitializeResource(select)`,context);
   const input=nodes[0];assert.equal(input.value,'Inherit');assert.equal(preview.disabled,true);
   input.value='Phone';input.input();assert.equal(select.value,'id-1');assert.equal(changes,1);
-  preview.click();assert.equal(opened.href,'/admin/3d/id-1');assert.equal(select.value,'id-1');
+  preview.click();assert.equal(opened.href,'/resources/id-1');assert.equal(select.value,'id-1');
   input.value='Unknown';input.input();assert.equal(input.validity.valid,false);assert.equal(preview.disabled,true);
   input.value='Inherit';input.input();assert.equal(select.value,'');assert.equal(input.validity.valid,true);
 });

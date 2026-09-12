@@ -42,6 +42,7 @@ func TestHTTPQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Run("role boundary", func(t *testing.T) { testWorkerTools(t, services, owner, category.ID) })
 	t.Run("lifecycle writes", func(t *testing.T) { testLifecycleTools(t, services, owner, category.ID) })
 	for _, tc := range []struct {
 		name               string

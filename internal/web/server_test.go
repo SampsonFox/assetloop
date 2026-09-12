@@ -100,11 +100,11 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 	}
 	editorSession := responseCookie(t, response, sessionCookie)
 	editorHome := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{editorSession, csrf})
-	if !strings.Contains(editorHome.Body.String(), `href="/settings"`) || strings.Contains(editorHome.Body.String(), `href="/imports"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
+	if strings.Contains(editorHome.Body.String(), `href="/settings"`) || strings.Contains(editorHome.Body.String(), `href="/imports"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
 		t.Fatalf("editor account menu has incorrect entries: %s", editorHome.Body.String())
 	}
 	forbidden := request(t, handler, http.MethodGet, "/admin/members", nil, []*http.Cookie{editorSession, csrf})
-	if forbidden.Code != http.StatusForbidden || !strings.Contains(forbidden.Body.String(), "只有 Owner") {
+	if forbidden.Code != http.StatusForbidden {
 		t.Fatalf("editor member access: status=%d body=%s", forbidden.Code, forbidden.Body.String())
 	}
 }

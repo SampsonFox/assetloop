@@ -52,6 +52,13 @@ func (s *Store) FindLifecycleRequest(ctx context.Context, tenantID, userID, key 
 	if err != nil {
 		return application.LifecycleRequest{}, false, err
 	}
+	deleted, err := s.queries().DeletedLifecycleRequestExists(ctx, postgresdb.DeletedLifecycleRequestExistsParams{TenantID: tenant, UserID: user, RequestKey: key})
+	if err != nil {
+		return application.LifecycleRequest{}, false, err
+	}
+	if deleted != 0 {
+		return application.LifecycleRequest{}, false, application.NewInputError("validation.asset_deleted")
+	}
 	row, err := s.queries().FindLifecycleRequest(ctx, postgresdb.FindLifecycleRequestParams{TenantID: tenant, UserID: user, RequestKey: key})
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.LifecycleRequest{}, false, nil

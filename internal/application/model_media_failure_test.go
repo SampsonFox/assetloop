@@ -157,7 +157,7 @@ func TestModelResourceCanceledUploadCleanupIsBoundedAndUncancelled(t *testing.T)
 }
 
 func mediaFailureSetup() (Principal, *failingMediaStore, *failingMediaBlob, *ModelMediaService) {
-	actor := Principal{TenantID: uuid.NewString(), UserID: uuid.NewString(), Role: RoleEditor}
+	actor := Principal{TenantID: uuid.NewString(), UserID: uuid.NewString(), Role: RoleOwner}
 	store := &failingMediaStore{mediaTestStore: &mediaTestStore{model: domain.ProductModel{ID: uuid.NewString(), TenantID: actor.TenantID, Name: "Existing"}}}
 	blob := &failingMediaBlob{memoryBlob: &memoryBlob{data: map[string][]byte{"legacy-key.glb": []byte("keep")}}}
 	svc := NewModelMediaService(store, mediaRegistry{"local": blob}, mediaKeys{}, "local")
