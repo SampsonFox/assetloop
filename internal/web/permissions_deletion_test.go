@@ -64,6 +64,9 @@ func TestRolePagesAndConfirmedDeletion(t *testing.T) {
 			}
 			cookies := []*http.Cookie{{Name: sessionCookie, Value: login.Token}, adminCookies[1]}
 			body := request(t, h, "GET", path, nil, cookies).Body.String()
+			if strings.Contains(body, textFor(admin.Locale, "asset.delete_warning")) || strings.Contains(body, "<h2>"+textFor(admin.Locale, "asset.delete")+"</h2>") {
+				t.Fatal("item detail should show only the delete button; explanation belongs on confirmation page")
+			}
 			for _, check := range []struct {
 				needle string
 				want   bool
