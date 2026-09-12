@@ -1,5 +1,19 @@
 # MCP implementation and acceptance
 
+## Current checkpoint — 2026-09-12
+
+The user has explicitly authorized UAT promotion of this batch. The current
+capability summary, changes, limitations and acceptance gates are maintained in
+[MCP release notes](MCP_RELEASE_NOTES.md). There are 40 tools (22 reads, 18 writes),
+including server-side public GLB URL import. Model images are Web-only. Tool and
+field descriptions ship the event-type versus notes semantics with the server.
+Current PR dual-database CI and post-merge packaging must pass before claiming
+this candidate validated. Production is not authorized.
+
+The dated development entries below are historical evidence, not competing
+current capability lists. Earlier 39-tool/no-import and pending-wiring statements
+have been superseded; their live revocation/cleanup limitations remain explicit.
+
 Approved scope: HTTP Streamable MCP in the existing Go process, backed by the
 same application services as Web. Work branch `dev-mcp` starts at accepted UAT
 `99f733c`, in a separate worktree. The frontend preview and its database are not
@@ -55,7 +69,7 @@ Corrections void and replace historical events through the existing use case.
 First phase excludes stdio, public deployment, dynamic public client registration,
 file upload, general attachments, market integration and MCP member/permission
 administration. Pre-register the local Codex OAuth client. Existing Web file
-upload remains available; MCP manages only existing resources.
+upload remains available; MCP can also import public GLB URLs before binding.
 
 Completion means the entire checklist is proved, not merely that the read adapter
 compiles. UAT packaging/promotion and production remain separate user approvals.

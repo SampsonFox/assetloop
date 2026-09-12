@@ -1,5 +1,9 @@
 # MCP setup and tool contract
 
+For the 2026-09-12 UAT batch capabilities, changes and exclusions, see
+[MCP release notes](MCP_RELEASE_NOTES.md). Product-model images remain a
+[Web configuration feature](model-images.md), not an MCP upload tool.
+
 AssetLoop exposes opt-in Streamable HTTP at `/mcp` in the existing Go server.
 It uses the same application services, database and authorization rules as Web.
 No model API key, second service or stdio process is needed. Development evidence

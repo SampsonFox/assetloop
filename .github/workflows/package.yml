@@ -92,6 +92,8 @@ jobs:
           mkdir -p "dist/${package}"
           go build -trimpath -ldflags="-s -w" -o "dist/${package}/assetloop${{ matrix.extension }}" ./cmd/assetloop
           cp README.md .env.example "dist/${package}/"
+          mkdir -p "dist/${package}/docs"
+          cp docs/MCP.md docs/MCP_IMPLEMENTATION.md docs/MCP_RELEASE_NOTES.md docs/CODEX_MCP_ACCEPTANCE.md docs/model-images.md "dist/${package}/docs/"
           if [ "${GOOS}" = "windows" ]; then
             (cd dist && zip -qr "${package}.zip" "${package}")
             unzip -Z1 "dist/${package}.zip" > "${RUNNER_TEMP}/archive-contents.txt"
@@ -105,6 +107,9 @@ jobs:
             (cd dist && sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256")
             test ! -e "dist/${package}.zip"
           fi
+          for guide in MCP.md MCP_IMPLEMENTATION.md MCP_RELEASE_NOTES.md CODEX_MCP_ACCEPTANCE.md model-images.md; do
+            grep -Fxq "${package}/docs/${guide}" "${RUNNER_TEMP}/archive-contents.txt"
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: assetloop-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}

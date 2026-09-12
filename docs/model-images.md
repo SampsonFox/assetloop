@@ -29,6 +29,18 @@ tool contract. Trade-in linking remains a separate proposed feature.
 
 ## Real-world findings
 
+Before downloading for import, open the original candidate image and visually
+check the exact model, color, whole-product framing and clarity. If temporary
+download is necessary to inspect it, it is not yet approved for upload. Do not
+substitute multi-color lineups, color swatches or cropped detail shots for a
+matching product photo. Front/back views of the same color are acceptable.
+After saving, re-read the binding and inspect the actual asset display. Consider
+other assets sharing this model before replacing a shared image.
+
+The initial multi-color illustration was rejected; a complete white front/back
+product image was subsequently inspected and uploaded, with the asset view
+verified. No economic records changed. This was Web acceptance, not MCP upload.
+
 The Xiaomi 15 specifications page presents a multi-color model illustration. Its
 color swatches are tiny images, not product photos. Inspect the actual image and
 dimensions before importing. The bare PNG URL retrieved during local verification

@@ -16,6 +16,9 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 ## Entry points
 
+`docs/MCP_RELEASE_NOTES.md` records the 2026-09-12 MCP UAT batch capabilities,
+changes and exclusions; setup and acceptance guides ship under `docs/` in packages.
+
 Model images: `internal/application/model_images.go` owns validation, import,
 immutable blob revisions and active model binding. `internal/web/model_images.go`
 and `templates/model_image.html` expose upload/replace/detach and HTTPS import;

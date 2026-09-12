@@ -493,6 +493,11 @@ ONEBOUND_APP_SECRET=
 
 ### 13.2 MCP 工具
 
+2026-09-12：用户将 `dev-mcp` 批次标为 UAT 检查点。当前 40 个工具、
+本批次改动和明确限制见 `docs/MCP_RELEASE_NOTES.md`，准确工具目录见 `docs/MCP.md`。
+本次同时包含型号图片的 Web 上传/导入，不包含 MCP 图片工具或以旧换新关联。
+晋级以当前提交的双数据库全要素验证和打包冒烟为准，生产仍须单独批准。
+
 当前已批准独立增量：在 `dev-mcp` 实现同进程 Streamable HTTP、现有账户
 OAuth/PKCE 授权、可撤销的客户端权限和现有业务管理工具。直接复用 application
 服务；管理写入补共享幂等，生命周期沿用已有回执。以本地 Codex 实测为验收，
@@ -502,22 +507,23 @@ OAuth/PKCE 授权、可撤销的客户端权限和现有业务管理工具。直
 仍不含 MCP 文件上传、行情、成员管理、stdio 或公网部署。完整范围与未完成清单见
 `docs/MCP_IMPLEMENTATION.md`；以下示例中的附件和行情仍属于后续阶段。
 
-MCP 只暴露语义化工具，例如：
+当前 MCP 只暴露语义化工具，例如：
 
 ```text
 search_product_models
 search_specification_tags
-record_purchase
-record_repair
-record_sale
-attach_evidence
+record_event
+correct_event
 get_asset
 list_assets
-get_asset_valuation
-refresh_market_price
+get_asset_cost
+get_portfolio_summary
+import_3d_resource_from_url
 ```
 
 写入工具必须经过输入验证和业务规则；不提供任意 SQL 写权限。
+买入、维修和卖出通过 `record_event` 加已有类型实现；事件类型是可复用行为分类，
+商品/服务名称属于备注。通用证据附件和行情工具尚未实现。
 
 ## 14. 建议目录结构
 
