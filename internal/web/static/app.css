@@ -683,3 +683,6 @@ dialog .asset-editor-fields { grid-template-columns:repeat(auto-fit,minmax(min(1
 .market-specs dd { margin:0; overflow-wrap:anywhere; }
 .market-specs details { margin-top:8px; font-size:.85rem; }
 .market-selection h3,.market-preview h3 { margin-top:0; }
+
+.asset-delete-reveal { padding-top:20px; }
+.asset-delete-reveal > .button { display:block; width:100%; text-align:center; min-height:48px; }

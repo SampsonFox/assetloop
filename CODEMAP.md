@@ -284,3 +284,7 @@ asset_deletion.go adapters; migrations 00020 preserve ordinary append-only prote
 Web asset_deletion.go and templates/asset_delete.html implement explicit confirmation.
 Regression spine: permissions_deletion_test.go in Web and integration, MCP permissions_test.go,
 plus the named full-element scenario and V19 upgrade preservation scenario.
+
+Asset deletion disclosure: static/asset-delete-reveal.js reveals the full-width footer only
+on a fresh downward gesture at the page bottom; keyboard and no-JS fallbacks remain.
+asset_delete_reveal.test.mjs covers wheel momentum, touch, nested scroll and keyboard input.
