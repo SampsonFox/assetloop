@@ -65,7 +65,7 @@ func TestAssetListIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, view := range []string{"list", "grid"} {
-		for _, name := range []string{"", "  ", "My phone", strings.Repeat("Long custom name ", 12)} {
+		for _, name := range []string{"", "  ", "Xiaomi 15", "My phone", strings.Repeat("Long custom name ", 12)} {
 			t.Run(view+"/"+name, func(t *testing.T) {
 				data := pageData{Strings: messages[application.LocaleEn], Principal: &application.Principal{}, AssetView: view, CanManageLifecycle: true,
 					Assets:         []domain.Asset{{ID: "item", DisplayName: name, Model: "Xiaomi 15", Category: "Phone", TagSummary: "512GB", SerialNumber: "PRIVATE-SERIAL-123"}},
@@ -81,6 +81,17 @@ func TestAssetListIdentity(t *testing.T) {
 				}
 				if !strings.Contains(body, `href="/assets/item">`+want+`</a>`) {
 					t.Errorf("item title should be custom name or model: %q", want)
+				}
+				separator := " / "
+				if view == "grid" {
+					separator = " · "
+				}
+				taxonomy := "Phone" + separator + "512GB"
+				if want != "Xiaomi 15" {
+					taxonomy = "Phone" + separator + "Xiaomi 15" + separator + "512GB"
+				}
+				if !strings.Contains(body, ">"+taxonomy+"<") {
+					t.Errorf("taxonomy should complement title, want %q", taxonomy)
 				}
 				for _, forbidden := range []string{"PRIVATE-SERIAL-123", messages[application.LocaleEn]["assets.serial_missing"], `data-label="` + messages[application.LocaleEn]["assets.serial_number"] + `"`} {
 					if strings.Contains(body, forbidden) {
