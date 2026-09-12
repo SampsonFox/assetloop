@@ -120,3 +120,12 @@ test('unchanged standalone editor leaves without asking',async()=>{
   const context={document:{querySelectorAll:()=>[{dataset:{dirty:'false'},closest:()=>null}]},updateDirty:()=>{},confirmDiscard:()=>assert.fail('unexpected prompt'),window:{location:{assign:()=>{navigated=true;}}}};
   vm.createContext(context);vm.runInContext(`${block}\nthis.leave=leaveEditor;`,context);await context.leave('/');assert.equal(navigated,true);
 });
+
+test('SSR step drawers retain server-rendered fields and action without opener metadata',()=>{
+ const start=source.indexOf('      if (opener.dataset.action) form.action');
+ assert.notEqual(start,-1);
+ const block=source.slice(start,source.indexOf('      if (dialog.id === "model-drawer")',start));
+ const field={value:'Phone 256GB'},form={action:'/admin/market/discover',hasAttribute:()=>true,elements:{namedItem:()=>field}};
+ vm.runInNewContext(block,{fields:{name:'name'},form,opener:{dataset:{}},dialog:{querySelector:()=>null}});
+ assert.equal(form.action,'/admin/market/discover');assert.equal(field.value,'Phone 256GB');
+});

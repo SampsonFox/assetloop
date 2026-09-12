@@ -12,6 +12,7 @@ import (
 
 type ManagementRequest struct{ TenantID, UserID, Key, Hash, ResultJSON string }
 type ManagementStore interface {
+	MarketStore
 	CatalogStore
 	SpecificationStore
 	LifecycleStore

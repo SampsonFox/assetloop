@@ -8,7 +8,7 @@ import (
 )
 
 func settingsSection(path string) string {
-	for _, section := range []string{"catalog", "tags", "3d", "event-types"} {
+	for _, section := range []string{"catalog", "tags", "3d", "event-types", "market"} {
 		root := "/admin/" + section
 		if path == root || strings.HasPrefix(path, root+"/") {
 			return section

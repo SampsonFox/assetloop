@@ -9,10 +9,15 @@
 </dl>
 {{if $c.Points}}{{$chart := costChart $c}}
 <section class="cost-report"><h3>{{t $s "cost.trend"}}</h3><p class="muted" id="cost-chart-help">{{t $s "cost.trend_help"}}</p>
+{{if le (len $c.Points) 5}}
+<ol class="cost-milestones">{{range $c.Points}}<li class="cost-milestone"><div><time datetime="{{.At.Format "2006-01-02T15:04:05Z07:00"}}">{{localDate .At}}</time><span>{{eventLabel $s .Type}}</span></div><div class="cost-milestone-value"><small>{{t $s "cost.after_event"}}</small><strong>{{money .NetMinor $c.Currency}}</strong></div></li>{{end}}</ol>
+{{else}}
 <div class="cost-chart-scale"><span>{{money $chart.Min $c.Currency}} — {{money $chart.Max $c.Currency}}</span></div>
 <svg class="cost-chart" viewBox="0 0 640 200" role="img" aria-labelledby="cost-chart-help"><line x1="20" x2="620" y1="{{$chart.ZeroY}}" y2="{{$chart.ZeroY}}" class="cost-zero"/><path d="{{$chart.Path}}"/>{{range $chart.Points}}<circle cx="{{.X}}" cy="{{.Y}}" r="3" fill="currentColor"><title>{{dateTime .Point.At}} · {{eventLabel $s .Point.Type}} · {{money .Point.NetMinor $c.Currency}}</title></circle>{{end}}</svg>
 <div class="cost-chart-scale"><time>{{localDate $chart.Start}}</time><time>{{localDate $chart.End}}</time></div>
-<details class="cost-data"><summary>{{t $s "cost.data"}}</summary><div class="table-scroll"><table><thead><tr><th>{{t $s "asset.time"}}</th><th>{{t $s "asset.event_type"}}</th><th>{{t $s "cost.net"}}</th></tr></thead><tbody>{{range $c.Points}}<tr><td>{{dateTime .At}}</td><td>{{eventLabel $s .Type}}</td><td>{{money .NetMinor $c.Currency}}</td></tr>{{end}}</tbody></table></div></details></section>
+<details class="cost-data"><summary>{{t $s "cost.data"}}</summary><div class="table-scroll"><table><thead><tr><th>{{t $s "asset.time"}}</th><th>{{t $s "asset.event_type"}}</th><th>{{t $s "cost.net"}}</th></tr></thead><tbody>{{range $c.Points}}<tr><td>{{dateTime .At}}</td><td>{{eventLabel $s .Type}}</td><td>{{money .NetMinor $c.Currency}}</td></tr>{{end}}</tbody></table></div></details>
+{{end}}
+</section>
 {{else}}<p class="muted">{{t $s "cost.empty"}}</p>{{end}}
 {{if $c.Categories}}<section class="cost-report"><h3>{{t $s "cost.breakdown"}}</h3><ul class="cost-categories">{{range $c.Categories}}<li><div><span>{{eventLabel $s .Type}}</span><strong>{{money .AmountMinor $c.Currency}}</strong><span>{{costPercent .PercentTenths}}%</span></div>{{if gt (len $c.Categories) 1}}<svg viewBox="0 0 1000 6" preserveAspectRatio="none" aria-hidden="true"><rect width="{{.PercentTenths}}" height="6"/></svg>{{end}}</li>{{end}}</ul></section>{{end}}
 </section>

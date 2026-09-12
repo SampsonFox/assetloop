@@ -40,6 +40,7 @@
     </dl>
     {{if and .Binding .Binding.EffectiveResourceID}}<p class="muted">{{t $s "catalog.model_3d"}} · {{if eq .Binding.Source "asset"}}{{t $s "resource.source_asset"}}{{else if eq .Binding.Source "appearance"}}{{t $s "appearance.title"}}{{else}}{{t $s "resource.source_model"}}{{end}}</p>{{end}}
     {{if and .CanManageCatalog .Binding .Binding.Conflict}}<p class="muted" role="status">{{t $s "appearance.conflict"}} <a href="/admin/catalog/models/{{.Asset.ModelID}}/appearance">{{t $s "appearance.title"}}</a></p>{{end}}
+    {{template "market-summary" .}}
     <div class="asset-notes"><h3>{{t $s "common.notes"}}</h3><p>{{if .Asset.Notes}}{{.Asset.Notes}}{{else}}<span class="muted">{{t $s "asset.no_notes"}}</span>{{end}}</p></div>
   </div>
 </section>

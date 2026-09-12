@@ -58,4 +58,5 @@ func TestStoreConformance(t *testing.T) {
 	storetest.RunModelResources(t, postgres.New(db), postgres.New(other), db, "postgres")
 	storetest.RunEventTypeManagement(t, postgres.New(db), postgres.New(other), db, "postgres")
 	t.Run("specifications", func(t *testing.T) { storetest.RunSpecifications(t, postgres.New(db), postgres.New(other)) })
+	t.Run("market", func(t *testing.T) { storetest.RunMarket(t, postgres.New(db), postgres.New(other), db, "postgres") })
 }

@@ -1,11 +1,12 @@
 
 -- name: GetAsset :one
-SELECT a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
+SELECT COALESCE(amb.market_item_id, '') AS market_item_id, a.id, a.tenant_id, c.id AS category_id, c.name AS category_name,
        c.icon_key AS category_icon,
        m.id AS model_id, m.name AS model_name,
        a.display_name, a.serial_number, a.model_3d_resource_id,
        a.purchase_channel, a.notes, a.created_at
 FROM assets a
+LEFT JOIN asset_market_bindings amb ON amb.tenant_id=a.tenant_id AND amb.asset_id=a.id
 JOIN product_models m ON m.tenant_id = a.tenant_id AND m.id = a.model_id
 JOIN item_categories c ON c.tenant_id = m.tenant_id AND c.id = m.category_id
 WHERE a.tenant_id = ? AND a.id = ?;

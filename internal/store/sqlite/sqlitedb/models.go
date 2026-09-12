@@ -55,6 +55,12 @@ type AssetEventType struct {
 	UpdatedAt         string
 }
 
+type AssetMarketBinding struct {
+	TenantID     string
+	AssetID      string
+	MarketItemID string
+}
+
 type AssetSpecificationTag struct {
 	TenantID string
 	AssetID  string
@@ -113,6 +119,47 @@ type ManagementRequest struct {
 	RequestKey  string
 	RequestHash string
 	ResultJson  string
+}
+
+type MarketItem struct {
+	ID             string
+	TenantID       string
+	Name           string
+	Provider       string
+	Keyword        string
+	FilterCriteria string
+	ModelDesc      string
+	Region         string
+	ExternalID     sql.NullString
+	Enabled        int64
+	CreatedAt      int64
+	LastAttempt    int64
+	LastSuccess    int64
+	LastError      string
+	LeaseToken     string
+	LeaseUntil     int64
+	SelectionJson  sql.NullString
+}
+
+type MarketPrice struct {
+	TenantID        string
+	MarketItemID    string
+	ObservationDate string
+	ObservedAt      int64
+	MaxMinor        int64
+	MinMinor        sql.NullInt64
+	Currency        string
+	BaseCurrency    string
+	BaseMinor       sql.NullInt64
+	RateScaled      sql.NullInt64
+	RateDate        sql.NullString
+	RateSource      sql.NullString
+	Provider        string
+	ProviderVersion string
+	Provenance      string
+	Evidence        string
+	SourceDate      sql.NullString
+	SampleCount     sql.NullInt64
 }
 
 type Model3dResource struct {

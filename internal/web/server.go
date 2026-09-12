@@ -39,6 +39,7 @@ type Pinger interface {
 }
 
 type Options struct {
+	Market            *application.MarketService
 	AuthMode          string
 	SecureCookies     bool
 	DisabledPrincipal application.Principal
@@ -64,6 +65,8 @@ type Server struct {
 type pageData struct {
 	ImageURLs              map[string]string
 	ModelImage             *application.ModelImage
+	Market                 marketPageData
+	MarketEnabled          bool
 	Title                  string
 	Locale                 application.Locale
 	Theme                  application.Theme
@@ -190,6 +193,12 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 	}
 	templates := map[string]*template.Template{}
 	funcs := template.FuncMap{
+		"derefMinor": func(v *int64) int64 {
+			if v == nil {
+				return 0
+			}
+			return *v
+		},
 		"resourceSize": resourceSize, "resourceLicenseSummary": resourceLicenseSummary,
 		"tagEditor": func(editor modelTagEditor, values map[string]string) any {
 			return struct {
@@ -197,7 +206,8 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 				Strings map[string]string
 			}{editor, values}
 		},
-		"money": domain.FormatMinor, "eventClass": eventClass,
+		"optionSelected": func(v *int) bool { return v != nil && *v == 1 },
+		"money":          domain.FormatMinor, "eventClass": eventClass,
 		"currencyOptions":    domain.SelectableCurrencyCodes,
 		"currencyMinorUnits": domain.CurrencyMinorUnits,
 		"accentOptions": func() []application.Accent {
@@ -257,8 +267,8 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth", "model_image"} {
-		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/resources.html", "templates/"+page+".html")
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth", "model_image", "market"} {
+		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/market_summary.html", "templates/resources.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
 		}
@@ -332,6 +342,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
 	mux.HandleFunc("POST /admin/event-types", s.createAssetEventType)
 	mux.HandleFunc("GET /admin/event-types", s.eventTypesPage)
+	mux.HandleFunc("GET /admin/market", s.marketPage)
+	mux.HandleFunc("POST /admin/market/preview", s.marketPreview)
+	mux.HandleFunc("POST /admin/market/discover", s.marketDiscover)
+	mux.HandleFunc("POST /admin/market", s.marketCreate)
+	mux.HandleFunc("POST /admin/market/{id}", s.marketUpdate)
+	mux.HandleFunc("POST /admin/market/{id}/refresh", s.marketRefresh)
 	mux.HandleFunc("GET /admin/tags", s.specificationsPage)
 	mux.HandleFunc("POST /admin/tags/types", s.saveSpecificationType)
 	mux.HandleFunc("POST /admin/tags/types/{id}", s.saveSpecificationType)
@@ -809,7 +825,16 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 			model3D = &media
 		}
 	}
+	var latest *domain.MarketPrice
+	if s.options.Market != nil {
+		latest, err = s.options.Market.LatestForAsset(r.Context(), principal, asset.ID)
+		if err != nil {
+			s.renderError(w, r, 500, err)
+			return
+		}
+	}
 	s.render(w, status, "asset", pageData{
+		Market: marketPageData{Latest: latest}, MarketEnabled: s.options.Market != nil,
 		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(), ImageURLs: s.imageURLs(r.Context(), principal, []domain.Asset{asset}),
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: result.Events,
 		Summary: result.Summary, Cost: cost, BaseCurrency: result.Summary.BaseCurrency, BaseCurrencyLocked: locked,
@@ -959,9 +984,9 @@ func (s *Server) renderAssetMutationError(w http.ResponseWriter, r *http.Request
 func assetFromForm(r *http.Request, id string) domain.Asset {
 	asset := domain.Asset{
 		ID: id, ModelID: r.FormValue("model_id"), DisplayName: r.FormValue("display_name"),
-		Model3DResourceID: r.FormValue("resource_id"),
-		SerialNumber:      r.FormValue("serial_number"),
-		PurchaseChannel:   r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
+		Model3DResourceID: r.FormValue("resource_id"), MarketItemID: r.FormValue("market_item_id"),
+		SerialNumber:    r.FormValue("serial_number"),
+		PurchaseChannel: r.FormValue("purchase_channel"), Notes: r.FormValue("notes"),
 	}
 	for _, id := range r.PostForm["tag_ids"] {
 		if id != "" {
@@ -1003,6 +1028,15 @@ func (s *Server) renderAssetForm(w http.ResponseWriter, r *http.Request, status 
 		Categories: snapshot.Categories, Models: snapshot.Models, Asset: &asset,
 		CanManageCatalog: true, CategoryIcons: application.CategoryIconOptions, CatalogFlow: "asset",
 		AssetFormAction: action, AssetFormEditing: editing,
+	}
+	if s.options.Market != nil {
+		data.MarketEnabled = true
+		items, err := s.options.Market.List(r.Context(), principal)
+		if err != nil {
+			s.renderError(w, r, 500, err)
+			return
+		}
+		data.Market.Items = items
 	}
 	if s.options.Specifications != nil {
 		state, err := s.options.Specifications.Snapshot(r.Context(), principal)

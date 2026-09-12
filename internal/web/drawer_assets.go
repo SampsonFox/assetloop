@@ -30,6 +30,10 @@ func (s *Server) saveDrawerAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := application.SaveSpecificationAsset{ID: id, ModelID: r.PostForm.Get("model_id"), DisplayName: r.PostForm.Get("display_name"), SerialNumber: r.PostForm.Get("serial_number"), PurchaseChannel: r.PostForm.Get("purchase_channel"), Notes: r.PostForm.Get("notes")}
+	if r.PostForm.Has("market_item_id") {
+		value := r.PostForm.Get("market_item_id")
+		cmd.MarketItemID = &value
+	}
 	if r.PostForm.Has("resource_id") {
 		value := r.PostForm.Get("resource_id")
 		cmd.ResourceID = &value

@@ -24,6 +24,7 @@ import (
 	basestore "github.com/SampsonFox/assetloop/internal/store"
 	"github.com/SampsonFox/assetloop/internal/store/postgres"
 	"github.com/SampsonFox/assetloop/internal/store/sqlite"
+	"github.com/SampsonFox/assetloop/internal/store/storetest"
 )
 
 type scenarioStore interface {
@@ -33,6 +34,7 @@ type scenarioStore interface {
 	application.ModelMediaStore
 	application.ModelImageStore
 	application.SpecificationStore
+	application.MarketStore
 }
 
 func TestFullElementScenario(t *testing.T) {
@@ -438,6 +440,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 	t.Run("MCP OAuth lifecycle", func(t *testing.T) {
 		runMCPFullElement(t, db, store, ownerSession, model.ID)
 	})
+	t.Run("shared market quotes and FX", func(t *testing.T) { storetest.RunMarket(t, store, store, db, driver) })
 }
 
 func fullElementGLB() []byte {
