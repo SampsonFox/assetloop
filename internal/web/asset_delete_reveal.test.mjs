@@ -22,23 +22,26 @@ test('arriving at bottom and the rest of the same wheel gesture keep deletion hi
   const p=page();p.send('wheel',{deltaY:1200});p.bottom();
   for(let n=0;n<10;n++){p.wait(80);p.send('wheel',{deltaY:20});}
   assert.equal(p.footer.hidden,true);
-  p.wait(300);p.send('wheel',{deltaY:50});assert.equal(p.footer.hidden,false);assert.equal(p.footer.calls.length,1);
+  p.wait(300);p.send('wheel',{deltaY:240});assert.equal(p.footer.hidden,false);assert.equal(p.footer.calls.length,1);
   p.send('wheel',{deltaY:50});assert.equal(p.footer.calls.length,1);
 });
 test('upward, horizontal, zoom and nested scroll gestures do not reveal',()=>{
-  for(const values of [{deltaY:-50},{deltaX:100,deltaY:1},{deltaY:50,ctrlKey:true},{deltaY:50,target:{closest:()=>null,scrollHeight:200,clientHeight:100}}]){
+  for(const values of [{deltaY:-240},{deltaX:1000,deltaY:240},{deltaY:240,ctrlKey:true},{deltaY:240,target:{closest:()=>null,scrollHeight:200,clientHeight:100}}]){
     const p=page();p.bottom();p.wait(300);p.send('wheel',values);assert.equal(p.footer.hidden,true);
   }
-  const p=page();p.bottom();p.wait(300);p.modal(true);p.send('wheel',{deltaY:50});assert.equal(p.footer.hidden,true);
+  const p=page();p.bottom();p.wait(300);p.modal(true);p.send('wheel',{deltaY:240});assert.equal(p.footer.hidden,true);
 });
 test('a wheel event delivered just after reaching the bottom still belongs to the arrival',()=>{
   const p=page();p.bottom();p.send('wheel',{deltaY:100});assert.equal(p.footer.hidden,true);
-  p.wait(300);p.send('wheel',{deltaY:100});assert.equal(p.footer.hidden,false);
+  p.wait(300);p.send('wheel',{deltaY:240});assert.equal(p.footer.hidden,false);
 });
 test('touch requires a fresh upward swipe starting at the bottom',()=>{
   const p=page();p.send('touchstart',{touches:[{clientY:300}]});p.bottom();p.send('touchmove',{touches:[{clientY:100}]});assert.equal(p.footer.hidden,true);
   p.send('touchend');p.send('touchstart',{touches:[{clientY:300}]});p.send('touchmove',{touches:[{clientY:280}]});assert.equal(p.footer.hidden,true);
-  p.send('touchmove',{touches:[{clientY:240}]});assert.equal(p.footer.hidden,false);
+  p.send('touchmove',{touches:[{clientY:240}]});assert.equal(p.footer.hidden,true);
+  p.send('touchmove',{touches:[{clientY:200}]});assert.equal(p.footer.hidden,false);
+  p.send('touchmove',{touches:[{clientY:220}]});assert.equal(p.footer.hidden,true);
+  p.send('touchend');p.send('touchstart',{touches:[{clientY:300}]});p.send('touchmove',{touches:[{clientY:200}]});assert.equal(p.footer.hidden,false);
 });
 test('keyboard repeat cannot expose it on first arrival; a fresh key reveals and focuses it',()=>{
   const p=page();p.send('keydown',{key:'End'});p.bottom();p.send('keydown',{key:'End',repeat:true});assert.equal(p.footer.hidden,true);
@@ -53,4 +56,24 @@ test('markup provides full-width action, initial hiding and a no-JavaScript fall
   const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
   assert.match(html,/data-delete-reveal hidden/);assert.match(html,/<noscript><div class="asset-delete-reveal">/);
   assert.match(css,/\.asset-delete-reveal > \.button[^}]*width:100%/);
+});
+test('bottom anchor resists a light wheel pull and closes again on upward scrolling',()=>{
+  const p=page();p.bottom();p.wait(300);
+  p.send('wheel',{deltaY:60});assert.equal(p.footer.hidden,true);
+  p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.hidden,false);
+  p.send('wheel',{deltaY:-10});assert.equal(p.footer.hidden,true);
+  p.wait(300);p.send('wheel',{deltaY:60});assert.equal(p.footer.hidden,true);
+  p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.hidden,false);
+});
+test('scrollbar or keyboard return hides the footer; paused small pulls do not accumulate',()=>{
+  const p=page();p.bottom();p.wait(300);p.send('wheel',{deltaY:100});p.wait(300);p.send('wheel',{deltaY:140});assert.equal(p.footer.hidden,true);
+  p.wait(50);p.send('wheel',{deltaY:100});assert.equal(p.footer.hidden,false);
+  p.root.scrollTop=1180;p.send('scroll');assert.equal(p.footer.hidden,true);
+  p.bottom();p.send('keydown',{key:'End'});assert.equal(p.footer.hidden,false);
+  p.send('keydown',{key:'Home'});assert.equal(p.footer.hidden,true);
+});
+test('line and page wheel units also cross the anchor',()=>{
+  for(const values of [{deltaY:15,deltaMode:1},{deltaY:1,deltaMode:2}]){
+    const p=page();p.bottom();p.wait(300);p.send('wheel',values);assert.equal(p.footer.hidden,false);
+  }
 });

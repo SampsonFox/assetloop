@@ -286,5 +286,6 @@ Regression spine: permissions_deletion_test.go in Web and integration, MCP permi
 plus the named full-element scenario and V19 upgrade preservation scenario.
 
 Asset deletion disclosure: static/asset-delete-reveal.js reveals the full-width footer only
-on a fresh downward gesture at the page bottom; keyboard and no-JS fallbacks remain.
-asset_delete_reveal.test.mjs covers wheel momentum, touch, nested scroll and keyboard input.
+after a deliberate pull across the bottom threshold, and hides it on upward scrolling;
+keyboard and no-JS fallbacks remain. asset_delete_reveal.test.mjs covers wheel momentum,
+pull thresholds, repeated reveal/hide, touch, nested scroll and keyboard input.
