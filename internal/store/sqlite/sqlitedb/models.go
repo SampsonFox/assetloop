@@ -107,6 +107,14 @@ type LifecycleRequest struct {
 	EventID     string
 }
 
+type ManagementRequest struct {
+	TenantID    string
+	UserID      string
+	RequestKey  string
+	RequestHash string
+	ResultJson  string
+}
+
 type Model3dResource struct {
 	ID        string
 	TenantID  string
@@ -150,6 +158,42 @@ type ModelAppearanceDimension struct {
 	ModelID           string
 	TypeID            string
 	AffectsAppearance int64
+}
+
+type ModelImage struct {
+	ID          string
+	TenantID    string
+	ModelID     string
+	StoreID     string
+	ObjectKey   string
+	Sha256      string
+	ContentType string
+	SizeBytes   int64
+	SourceUrl   string
+	Active      int64
+}
+
+type OauthCredential struct {
+	Hash        string
+	TenantID    string
+	GrantID     string
+	Kind        string
+	RedirectUri string
+	Challenge   string
+	ExpiresAt   string
+	Consumed    bool
+}
+
+type OauthGrant struct {
+	ID        string
+	TenantID  string
+	UserID    string
+	ClientID  string
+	Scope     string
+	Resource  string
+	CreatedAt string
+	ExpiresAt string
+	Revoked   bool
 }
 
 type ProductModel struct {

@@ -274,6 +274,11 @@
       }
       if (dialog.id === "model-drawer") {
         const modelId = opener.dataset.editModelId || "";
+        const image = dialog.querySelector("[data-model-image]");
+        if (image) {
+          image.hidden = !modelId;
+          image.querySelector("[data-model-image-link]").href = `/admin/catalog/models/${modelId}/image`;
+        }
         const library = dialog.querySelector("[data-model-library]");
         if (library) {
           library.hidden = !modelId;
@@ -386,7 +391,9 @@
     form.dataset.submitting = "true";
     form.dataset.dirty = "false";
     if (event.submitter) {
-      event.submitter.disabled = true;
+      // Keep the submitter successful so native POST includes its name/value.
+      // The form-level guard above already rejects repeated submissions.
+      event.submitter.setAttribute("aria-disabled", "true");
       event.submitter.setAttribute("aria-busy", "true");
     }
   });

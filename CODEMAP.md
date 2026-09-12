@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. General attachments, market, MCP, and scheduler paths continue as later slices.
+Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. MCP is in development (see `docs/MCP_IMPLEMENTATION.md`); general attachments, market and scheduler remain later slices.
 
 ## Authority map
 
@@ -16,6 +16,17 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 
 ## Entry points
 
+`docs/MCP_RELEASE_NOTES.md` records the 2026-09-12 MCP UAT batch capabilities,
+changes and exclusions; setup and acceptance guides ship under `docs/` in packages.
+
+Model images: `internal/application/model_images.go` owns validation, import,
+immutable blob revisions and active model binding. `internal/web/model_images.go`
+and `templates/model_image.html` expose upload/replace/detach and HTTPS import;
+`internal/store/{sqlite,postgres}/images.{go,sql}` implement tenant-scoped storage.
+Migration 00017 adds images independently of 3D and lifecycle events.
+Regression coverage: `model_images_test.go` in application, Web and integration;
+the named full-element scenario calls the shared image scenario on both databases.
+
 | Path | Responsibility |
 |---|---|
 | `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |
@@ -24,12 +35,28 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `internal/web/shared_rename.test.mjs` | Conditional shared-name confirmation, no-JS confirmation fallback and unified resource editor form coverage |
 | `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons; consistent compact catalog/tag/resource/event-type row actions and drawer controls; accessible-label/layout regression checks |
 | `internal/web/model_configuration.go`, `model_configuration.test.mjs`, `templates/catalog_drawers.html` | Unified model metadata/tag/appearance submission and transactional save; management drawers share `data-management-drawer` fixed heading actions and independent scrolling, covered by `management_ui.test.mjs` |
-| `internal/mcp/` | Semantic MCP tool transport |
+| `internal/mcp/` | Opt-in Streamable HTTP semantic query adapter calling application services; SDK HTTP regression tests; mounted alongside Web by the existing serve entry point |
+| `internal/mcp/lifecycle.go`, `lifecycle_test.go` | Required-key record/correct tools reuse lifecycle transactions and durable receipts; HTTP tests cover retry, conflict, append-only correction and permission denial |
+| `internal/application/management.go`, both Store `management.go` / `management.sql`, paired `00016_management_requests.sql` | Transactional tenant/user/key receipts replay original JSON results; currently wraps category create/update and model create; failure-injected receipt rollback is covered in `catalog_transaction_test.go` |
+| `internal/mcp/catalog.go` | Required-key category create/update and product model create adapters using the shared management service |
+| `internal/mcp/specifications.go` | Required-key item, tag/type, model configuration, appearance-rule and existing-resource metadata tools reuse specification use cases inside management receipt transactions |
+| `internal/mcp/event_types.go` | Required-key custom event-type create/update/enable tools; existing lifecycle rules and tenant-bound nested transaction reuse remain authoritative |
+| `internal/mcp/media.go`, `internal/integration/mcp_media_test.go` | Required-key binding/deletion and storage-free effective-binding query; real GLB tests cover receipt rollback, inheritance, reference guards, HTTP permissions and recovery across blob/metadata failures |
+| `internal/mcp/media_results.go` | Explicit public model/resource/appearance DTOs omit blob store IDs, object keys and checksums from both direct and nested results |
+| `internal/mcp/contract_test.go` | SDK-discovered input/result-envelope checks, required mutation keys, integer money/FX schemas and safe business-error mapping over HTTP |
+| `internal/application/specification_configuration.go`, `internal/mcp/configuration.go`, `internal/integration/mcp_configuration_test.go` | Model/resource edit-state projections and paged tag/type references reuse specification snapshots; HTTP tests preserve explicit false overrides, complete associations and tenant/scope isolation |
+| `internal/integration/catalog_transaction_test.go` | Catalog services composed inside a Store transaction see their own writes and roll back category changes/model creation together; both catalog adapters use the current query handle |
+| `internal/integration/management_concurrency_test.go` | Two independent Store connections race same-key creation, conflicting payloads and recoverable deletion; reconstructed service replays persisted deletion intent |
+| `internal/web/oauth.go`, `templates/oauth.html`, `oauth_test.go` | Account-authenticated consent and per-user authorized-client revocation; native forms reuse CSRF and login continuation; bilingual content inherits existing theme |
+| `internal/mcp/oauth.go`, `oauth_test.go` | OAuth discovery/token/revocation HTTP formatting, configured-origin/Host guard and bearer resolver; real SQLite HTTP exchange/revocation tests; consent UI and runtime mounting pending |
+| `internal/web/login_return_test.go` | Safe login continuation for OAuth consent, preserving retries and existing sessions while rejecting external and encoded redirect bypasses |
 | `internal/scheduler/` | Refresh-job entry adapters |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
+| `internal/application/oauth.go`, `oauth_test.go` | OAuth application policy and persistence port: registered callbacks, S256 PKCE, audience/scopes, code exchange, rotating refresh, replay revocation and current-role authorization; HTTP wiring pending |
+| both Store `oauth.go` / `oauth.sql`, paired `00015_oauth.sql` | Hash-only OAuth credentials, tenant-bound grants and serialized token exchanges; `internal/integration/oauth_test.go` covers cross-connection persistence and replay; `internal/store/oauth_migration_test.go` covers schema-14 upgrade rollback/retry |
 | `internal/domain/` | Pure catalog/lifecycle types plus the versioned ISO 4217 catalog, exact minor-unit money, and fixed-point FX logic |
 | `internal/config/` | Defaults, optional `.env`, and environment override loading |
-| `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation |
+| `.github/workflows/ci.yml` | Work-branch secret scanning plus full pull-request/UAT/Prod validation; `[full-test]` explicitly opts a development checkpoint into tests only |
 | `.github/workflows/package.yml` | Shared UAT/Prod packaging, artifact smoke test, Prod release |
 
 ## Infrastructure adapters
@@ -49,6 +76,13 @@ Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lif
 | `migrations/postgres/` | PostgreSQL forward migrations | none |
 
 ## Core ports
+
+`internal/application/model_import.go` owns confirmed URL import and receipt/upload
+orchestration through `ModelDownloader`. `internal/modeldownload/` implements
+bounded public HTTPS retrieval and DNS/IP/redirect defenses. `internal/mcp/import.go`
+exposes import without binding or physical storage metadata. Tests: downloader
+policy/limits, `internal/integration/model_import_test.go` (both Store adapters via
+catalog transaction suite), and the expanded full-element MCP import walkthrough.
 
 | Symbol | Expected location | Implementations |
 |---|---|---|
@@ -89,6 +123,8 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 | `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, GLB upload/read and fallback, progressive FX evidence, correction, totals, and role denial |
 | `internal/web/viewer_mechanics.test.mjs` | Dependency-free Node test harness for viewer framing, keyboard controls, reduced motion, idle rendering and failure fallback |
 | `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → typed model allowances → direct items with different capacity tags sharing an appearance GLB → dedicated override/inheritance → foreign purchase → repair correction → sale scenario on both databases |
+| `internal/integration/mcp_full_element_test.go` | Extends the same full-element scenario with HTTP Web consent/PKCE exchange, authenticated SDK discovery/write/retry/correction, Web visibility and client revocation without ending the Web session |
+| `internal/integration/mcp_walkthrough_test.go` | Calls every discovered MCP tool over the full-element OAuth HTTP connection; checks saved values, write replay, configuration/binding cleanup and resource deletion; fails on an uncalled tool |
 
 ## Read paths by task
 
@@ -108,6 +144,8 @@ covers atomic rollback; Web transport retains ordinary form and drawer save path
 | Change product 3D media | `internal/application/model_media.go` | resource library, model/appearance/asset bindings, Blob adapters, both Store mappings, Web asset/catalog/resource templates |
 | Add market provider | market port | provider adapter plus shared normalization pipeline |
 | Change MCP tool | `internal/mcp/` | called application service; never inspect Store unless service contract changes |
+| Configure/use MCP | `docs/MCP.md` | `docs/MCP_IMPLEMENTATION.md` for current verification evidence and remaining acceptance |
+| Codex MCP setup/troubleshooting and skill source notes | `docs/CODEX_MCP_ACCEPTANCE.md` | Verified native-tool lifecycle, authentication/connection layers, Windows process lifetime and remaining cleanup |
 | Change Web screen | `internal/web/server.go` | affected template under `templates/`, then `static/app.css` or local `static/app.js`; called application service only when behavior changes |
 | Change locale or theme | `internal/web/i18n.go` | affected templates, semantic variables in `static/app.css`, then Web locale/theme tests |
 | Change deployment config | `internal/config/` | `.env.example`, README deployment section |

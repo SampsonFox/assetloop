@@ -26,6 +26,25 @@ function harness(forms) {
   return {...context.api,dialog,get prompts(){return prompts;},get resets(){return resets;},answer(v){answer=v;},pending(v){pending=v;}};
 }
 const field=(name,value,type='text')=>({name,value,type});
+
+test('native submit preserves the decision button and blocks repeated submission',async()=>{
+ const start=source.indexOf('  document.addEventListener("submit", async (event) => {');
+ const block=source.slice(start,source.indexOf('  window.addEventListener("beforeunload"',start));
+ let submit;
+ vm.runInNewContext(block,{document:{addEventListener:(_name,handler)=>{submit=handler;}},window:{}});
+ for(const value of ['allow','deny']) {
+  const target={dataset:{},hasAttribute:()=>false};
+  const submitter={name:'decision',value,disabled:false,setAttribute(){}};
+  let prevented=false;
+  const event={target,submitter,preventDefault(){prevented=true;}};
+  await submit(event);
+  assert.equal(prevented,false);
+  assert.equal(submitter.disabled,false,'disabled successful controls lose their name/value');
+  assert.equal(submitter.value,value);
+  await submit(event);
+  assert.equal(prevented,true);
+ }
+});
 const form=(elements)=>({elements,dataset:{discardConfirm:'Discard?'}});
 
 test('unchanged create/edit closes directly; changing back to original does not prompt',async()=>{

@@ -5,6 +5,7 @@
   {{if .Error}}<div class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</div>{{end}}
   <form method="post" action="/login" class="stack">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="return_to" value="{{.LoginReturnTo}}">
     <label>{{t $s "login.username"}}<input name="username" required autofocus autocomplete="username"></label>
     <label>{{t $s "login.password"}}<input name="password" type="password" required autocomplete="current-password"></label>
     <button type="submit">{{t $s "login.submit"}}</button>

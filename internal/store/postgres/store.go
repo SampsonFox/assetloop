@@ -11,8 +11,9 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
-	tx *sql.Tx
+	db               *sql.DB
+	tx               *sql.Tx
+	managementTenant string
 }
 
 func (s *Store) queries() *postgresdb.Queries {

@@ -12,7 +12,7 @@
 {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
 <section class="card asset-profile asset-editor-profile">
   <figure class="asset-product-visual">
-    {{$productImage := productImage .Asset}}{{if $productImage}}<img class="asset-product-image" src="{{$productImage}}" alt="{{.Asset.Model}} · {{t $s "asset.model_image_caption"}}" width="1728" height="912" decoding="async" fetchpriority="high"><figcaption class="asset-product-caption">{{t $s "asset.model_image_caption"}}</figcaption>{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{if .Asset.CategoryIcon}}{{.Asset.CategoryIcon}}{{else}}package{{end}}"></use></svg>{{end}}
+    {{$productImage := index .ImageURLs .Asset.ModelID}}{{if $productImage}}<img class="asset-product-image" src="{{$productImage}}" alt="{{.Asset.Model}} · {{t $s "asset.model_image_caption"}}" decoding="async" fetchpriority="high"><figcaption class="asset-product-caption">{{t $s "asset.model_image_caption"}}</figcaption>{{else}}<svg class="category-icon large" aria-hidden="true"><use href="/static/category-icons.svg#{{if .Asset.CategoryIcon}}{{.Asset.CategoryIcon}}{{else}}package{{end}}"></use></svg>{{end}}
   </figure>
   <div class="asset-profile-content">
     {{if .Models}}

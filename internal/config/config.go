@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -29,6 +31,12 @@ type Config struct {
 	AuthMode    string
 	Database    Database
 	Blob        Blob
+	MCP         MCP
+}
+
+type MCP struct {
+	Enabled                       bool
+	Issuer, ClientID, RedirectURI string
 }
 
 func Load(dotenvPath string) (Config, error) {
@@ -37,6 +45,10 @@ func Load(dotenvPath string) (Config, error) {
 		"HTTP_ADDR":                "127.0.0.1:8080",
 		"LOG_LEVEL":                "info",
 		"AUTH_MODE":                "local",
+		"MCP_ENABLED":              "false",
+		"MCP_ISSUER":               "",
+		"MCP_CLIENT_ID":            "codex-local",
+		"MCP_REDIRECT_URI":         "http://127.0.0.1/callback",
 		"DB_DRIVER":                "sqlite",
 		"DB_DSN":                   "./data/assetloop.db",
 		"ATTACHMENT_DEFAULT_STORE": "local",
@@ -70,6 +82,10 @@ func Load(dotenvPath string) (Config, error) {
 	if authMode == "disabled" && !isLoopbackAddress(values["HTTP_ADDR"]) {
 		return Config{}, errors.New("AUTH_MODE=disabled requires a loopback HTTP_ADDR")
 	}
+	mcp, err := loadMCP(values, authMode)
+	if err != nil {
+		return Config{}, err
+	}
 	defaultStore := strings.ToLower(strings.TrimSpace(values["ATTACHMENT_DEFAULT_STORE"]))
 	if defaultStore != "local" && defaultStore != "aliyun" {
 		return Config{}, errors.New("ATTACHMENT_DEFAULT_STORE must be local or aliyun")
@@ -90,12 +106,53 @@ func Load(dotenvPath string) (Config, error) {
 		HTTPAddr:    values["HTTP_ADDR"],
 		LogLevel:    values["LOG_LEVEL"],
 		AuthMode:    authMode,
+		MCP:         mcp,
 		Database: Database{
 			Driver: driver,
 			DSN:    values["DB_DSN"],
 		},
 		Blob: Blob{DefaultStore: defaultStore, LocalRoot: values["ATTACHMENT_LOCAL_ROOT"], OSS: OSS{Endpoint: values["ALIYUN_OSS_ENDPOINT"], Region: values["ALIYUN_OSS_REGION"], Bucket: values["ALIYUN_OSS_BUCKET"], AccessKeyID: values["ALIYUN_OSS_ACCESS_KEY_ID"], AccessKeySecret: values["ALIYUN_OSS_ACCESS_KEY_SECRET"], PathPrefix: values["ALIYUN_OSS_PATH_PREFIX"]}},
 	}, nil
+}
+
+func loadMCP(values map[string]string, authMode string) (MCP, error) {
+	enabled, err := strconv.ParseBool(strings.TrimSpace(values["MCP_ENABLED"]))
+	if err != nil {
+		return MCP{}, errors.New("MCP_ENABLED must be true or false")
+	}
+	cfg := MCP{Enabled: enabled, Issuer: strings.TrimSpace(values["MCP_ISSUER"]), ClientID: strings.TrimSpace(values["MCP_CLIENT_ID"]), RedirectURI: strings.TrimSpace(values["MCP_REDIRECT_URI"])}
+	if !enabled {
+		return cfg, nil
+	}
+	if authMode != "local" {
+		return MCP{}, errors.New("MCP requires AUTH_MODE=local")
+	}
+	issuer, err := url.Parse(cfg.Issuer)
+	if err != nil || !validMCPURL(issuer) || issuer.Path != "" || issuer.RawQuery != "" || issuer.ForceQuery || strings.Contains(cfg.Issuer, "#") {
+		return MCP{}, errors.New("MCP_ISSUER must be an HTTPS origin or an HTTP loopback IP origin")
+	}
+	if cfg.ClientID == "" || len(cfg.ClientID) > 128 || strings.ContainsAny(cfg.ClientID, " \t\r\n") {
+		return MCP{}, errors.New("MCP_CLIENT_ID must be a nonempty identifier")
+	}
+	redirect, err := url.Parse(cfg.RedirectURI)
+	if err != nil || !validMCPURL(redirect) || strings.Contains(cfg.RedirectURI, "#") {
+		return MCP{}, errors.New("MCP_REDIRECT_URI must be an HTTPS or HTTP loopback IP callback")
+	}
+	return cfg, nil
+}
+
+func validMCPURL(u *url.URL) bool {
+	if u == nil || u.Host == "" || u.User != nil || u.Opaque != "" || u.Fragment != "" {
+		return false
+	}
+	if u.Port() != "" {
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return false
+		}
+	}
+	ip := net.ParseIP(u.Hostname())
+	return u.Scheme == "https" || u.Scheme == "http" && ip != nil && ip.IsLoopback()
 }
 
 func isLoopbackAddress(addr string) bool {

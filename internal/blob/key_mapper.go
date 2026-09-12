@@ -9,6 +9,13 @@ import (
 
 type ObjectKeyMapper struct{}
 
+func (m ObjectKeyMapper) ModelImage(tenantID, imageID, sha string) (string, error) {
+	if _, err := m.ProductModel3D(tenantID, imageID, sha); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("tenants/%s/model-images/%s/%s.img", tenantID, imageID, sha), nil
+}
+
 func (ObjectKeyMapper) Model3DResource(tenantID, resourceID, sha string) (string, error) {
 	if _, err := (ObjectKeyMapper{}).ProductModel3D(tenantID, resourceID, sha); err != nil {
 		return "", err

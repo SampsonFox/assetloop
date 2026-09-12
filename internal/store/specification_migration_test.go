@@ -72,7 +72,7 @@ func TestSpecificationMigration(t *testing.T) {
 			if err := basestore.Migrate(context.Background(), db, cfg); err != nil {
 				t.Fatal(err)
 			}
-			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 14)
+			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 17)
 			if driver == "sqlite" {
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('product_variants','legacy_variant_tags','legacy_variant_media')", 0)
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM pragma_table_info('assets') WHERE name IN ('variant_id','color')", 0)

@@ -330,6 +330,10 @@ func runUpgradeTest(t *testing.T, cfg config.Database) {
 		t.Fatalf("new model media fields must be null, got %d null fields", modelMediaFields)
 	}
 	var users int
+	var images int
+	if err := db.QueryRow("SELECT COUNT(*) FROM model_images").Scan(&images); err != nil || images != 0 {
+		t.Fatalf("upgraded image table must exist without fabricated images: %d %v", images, err)
+	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&users); err != nil {
 		t.Fatalf("new auth schema is unavailable after upgrade: %v", err)
 	}

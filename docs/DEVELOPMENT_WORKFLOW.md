@@ -60,7 +60,7 @@ For each requested adjustment:
 4. rebuild or restart the local development instance so the change is immediately visible;
 5. commit and push coherent restore points without opening a UAT pull request.
 
-A work-branch push runs `secret-scan` only. The full Go suite, PostgreSQL compatibility run, cumulative full-element scenario, sqlc verification, vet, cross-platform packaging, and packaged-artifact smoke test are deferred until the user explicitly says the current batch is a UAT checkpoint.
+A normal work-branch push runs `secret-scan` only. An explicitly requested validation checkpoint may include `[full-test]` in its commit message to run the existing CI test job (Go, PostgreSQL, full-element, sqlc, Web interactions and vet) without a promotion PR. This is useful when local PostgreSQL is unavailable. It does not authorize UAT packaging, promotion, branch deletion or production release. Cross-platform packaging and packaged-artifact smoke tests remain behind the explicit UAT checkpoint gate.
 
 Passing a narrow test, finishing one bug fix, or pushing a checkpoint does not imply that development is finished. Only the user's explicit UAT-checkpoint instruction starts promotion.
 

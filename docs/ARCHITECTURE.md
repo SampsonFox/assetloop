@@ -109,7 +109,68 @@ Web prompts only for referenced names that actually change.
 
 Transport adapters contain authentication, parsing, and response formatting, not economic rules.
 
+The approved MCP increment uses Streamable HTTP in this same Go process and
+calls application services directly, not the application's own Web endpoints.
+It is opt-in and requires independently revocable OAuth client authorization
+against the existing account. Current role capabilities intersect granted read,
+catalog and lifecycle scopes; Web sessions and disabled-auth local principals
+are not MCP credentials. Authorization-code PKCE uses a consent-page-only CSP
+allowance for the validated registered callback origin
+(including its exact loopback port); all other pages retain same-origin forms.
+No unvalidated redirect may enter this allowance. Repeated identical resource
+indicators retain the same single audience; distinct resources are rejected.
+PKCE, discovery and rotating tokens
+are required before mounting the endpoint. Management idempotency belongs in
+application transactions, alongside the existing lifecycle receipts. Detailed
+scope, implementation status and acceptance evidence live in
+`docs/MCP_IMPLEMENTATION.md`.
+
+OAuth grants bind tenant membership, client, scopes and resource. Migration 00015
+stores only credential hashes with a tenant/grant foreign key; consumed codes and
+refresh tokens remain available for replay detection. Store adapters serialize
+short exchanges in a database transaction (SQLite write reservation; PostgreSQL
+transaction advisory lock). Replay-triggered grant revocation commits before an
+invalid-grant response. Token reads resolve current membership rather than a
+persisted role snapshot. No OAuth endpoint is enabled by adding these tables.
+
+Management command replay uses application-owned `ManagementService`, existing
+catalog services and tenant-locked Store transactions. Migration 00016 stores a
+tenant/user/request-key receipt containing the command fingerprint and original
+JSON result; saving the receipt and business mutation is atomic. Replays check
+current capability before returning the saved result, and different commands
+cannot reuse the key. This is independent of lifecycle event receipts and is
+not a generic SQL or transport-owned mutation API.
+
+Resource deletion is the cross-storage exception to ordinary result receipts:
+the management transaction commits the guarded pending-delete state and a receipt
+of the immutable resource identity together, before touching BlobStore. That
+receipt is a deletion intent, not a success response. The shared media cleanup
+then deletes the object (missing is already complete) and pending metadata;
+every retry resumes cleanup from the same committed identity, including after
+metadata removal. A missing resource without a matching receipt is not success.
+This reuses the Web pending-delete policy without making blob I/O rollbackable,
+adding a state table, or introducing an external transaction coordinator.
+
 ### 4.4 Infrastructure adapters
+
+The approved URL-import increment adds an application `ModelDownloader` port and
+an outbound `modeldownload` HTTPS adapter. MCP supplies a confirmed public URL;
+it never performs network/storage I/O itself. The adapter uses no environment
+proxy or credentials, validates every redirect, rejects special/private DNS
+answers and dials a validated IP without resolving the hostname again. TLS still
+verifies the original hostname. Downloads are bounded to 25 MiB/30 seconds;
+the application limits concurrent imports to two with a 45-second operation
+deadline. Initial/redirect URLs permit HTTPS port 443 only.
+
+`ModelImportService` checks authorization and existing management receipts before
+downloading, then reuses the shared GLB upload validation/BlobStore path. A short
+management transaction creates the resource and receipt atomically; neither
+network nor Blob I/O holds that transaction. Concurrent replay returns the winner
+and cleans only the losing uncommitted blob using existing rollback probing.
+Ambiguous commits preserve possibly referenced bytes, as Web upload already does.
+No schema, queue, second process or automatic binding is introduced. Download URLs
+are included only in the command fingerprint, not persisted verbatim in receipts;
+source attribution remains a separate user-confirmed metadata field.
 
 - Stores translate application operations to SQLite or PostgreSQL.
 - Blob stores translate logical object keys to local files or Aliyun OSS.
@@ -388,6 +449,29 @@ Predictable application validation crosses the transport boundary as language-ne
 a localized generic message.
 
 ## 8. Blob media architecture
+
+### Model image fallback
+
+Product-model images are independent of 3D resources and monetary events.
+`ModelImageService` accepts PNG, JPEG and WebP up to 8 MiB and 16 million pixels,
+requiring a complete decode before publication. Web handlers call this service;
+all bytes pass through BlobStore and ObjectKeyMapper. The dedicated logical key
+is `tenants/{tenant_id}/model-images/{image_id}/{sha256}.img`; its actual validated
+content type is stored separately and returned with nosniff.
+
+Migration 00017 adds tenant/model-scoped immutable image revisions and a unique
+active revision per model. Replacement atomically detaches the previous revision;
+clear detaches without erasing historical metadata or blobs. File garbage collection
+and revision restoration UI are not part of this slice. A changed default storage
+backend does not affect reads of existing revisions. Authenticated GET revalidates
+private caches so replacement and clear do not leave a stale active image.
+
+The server-side HTTPS image downloader reuses the GLB downloader's public-address,
+redirect, timeout and no-credential policies with an 8 MiB response limit. A domain
+resolved to reserved/fake-IP space is rejected; browser download plus file upload is
+the explicit fallback, not an SSRF exception. A source page is attribution only and
+is never used as the stored blob location. This image slice currently exposes Web
+actions; image-specific MCP tools have not yet been added.
 
 ```text
 Attachment or product-model media use case

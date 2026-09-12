@@ -1,5 +1,10 @@
 # AssetLoop / 物迹 项目计划
 
+图片增量：在现有型号配置中维护 PNG/JPEG/WebP 图片，支持上传、替换、解除展示关联
+和服务器公开 HTTPS 直链导入；详情页无可用 3D 时回退到图片，列表显示缩略图。
+与通用附件、3D 资源和生命周期账务保持独立。暂不包含图片专用 MCP 工具或
+以旧换新关联；后者需另行确定事件引用与成本口径，不能重复记一笔卖出收入。
+
 状态：阶段 1、2A、2B、2C 已完成；产品型号 3D 展示作为阶段 2B 增量实现，通用附件系统仍为下一阶段
 
 当前已批准增量：产品规格标签化。保留类别与型号，Item 直接归属型号；规格描述改为可选类型化标签，3D 使用已确认外观默认。迁移 00013–00014 已在原 8080 SQLite 数据库落地，备份、原物品/事件/资源逐字段比对和 GLB 哈希检查通过。型号允许范围、标签库、物品选择、资源描述、候选与上传绑定已接通。开发验证见 docs/specification-acceptance.md；PostgreSQL 实测尚未完成，UAT 前必须补齐。本批次不接行情 API、任务调度或新 MCP 传输。
@@ -488,22 +493,37 @@ ONEBOUND_APP_SECRET=
 
 ### 13.2 MCP 工具
 
-MCP 只暴露语义化工具，例如：
+2026-09-12：用户将 `dev-mcp` 批次标为 UAT 检查点。当前 40 个工具、
+本批次改动和明确限制见 `docs/MCP_RELEASE_NOTES.md`，准确工具目录见 `docs/MCP.md`。
+本次同时包含型号图片的 Web 上传/导入，不包含 MCP 图片工具或以旧换新关联。
+晋级以当前提交的双数据库全要素验证和打包冒烟为准，生产仍须单独批准。
+
+当前已批准独立增量：在 `dev-mcp` 实现同进程 Streamable HTTP、现有账户
+OAuth/PKCE 授权、可撤销的客户端权限和现有业务管理工具。直接复用 application
+服务；管理写入补共享幂等，生命周期沿用已有回执。以本地 Codex 实测为验收，
+2026-09-10 批准追加服务器端公开 HTTPS GLB 直链导入，复用既有校验、BlobStore、
+资源注册及管理幂等；导入与绑定分开。限制 SSRF、DNS 重绑定、重定向、大小、
+时限和并发，不接受调用者 Cookie/认证头、压缩包或任意网页解析。
+仍不含 MCP 文件上传、行情、成员管理、stdio 或公网部署。完整范围与未完成清单见
+`docs/MCP_IMPLEMENTATION.md`；以下示例中的附件和行情仍属于后续阶段。
+
+当前 MCP 只暴露语义化工具，例如：
 
 ```text
 search_product_models
 search_specification_tags
-record_purchase
-record_repair
-record_sale
-attach_evidence
+record_event
+correct_event
 get_asset
 list_assets
-get_asset_valuation
-refresh_market_price
+get_asset_cost
+get_portfolio_summary
+import_3d_resource_from_url
 ```
 
 写入工具必须经过输入验证和业务规则；不提供任意 SQL 写权限。
+买入、维修和卖出通过 `record_event` 加已有类型实现；事件类型是可复用行为分类，
+商品/服务名称属于备注。通用证据附件和行情工具尚未实现。
 
 ## 14. 建议目录结构
 
