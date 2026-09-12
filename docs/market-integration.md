@@ -1,0 +1,174 @@
+# 二手行情实施契约
+
+首版转转 market_price；来源隔离，按采集日期记录最新一期成交最高价，不称作当日最高成交价。
+显式的资产→二手物品多对一关系，查询配置改变创建新序列，旧记录保留。
+详情只显示提供方图标、参考价及观察时间。成本看板不读取行情。
+Frankfurter v2 自动汇率，整数最小货币单位和定点汇率，缺汇率保留原币并稍后补取。
+每日北京时间09:00由系统计划任务调用同一Go二进制 refresh-market；跨进程租约。
+两种数据库同版本前向迁移、升级测试和共享应用场景。UAT/生产分别授权。
+
+## Provider evidence
+
+Read-only probe 2026-09-08: zai-transfer-mcp 1.0.0 / protocol 2025-03-26.
+iPhone 15 Pro + 256GB returned modelDesc=iPhone 15 Pro 256G,
+dealMinPrice=3452, dealMaxPrice=6458. No currency, unit, source date or sample count.
+The jump URL redirects to the public homepage on desktop and mobile user agents.
+The approved integration contract assigns currency and units to the adapter:
+Zhuanzhuan uses CNY yuan and returns integer fen. The application does not impose
+a CNY-only constraint or require user unit confirmation. Other adapters must provide
+their own platform currency/default and normalize upstream units.
+The adapter remains testable with sanitized fixtures. Never copy tokens into evidence.
+
+## Configuration and scheduled execution
+
+Set ZHUANZHUAN_MCP_TOKEN in the process environment, ignored .env, or ignored
+.env.zhuanzhuan.local beside the selected configuration file. The environment wins.
+Web shows configuration state only. Credentials never enter quote evidence.
+
+Use an installed binary in a stable path, with absolute SQLite DB_DSN and
+ATTACHMENT_LOCAL_ROOT values in its configuration. Do not move or replace an existing
+preview database to set up scheduling. Commands resolve relative paths from the
+configuration directory and never migrate a database; run the normal upgrade first.
+
+```powershell
+.\assetloop.exe refresh-market --config C:\AssetLoop\.env
+.\assetloop.exe refresh-market --config C:\AssetLoop\.env --tenant <tenant-id> --item <market-item-id>
+.\assetloop.exe install-scheduler --config C:\AssetLoop\.env --dry-run
+.\assetloop.exe install-scheduler --config C:\AssetLoop\.env
+```
+
+The Windows installer creates a task scoped to that absolute configuration path,
+daily at 09:00 Asia/Shanghai. It runs as the current signed-in user without stored
+passwords or elevated privileges, skips overlapping instances and starts when a
+missed time becomes available. The machine must be on and that user signed in;
+application startup also catches up the current date. Installation requires configured credentials. The dry run prints XML with paths, not secrets.
+
+Linux/server deployment can use systemd units (deployment itself needs its normal
+environment authorization). Keep the service in the application's deployment
+directory and invoke the same installed binary:
+
+```ini
+# assetloop-market.service
+[Unit]
+Description=AssetLoop daily secondhand quotes
+[Service]
+Type=oneshot
+User=assetloop
+WorkingDirectory=/opt/assetloop
+ExecStart=/opt/assetloop/assetloop refresh-market --config /opt/assetloop/.env
+TimeoutStartSec=2h
+```
+
+```ini
+# assetloop-market.timer
+[Unit]
+Description=Refresh AssetLoop quotes at 09:00 Shanghai
+[Timer]
+OnCalendar=*-*-* 09:00:00 Asia/Shanghai
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+No timestamps are fabricated for missed days. A snapshot is keyed by tenant, market
+item and Shanghai acquisition date. Manual refresh can replace the current day's
+price; older successes cannot overwrite a newer timestamp. Five-minute database
+leases are fenced by token, external work has a three-minute deadline, and HTTP
+requests never hold a long write transaction. Transient failures retry at most
+three times; authentication failure ends the batch.
+
+Only explicitly bound, enabled items are automatically collected. All-sold series
+continue through the 90-day boundary; another held device restores eligibility.
+Manual disabling retains observations. Historical pending FX is repaired before
+the next quote request, using the original observation date.
+
+## Verification evidence (development, 2026-09-08)
+
+- Live Zhuanzhuan preview succeeded through the Go application and Web drawer:
+  iPhone 15 Pro / 256GB -> iPhone 15 Pro 256G, max 6458, min 3452.
+  CNY yuan is now the adapter-owned default approved by the user. Formal saving
+  is enabled without a separate currency confirmation setting.
+- A real Frankfurter v2 time-series response succeeded. Expanded providers are
+  objects containing key, date and rate. The recorded public fixture tests this
+  actual shape, latest non-future date selection and fixed-point rates.
+  2026-09-08 CNY/USD sample: 0.14909; normalized source retains provider keys.
+- SQLite application, upgrade and cumulative full-element tests pass. The shared
+  scenario covers two devices, config separation, tenant isolation, same-day
+  replacement, failed/mismatched quotes, leases, 90-day eligibility, pending FX and
+  base-currency locking. Web tests cover actual form posts and viewer denial.
+- Existing local preview upgraded 14 -> 15 with automatic backup. All original
+  asset/catalog/tag/resource rows, all 15 lifecycle events and the existing GLB
+  hash match the before snapshot. The GLB HTTP endpoint returns the same bytes.
+- PostgreSQL 17 live validation passed after the test host became reachable: complete
+  Store conformance (including market), 14->15 market upgrade, specification upgrade,
+  and the cumulative full-element scenario. Tests used a temporary network-isolated
+  container and a dedicated non-superuser role/database, without shared credentials
+  or host ports. The container and uploaded test binaries were removed afterwards.
+  SQLite and PostgreSQL have both executed the market scenario; no skips count as passes.
+- Browser QA verified query preview, return to editable conditions, model
+  confirmation, existing detail empty state and loaded 3D model.
+  Asset editing correctly prefills model and selected tags into a child quote drawer;
+  cancelling leaves the original asset unchanged.
+  One Impeccable detector pass ran in regex fallback (HTML parser dependencies
+  absent); it is not a computed-contrast or accessibility certification.
+
+The fixed source icon is the official site's favicon from
+[Zhuanzhuan](https://m.zhuanzhuan.com/favicon.ico), stored locally for provider
+identification. No product pictures are fetched.
+Frankfurter reference: [official documentation](https://frankfurter.dev/).
+
+## Adapter currency activation (2026-09-08)
+
+The user approved adapter-owned defaults: Zhuanzhuan uses CNY/yuan; the temporary
+unit-confirmation configuration and UI gate were removed. A regression verifies
+that the application preserves valid adapter currencies (including USD, JPY and
+KWD) and integer minor amounts, rejecting invalid currency codes without applying
+a platform-specific default. Future adapters own their respective defaults.
+
+The local Windows daily task is installed and Ready, with its next execution at
+2026-09-09 09:00 Asia/Shanghai. Its XML importer uses UTF-16LE with BOM, covered by
+a Unicode-path regression. The refresh CLI exits successfully with zero eligible
+records; users can now create and bind real quotes. Existing application data and
+UAT/production delivery gates remain unchanged.
+
+## Candidate discovery and specification review (2026-09-09)
+
+Read-only live search returned multiple iPhone 15 Pro 256G products. The selected
+product detail used MCP text records (spec=name|value), explicitly returning
+storage 256G, blue titanium, China retail channel and condition 95B; RAM and a
+separate model field were absent. Both this text format and documented JSON
+specifications/options are supported. Fixtures remove links/telemetry and replace
+product IDs and pagination tokens with synthetic references.
+
+The default drawer now searches candidates and fetches details only on selection;
+direct model queries remain available. Configuration prefill comes only from
+explicit specifications. Preview separates product information, submitted query
+and returned market model scope. In the live browser, the full configuration
+query returned the broader iPhone 15 Pro description: the UI exposed this scope
+and required explicit acceptance rather than inventing configuration precision.
+No real quote or asset was created during browser verification.
+
+Selection snapshots use paired 00016 migrations. PostgreSQL 17 isolated live
+conformance, 14-to-current and 15-to-16 upgrades, and the full-element shared
+quote/FX scenario passed. SQLite counterparts and Web handlers passed. The local
+preview upgraded its original database with all old rows and existing GLB bytes
+preserved. Search, lazy detail loading, actual-spec prefill, and quote preview
+also completed against Zhuanzhuan through the local Web application.
+
+Drafts expire after 30 minutes or process restart. Provider references stay in
+principal-scoped memory; final save rechecks details and the matched quote model.
+Changes return to review. Same-query reuse preserves the original selection;
+automatic daily refresh does not query the listing. No UAT or production promotion.
+
+## Combined MCP development version (2026-09-12)
+
+The market branch is integrated with accepted MCP UAT e8ab8f9. The old 15/16
+market schema is preserved through a forward bridge into combined schema 19;
+accepted OAuth/management/images keep 15–17 and market now uses paired 18–19.
+Do not start the old branch binary on an upgraded database. Existing local
+preview databases were not migrated as part of this code integration.
+
+See [MCP tool contract](MCP.md#secondhand-prices) for the ten added market tools.
+They share the exact Web price/FX/lease rules and add durable successful-command
+replay. Search/preview are not persistent business writes; saving requires actual
+matched-scope acceptance and revalidation. No market value changes lifecycle costs.

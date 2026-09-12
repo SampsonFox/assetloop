@@ -63,14 +63,16 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	media := application.NewModelMediaService(store, blobs, blob.ObjectKeyMapper{}, "local")
 	management := application.NewManagementService(store.(application.ManagementStore), blobs)
 	importer := application.NewModelImportService(management, media, modelDownloadFixture{})
-	web, err := webtransport.New(auth, catalog, lifecycle, db, webtransport.Options{AuthMode: "local", Specifications: specs, OAuth: oauth, OAuthIssuer: issuer})
+	marketFixture := newMCPMarketFixture()
+	market := application.NewMarketService(store, marketFixture, nil, application.MarketOptions{})
+	web, err := webtransport.New(auth, catalog, lifecycle, db, webtransport.Options{Market: market, AuthMode: "local", Specifications: specs, OAuth: oauth, OAuthIssuer: issuer})
 	if err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", web.Handler())
 	mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
-	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Media: media, Management: management, Import: importer}, oauthHTTP.Authenticate)))
+	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Market: market, Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Media: media, Management: management, Import: importer}, oauthHTTP.Authenticate)))
 	host.Config.Handler = mux
 	host.Start()
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -133,7 +135,7 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	}
 	defer mcpClient.Close()
 	list, err := mcpClient.ListTools(ctx, &sdk.ListToolsParams{})
-	if err != nil || len(list.Tools) != 40 {
+	if err != nil || len(list.Tools) != 50 {
 		t.Fatal("OAuth MCP discovery failed")
 	}
 	called := map[string]bool{}
@@ -146,6 +148,13 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 		data, err := json.Marshal(result.StructuredContent)
 		if err != nil || json.Unmarshal(data, output) != nil {
 			t.Fatalf("MCP %s result invalid", name)
+		}
+		if strings.Contains(name, "market") {
+			for _, hidden := range []string{"private-provider", "lease_token", "lease_until", "NextPageToken", "Metric"} {
+				if strings.Contains(string(data), hidden) {
+					t.Fatalf("%s leaked internal metadata", name)
+				}
+			}
 		}
 		called[name] = true
 		t.Logf("HTTP tools/call PASS %s", name)
@@ -213,6 +222,21 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 		t.Fatal("MCP asset not visible through authenticated Web")
 	}
 	runMCPToolWalkthrough(t, call, resource.ID, assetID, originalID)
+	_, costsBefore, err := lifecycle.Timeline(ctx, session.Principal, assetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runMCPMarketWalkthrough(t, ctx, mcpClient, call, assetID, marketFixture, market, management, session.Principal)
+	_, costsAfter, err := lifecycle.Timeline(ctx, session.Principal, assetID)
+	if err != nil || costsBefore != costsAfter {
+		t.Fatal("market changed lifecycle costs", err)
+	}
+	page, body = request("GET", "/assets/"+assetID, nil)
+	if page.StatusCode != 200 || !strings.Contains(string(body), "5100.00") {
+		t.Fatal("MCP market price not visible in Web")
+	}
+
+	call("bind_asset_market", transport.BindMarketInput{AssetID: assetID, MarketItemID: "", RequestKey: "mcp-market-finish-unbind"}, new(any))
 	for _, tool := range list.Tools {
 		if !called[tool.Name] {
 			t.Errorf("discovered tool was not successfully called: %s", tool.Name)

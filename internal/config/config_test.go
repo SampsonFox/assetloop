@@ -38,3 +38,21 @@ func TestDisabledAuthRequiresLoopback(t *testing.T) {
 		t.Fatalf("loopback disabled auth should be accepted: cfg=%+v err=%v", cfg, err)
 	}
 }
+
+func TestMarketCredentialsLocalFileAndEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env.zhuanzhuan.local"), []byte("ZHUANZHUAN_MCP_TOKEN=fixture-local\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(filepath.Join(dir, ".env"))
+	if err != nil || cfg.Market.Token != "fixture-local" {
+		t.Fatal("local provider configuration failed", err)
+	}
+	t.Setenv("ZHUANZHUAN_MCP_TOKEN", "fixture-environment")
+
+	cfg, err = Load(filepath.Join(dir, ".env"))
+	if err != nil || cfg.Market.Token != "fixture-environment" {
+		t.Fatal("environment precedence failed", err)
+	}
+}

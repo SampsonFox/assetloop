@@ -68,7 +68,7 @@ Codex configuration is not a substitute for server-side revocation.
 ## Permissions and tools
 
 Client scopes never grant more authority than the signed-in account. Tool inputs
-cannot supply the acting tenant or user. All 40 tools remain discoverable, but
+cannot supply the acting tenant or user. All 50 tools remain discoverable, but
 unauthorized calls fail. Ask for only the scopes needed for the intended workflow.
 
 | Scope | Tools |
@@ -80,6 +80,9 @@ unauthorized calls fail. Ask for only the scopes needed for the intended workflo
 | `assets:catalog` | `create_category`, `update_category`, `create_product_model`, `save_tag_type`, `save_specification_tag`, `save_model_configuration`, `save_asset`, `save_appearance_default`, `delete_appearance_default`, `save_3d_resource_metadata`, `bind_3d_resource`, `delete_3d_resource` |
 | `assets:lifecycle` | `create_event_type`, `update_event_type`, `set_event_type_enabled`, `record_event`, `correct_event` |
 | `assets:catalog` — URL import | `import_3d_resource_from_url` |
+| `assets:read` — market | `list_market_items`, `get_market_item`, `get_asset_market_price` |
+| `assets:catalog` — market preparation | `search_market_products`, `select_market_product`, `preview_market_price` (temporary drafts, no business writes) |
+| `assets:catalog` — market writes | `create_market_item`, `update_market_item`, `bind_asset_market`, `refresh_market_price` |
 
 Paged queries use `page` and `page_size`, normalize invalid/nonpositive values,
 and cap page size at 200. Read all required pages before selecting IDs. Complete
@@ -87,6 +90,47 @@ configuration queries return the full association set; do not replace it with a
 partial search result. An absent appearance override inherits the tag type's
 default; explicit `false` overrides it. Resource descriptions/candidates never
 automatically bind a resource. Uploads remain in Web.
+
+## Secondhand prices
+
+The combined development version adds 10 market tools (50 total: 28 read-only
+annotations and 22 persistent writes). Existing OAuth scopes are reused; catalog
+permission is required for external discovery/preview and market management.
+Saved prices remain readable without configured provider credentials. Configure
+`ZHUANZHUAN_MCP_TOKEN` through the same ignored configuration/environment as Web;
+no token, provider metric, page token, lease token or raw provider evidence is
+returned by these tools.
+
+1. Search with `search_market_products`; select the returned `draft_id` and
+   zero-based candidate `index` using `select_market_product`. Asking prices only
+   identify candidates and are never saved as reference prices.
+2. Preview the draft's returned `keyword` and `filter_criteria` with
+   `preview_market_price`. Alternatively omit `draft_id` for direct model lookup.
+3. Show actual product specifications and `matched_model` separately. A broad
+   model quote does not prove precise capacity/color/condition matching. Obtain
+   explicit acceptance, then call `create_market_item` with `accept_scope=true`,
+   a name and stable `request_key`. Saving rechecks specifications and market model.
+4. Explicitly bind with `bind_asset_market`; an empty `market_item_id` unbinds.
+   `save_asset` does not silently change an existing market binding.
+5. Read via `get_asset_market_price` or `get_market_item` (daily history and bound
+   asset IDs). Refresh one enabled series with `refresh_market_price`. Rename or
+   enable/disable it using `update_market_item`; query changes create a new series.
+
+All prices are integer minor units. `max_minor` means the provider's latest-period
+maximum, not the highest trade today. `base_minor=null` means FX is pending; original
+currency/amount and nullable source date/sample count stay explicit. These tools
+never change lifecycle cashflows or the holding-cost dashboard. A failed refresh
+preserves the previous successful quote. Successful same-key retries return the
+original result without provider calls, including after draft expiry/restart;
+new deliberate refreshes need a new key. Concurrent requests use the same fenced
+leases as Web, CLI and startup collection.
+
+Drafts expire after 30 minutes or restart and belong to the current user/tenant.
+`market.draft_expired`, `market.selection_changed`, `market.model_changed`,
+`market.accept_scope`, and `market.product_gone` require renewed selection/review;
+`market.busy`, `market.temporary`, and `market.rate_limit` are retryable.
+Provider configuration/authentication errors require configuration repair.
+A read-only or Viewer grant cannot use discovery or mutate saved prices.
 
 ## Confirmed mutations and retries
 

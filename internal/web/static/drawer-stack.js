@@ -12,7 +12,7 @@
   };
   const layout = () => {
     const opened = panels().filter(dialog=>!dialog.hasAttribute('data-stack-closing'));
-    for(const dialog of opened) if(!remotes.has(dialog)&&['tag-editor','model-drawer','category-drawer','resource-editor','resource-upload','event-type-manage'].includes(dialog.id)) {
+    for(const dialog of opened) if(!remotes.has(dialog)&&['tag-editor','model-drawer','category-drawer','resource-editor','resource-upload','event-type-manage','market-editor'].includes(dialog.id)) {
       remotes.set(dialog,{target:dialog.id,native:true,parent:opened[opened.indexOf(dialog)-1],key:entityKey(dialog.id,dialog.querySelector('form')?.action||location.href)});
       if(!observed.has(dialog)){observed.add(dialog);dialog.addEventListener('close',()=>{remotes.delete(dialog);layout();});}
     }
@@ -54,6 +54,7 @@
     const url=new URL(link.href,location.href);
     if(link.dataset.drawerField&&link.dataset.drawerTarget!=='resource-upload'){const value=link.closest('form,dialog')?.querySelector(`[name="${link.dataset.drawerField}"]`)?.value;if(value){if(link.dataset.drawerQuery)url.searchParams.set(link.dataset.drawerQuery,value);else url.pathname=url.pathname.replace(/[^/]+$/,encodeURIComponent(value));}}
     if(url.origin!==location.origin)return;
+    if(link.hasAttribute?.('data-market-prefill')){const form=link.closest('form,dialog');const model=form?.querySelector('[name="model_id"]')?.selectedOptions?.[0];const keyword=model?.dataset.marketKeyword||'';const tags=[...(form?.querySelectorAll('[name="tag_ids"]:checked,select[name="tag_ids"] option:checked')||[])].map(n=>n.dataset.tagName||'').filter(Boolean);url.searchParams.set('keyword',keyword);url.searchParams.set('name',[keyword,...tags].join(' '));url.searchParams.set('filter_criteria',tags.join(','));}
     const target=link.dataset.drawerTarget;
     const key=entityKey(target,url.href);
     const existing=[...remotes].find(([,v])=>v.key===key);
@@ -64,7 +65,7 @@
     dialog.dataset.drawerKind=target;
     const header=document.createElement('header');header.className='drawer-heading';const heading=document.createElement('h2');heading.textContent=text.loading;
     const close=document.createElement('button');close.type='button';close.className='secondary auto';close.dataset.dialogClose='';close.textContent=text.cancel;header.append(heading,close);panel.append(header);dialog.append(panel);
-    const creating=/\/new$/.test(url.pathname)||(!url.searchParams.has('edit')&&!url.searchParams.has('edit_model_id')&&!url.searchParams.has('edit_type_id')&&['tag-editor','model-drawer','resource-upload','event-type-manage'].includes(target));
+    const creating=/\/new$/.test(url.pathname)||(!url.searchParams.has('edit')&&!url.searchParams.has('edit_model_id')&&!url.searchParams.has('edit_type_id')&&['tag-editor','model-drawer','resource-upload','event-type-manage','market-editor'].includes(target));
     const state={key,url:url.href,target,link,parent,creating,controller:null};remotes.set(dialog,state);document.body.append(dialog);
     window.assetloopDialog.initialize(dialog);dialog.showModal();layout();
     dialog.addEventListener('close',()=>{state.controller?.abort();dialog.dispatchEvent(new Event('drawer:dispose'));remotes.delete(dialog);dialog.remove();layout();const focus=link.isConnected?link:[...(parent?.querySelectorAll('a[href]')||[])].find(a=>a.href===link.href);focus?.focus({preventScroll:true});});
@@ -113,9 +114,10 @@
     await load();
   }
   function sync(result,state) {
-    const fieldName={category:'category_id',model:'model_id','tag-type':'type_id',resource:'resource_id','event-type':'event_type'}[result.kind];
-    if(fieldName && state.parent && state.creating) for(const select of state.parent.querySelectorAll(`select[name="${fieldName}"]`)) {
-      if(![...select.options].some(option=>option.value===result.id)){const option=new Option(result.name,result.id);if(result.cashflow)option.dataset.cashflow=result.cashflow;select.add(option);select.value=result.id;select.dispatchEvent(new Event('change',{bubbles:true}));}
+    const fieldName={category:'category_id',model:'model_id','tag-type':'type_id',resource:'resource_id','event-type':'event_type','market-item':'market_item_id'}[result.kind];
+    const parentForm=state.parent||(result.kind==='market-item'?state.link.closest?.('form'):null);
+    if(fieldName && parentForm && state.creating) for(const select of parentForm.querySelectorAll(`select[name="${fieldName}"]`)) {
+      if(![...select.options].some(option=>option.value===result.id)){const option=new Option(result.name,result.id);if(result.cashflow)option.dataset.cashflow=result.cashflow;select.add(option);}select.value=result.id;select.dispatchEvent(new Event('change',{bubbles:true}));
     }
     for(const node of document.querySelectorAll('option,[data-entity-id]')) {
       if((node.value||node.dataset.entityId)!==result.id)continue;
@@ -135,7 +137,7 @@
       const response=await fetch(url,{credentials:'same-origin'});if(!response.ok)return;
       const next=new DOMParser().parseFromString(await response.text(),'text/html').getElementById('settings-content');
       if(!next||serial!==refreshSerial||location.href!==url||!root.isConnected)return;
-      const selector=':scope > .table-card, :scope > .pagination, :scope > p.muted, :scope > .empty-state';
+      const selector=':scope > .table-card, :scope > .pagination, :scope > p.muted, :scope > .empty-state'+(new URL(url).pathname==='/admin/market'?', :scope > .management-filters':'');
       const old=[...root.querySelectorAll(selector)],fresh=[...next.querySelectorAll(selector)];
       const x=scrollX,y=scrollY,anchor=old[0]||root.querySelector(':scope > dialog');
       for(const item of fresh)root.insertBefore(item,anchor);for(const item of old)item.remove();
@@ -158,12 +160,13 @@
     (async()=>{
       try{
         const body=form.enctype==='multipart/form-data'?data:new URLSearchParams(data);
-        const response=await fetch(form.action,{method:'POST',body,credentials:'same-origin',headers:{'X-Assetloop-Drawer':state.target}});
+        const response=await fetch(event.submitter?.getAttribute('formaction')||form.action,{method:'POST',body,credentials:'same-origin',headers:{'X-Assetloop-Drawer':state.target}});
         if(response.ok&&response.headers.get('Content-Type')?.includes('application/json')){
           const result=await response.json();sync(result,state);form.dataset.dirty='false';delete form.dataset.submitting;await beforeClose(dialog);dialog.close();return;
         }
         if(response.status===401||new URL(response.url).pathname==='/login'){feedback(dialog,text.login);return;}
         const page=new DOMParser().parseFromString(await response.text(),'text/html');
+        if(form.hasAttribute('data-drawer-step') && (response.ok||response.status===422)) {const incoming=page.querySelector('dialog.drawer');if(incoming&&dialog.open){for(const script of incoming.querySelectorAll('script'))script.remove();namespace(incoming);dialog.setAttribute('aria-labelledby',incoming.getAttribute('aria-labelledby')||'');dialog.replaceChildren(...incoming.childNodes);window.assetloopDialog.initialize(dialog);dialog.querySelector('[data-error-summary], [data-dialog-initial-focus]')?.focus();layout();return;}}
         const errors=[...page.querySelectorAll('[data-error-summary],.error')].map(n=>n.textContent.trim()).filter(Boolean);
         feedback(dialog,errors.join(' · ')||text.failed);
       }catch{feedback(dialog,text.failed);}
@@ -205,4 +208,5 @@
     }
   }
   window.assetloopDrawers={submit,open,beforeClose,opened(dialog){if(!order.includes(dialog))order.push(dialog);layout();}};
+  layout(); // Register drawers opened by the earlier app.js initialization.
 })();

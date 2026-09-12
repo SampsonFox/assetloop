@@ -491,6 +491,14 @@ button[aria-busy="true"]::after { content:" …"; }
 .cost-report h3 { margin:0 0 8px; }
 .cost-report p,.cost-data { font-size:13px; }
 .cost-chart { display:block; width:100%; height:auto; color:var(--accent); }
+.cost-milestones { list-style:none; margin:20px 0 0; padding:0; max-width:720px; }
+.cost-milestone { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:16px 0; border-bottom:1px solid var(--line); }
+.cost-milestone:last-child { border-bottom:0; }
+.cost-milestone > div { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 20px; }
+.cost-milestone time,.cost-milestone small { color:var(--muted); font-size:.85rem; }
+.cost-milestone .cost-milestone-value { justify-content:flex-end; text-align:right; }
+.cost-milestone strong { font-variant-numeric:tabular-nums; white-space:nowrap; }
+@media (max-width:520px) { .cost-milestone { gap:16px; align-items:flex-start; } .cost-milestone > div { flex-direction:column; gap:4px; } .cost-milestone .cost-milestone-value { align-items:flex-end; } }
 .cost-chart path { stroke:currentColor; stroke-width:2; fill:none; vector-effect:non-scaling-stroke; }
 .cost-zero { stroke:var(--line-strong); stroke-dasharray:4 4; }
 .cost-chart-scale { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
@@ -661,3 +669,16 @@ dialog .asset-editor-fields { grid-template-columns:repeat(auto-fit,minmax(min(1
  .tag-transfer[data-side="0"] [data-column="1"], .tag-transfer[data-side="1"] [data-column="0"] { display:none; }
  .transfer-list { height:180px; }
 }
+
+.market-reference{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-block:16px;font-variant-numeric:tabular-nums}.market-reference img{flex:none}.market-reference time{font-size:.85rem;color:var(--muted)}.market-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.market-actions form{margin:0}.market-preview{border-block:1px solid var(--line);padding-block:12px}
+
+.market-candidates { display:grid; gap:0; }
+.market-candidate { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:16px; border-bottom:1px solid var(--line); }
+.market-candidate > div { min-width:0; overflow-wrap:anywhere; }
+.market-candidate p { margin:6px 0 0; }
+.market-specs { display:grid; gap:12px; }
+.market-specs > div { display:grid; grid-template-columns:minmax(90px,1fr) minmax(0,2fr); gap:12px; }
+.market-specs dt { color:var(--muted); }
+.market-specs dd { margin:0; overflow-wrap:anywhere; }
+.market-specs details { margin-top:8px; font-size:.85rem; }
+.market-selection h3,.market-preview h3 { margin-top:0; }

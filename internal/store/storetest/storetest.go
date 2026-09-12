@@ -17,6 +17,7 @@ type Store interface {
 	application.LifecycleStore
 	application.ModelMediaStore
 	application.SpecificationStore
+	application.MarketStore
 }
 
 func Run(t *testing.T, store Store) {

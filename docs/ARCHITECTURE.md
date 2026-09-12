@@ -31,7 +31,7 @@ The architecture optimizes for:
              |               |                |
              v               v                v
         Database Store   Attachment Store  Market/FX Sources
-        SQLite/Postgres  Local/Aliyun OSS  OneBound/others
+        SQLite/Postgres  Local/Aliyun OSS  Zhuanzhuan/Frankfurter
 ```
 
 The AI Harness interprets images and conversation and confirms every extracted field with the user before invoking a write MCP tool. A semantic MCP mutation therefore represents confirmed intent, but the application still validates identity, tenant scope, input shape, lifecycle invariants, money evidence, and transaction boundaries before writing.
@@ -51,7 +51,7 @@ Application services and ports
 Pure domain model
 
 Infrastructure adapters implement application ports:
-  SQLite | PostgreSQL | Local files | Aliyun OSS | OneBound
+  SQLite | PostgreSQL | Local files | Aliyun OSS | Zhuanzhuan / Frankfurter
 ```
 
 Dependencies point inward. Domain code has no knowledge of transports or infrastructure.
@@ -215,8 +215,8 @@ PostgreSQL live verification is still a required UAT gate.
   Migrated selections, assets, lifecycle history, resource metadata, effective item
   overrides and GLB bytes are preserved. Runtime adapters and HTTP maintenance no
   longer support the retired hierarchy.
-- Future market inputs use model identity plus configuration-tag snapshots,
-  condition, region and source. This transition adds no market polling or storage.
+- Market queries use explicitly confirmed keywords/configuration, region and source;
+  asset bindings share a tenant-scoped series without automatic model matching.
 
 ### Current persisted hierarchy
 
@@ -519,26 +519,56 @@ Migration 00011 expands existing metadata into resource references, retaining le
 
 ## 9. Market data architecture
 
-```text
-MarketDataProvider
-        |
-        v
-raw normalized listings
-        |
-match model + configuration-tag snapshot -> reject accessories/services -> deduplicate
-        |
-condition mapping -> outlier filter -> aggregate
-        |
-dated FX conversion -> persisted price point
-```
+MarketService -> MarketDataProvider.FetchQuote -> dated FX conversion -> MarketStore.
+Zhuanzhuan is the first adapter, calling market_price over Streamable HTTP MCP without
+an AI model. Providers map transport fields; application policy selects the provider's
+latest-period maximum completed-sale price. Listing aggregation, confidence scoring,
+OneBound and manual imports are deferred.
 
-Providers own transport mechanics only. The shared pipeline owns market meaning.
-Future price series use model identity, an immutable configuration-tag snapshot,
-condition, region and provider so sources and configurations cannot mix invisibly.
-Changing a shared display label must not reinterpret historical observations.
-This boundary does not add market tables, polling jobs or new MCP transports now.
+Tenant-scoped market_items identify immutable provider/query/configuration/region
+combinations. asset_market_bindings links existing assets without rebuilding their table.
+Composite tenant foreign keys prevent cross-tenant relations. Assets explicitly share a market item; mutable display names do not
+reinterpret history. market_prices retain one latest successful snapshot per Shanghai
+calendar day, original money, observed time, optional source date/sample count,
+provider version, calculation provenance and sanitized quote evidence. Missing source
+metadata stays unknown. Failed refreshes preserve prior valid observations.
 
-The initial provider is OneBound. Manual import is the second implementation used for testing and fallback. A versioned remote HTTP provider protocol is deferred until an external provider must run without recompiling the application.
+Frankfurter daily reference rates implement FXProvider. Exact fixed-point conversion
+preserves original money and actual rate date/source. Missing FX leaves the original
+observation pending conversion; no future rate or fabricated parity is used. A first
+market price locks tenant base currency just like a monetary lifecycle event.
+
+Web and CLI invoke application use cases. OS scheduled tasks call refresh-market at
+09:00 Asia/Shanghai, with database leases preventing overlapping workers. Only
+referenced enabled series refresh automatically; all-sold assets retain 90 days of
+refresh. Local startup catches up current observations, never backfills missed prices.
+Secrets remain environment or ignored local configuration. Currency and upstream
+amount units belong to each provider adapter; Zhuanzhuan defaults to CNY yuan and
+normalizes to integer fen. Application services validate ISO currency and operate
+on normalized minor units without platform-specific currency checks or user unit
+confirmation. Core costs remain derived only from lifecycle cashflows.
+
+### Product discovery and quote confirmation
+
+ProductDiscoveryProvider adds SearchProducts and GetProductDetail beside MarketDataProvider.
+The Zhuanzhuan adapter uses the same remote MCP client for all three tools and maps both
+JSON and text details; multiple quote payloads are rejected instead of field-merged.
+MarketService owns candidate selection, explicit-specification prefill, reference-scope
+confirmation and the shared per-service request limiter/retries. No model API is involved.
+
+Principal-scoped, opaque discovery drafts keep search tuples and confirmed previews in
+process for 30 minutes (24 per principal, 256 total); restart/expiry requires a fresh search.
+Web forms never supply trusted provider evidence. Save re-fetches the selected product,
+compares its actual specification snapshot and verifies the confirmed quote model. Changes
+invalidate confirmation and require review. No external call holds a database transaction.
+
+Paired migration 00016 adds nullable market_items.selection_json: the immutable selection
+snapshot holds source/product reference, title, returned specifications and retrieval time.
+Telemetry and page cursors stay ephemeral. Product IDs are not market model IDs. Exact-query
+reuse preserves the existing snapshot; scheduled refresh depends only on the fixed quote
+query, so a sold or removed listing does not stop the series. Product asking prices never
+enter market_prices. The UI distinguishes product specifications from quote model scope
+and permits incomplete quote scope only with explicit acceptance.
 
 ## 10. Configuration architecture
 
@@ -638,3 +668,25 @@ Delivery stops after every UAT build and artifact verification. Production promo
 The GitHub repository is public, so repository visibility is a security boundary: all tracked content and delivery metadata are assumed public. GitHub Push Protection blocks supported credential patterns before acceptance, while the required `secret-scan` CI job scans the complete fetched Git history with a checksum-pinned Gitleaks release. Runtime secrets remain outside Git in local `.env` files, GitHub Environment secrets, or a production secret manager.
 
 Rollback is Git-based: revert the smallest offending commit or revert the promotion pull request, then run the same pipeline again. Database rollback remains forward-only and uses a corrective migration; branch rollback never runs destructive down migrations against persisted data.
+
+## Market / MCP integration (development, 2026-09-12)
+
+The existing catalog scope authorizes market preparation and management; read
+scope authorizes stored reference prices. Ten semantic tools call MarketService
+and ManagementService in-process. Web, MCP, startup refresh and CLI share the
+provider currency contract, quotation policy and fenced leases. Preview/search
+modify only short-lived principal-scoped drafts; confirmed create/update/bind/
+refresh use durable tenant/user/key receipts. Provider and FX calls remain outside
+write transactions; the final business change and successful receipt commit
+together. Late duplicate refreshes release only their own lease and retain the
+winner's status. Market reference prices never enter lifecycle cost calculations.
+
+The accepted 00015 OAuth, 00016 management and 00017 image migrations are unchanged.
+Paired 00018 quotes and 00019 selection establish the combined schema. Already-used
+market development databases also recorded versions 15/16 with different contents:
+forward migration 18 verifies the legacy market tables, preserves those rows and
+Goose history, and adds the missing OAuth/management tables transactionally.
+Migration 19 retains an existing selection column or adds it for older instances.
+SQLite retains its pre-upgrade backup; ambiguous/partial legacy schemas fail
+rather than dropping data. Tests cover market 15/16, MCP 17 and rollback/retry on
+both adapters. No existing preview database is implicitly replaced or downgraded.

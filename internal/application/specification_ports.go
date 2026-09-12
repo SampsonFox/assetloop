@@ -23,6 +23,8 @@ type SpecificationSnapshot struct {
 }
 
 type SpecificationStore interface {
+	GetMarketItem(context.Context, string, string) (domain.MarketItem, error)
+	BindAssetMarket(context.Context, string, string, string) error
 	BindModel3DResource(context.Context, string, BindModel3DResource) error
 	UpdateModel3DResource(context.Context, domain.Model3DResource) error
 	UpdateModel(context.Context, domain.ProductModel) error

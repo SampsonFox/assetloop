@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "text": "{\"items\":[{\"infoId\":\"100\",\"title\":\"95B iPhone 15 Pro 256G 蓝色钛金属 国行 全网通\",\"chengSe\":\"95B\",\"appearanceCondition\":\"95\",\"functionCondition\":\"B\",\"overallCondition\":null,\"serviceLabelsInfo\":[\"iPhone影像旗舰手机·第5名\"],\"price\":\"4148\",\"businessType\":\"CONSUMER_ELECTRONICS\",\"metric\":\"fixture-metric-0\"},{\"infoId\":\"101\",\"title\":\"95B iPhone 15 Pro 256G 黑色钛金属 国行 全网通\",\"chengSe\":\"95B\",\"appearanceCondition\":\"95\",\"functionCondition\":\"B\",\"overallCondition\":null,\"serviceLabelsInfo\":[\"iPhone影像旗舰手机·第5名\"],\"price\":\"4298\",\"businessType\":\"CONSUMER_ELECTRONICS\",\"metric\":\"fixture-metric-1\"},{\"infoId\":\"102\",\"title\":\"95B iPhone 15 Pro 256G 原色钛金属 国行 全网通\",\"chengSe\":\"95B\",\"appearanceCondition\":\"95\",\"functionCondition\":\"B\",\"overallCondition\":null,\"serviceLabelsInfo\":[\"iPhone影像旗舰手机·第5名\"],\"price\":\"4228\",\"businessType\":\"CONSUMER_ELECTRONICS\",\"metric\":\"fixture-metric-2\"}],\"pageNo\":1,\"hasNext\":true,\"nextPageToken\":\"fixture-next-page\"}",
+      "type": "text"
+    }
+  ],
+  "isError": false
+}

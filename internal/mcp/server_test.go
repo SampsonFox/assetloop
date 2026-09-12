@@ -67,12 +67,12 @@ func TestHTTPQueries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(list.Tools) != 40 {
-				t.Fatalf("tools = %d, want 40", len(list.Tools))
+			if len(list.Tools) != 50 {
+				t.Fatalf("tools = %d, want 50", len(list.Tools))
 			}
 			for _, tool := range list.Tools {
 				write := strings.HasPrefix(tool.Name, "save_") || strings.HasPrefix(tool.Name, "create_") || strings.HasPrefix(tool.Name, "update_") || strings.HasPrefix(tool.Name, "delete_") || strings.HasPrefix(tool.Name, "set_") || tool.Name == "record_event" || tool.Name == "correct_event"
-				write = write || tool.Name == "bind_3d_resource" || tool.Name == "import_3d_resource_from_url"
+				write = write || tool.Name == "bind_asset_market" || tool.Name == "refresh_market_price" || tool.Name == "bind_3d_resource" || tool.Name == "import_3d_resource_from_url"
 				if tool.Annotations == nil || tool.Annotations.ReadOnlyHint == write {
 					t.Errorf("%s is not annotated read-only", tool.Name)
 				}

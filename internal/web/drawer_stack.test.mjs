@@ -103,7 +103,7 @@ function fragment() {
     ]),
   ]);
 }
-function harness({reducedMotion=true}={}) {
+function harness({reducedMotion=true,initialDrawer=null}={}) {
   const body = el('body'), requests = [], closeCalls = [], initializations = [], observers = [];
   const document = el('document'); document.body = body; document.documentElement = {lang: 'en'};
   document.getElementById = () => null; // This harness has no settings root to refresh.
@@ -125,6 +125,7 @@ function harness({reducedMotion=true}={}) {
     FormData: class extends URLSearchParams { constructor(form) { super(); for (const n of form.querySelectorAll('[name]')) if (!n.disabled) this.append(n.name, n.value); } },
     fetch(url, options) { return new Promise((resolve, reject) => requests.push({url, options, resolve, reject})); },
   };
+  if(initialDrawer)body.append(initialDrawer);
   vm.runInNewContext(source, context, {filename: 'drawer-stack.js'});
   function respond(index, {status = 200, tree = fragment(), json, readonly = false} = {}) {
     const key = 'fixture-' + ++pageID; const page = el('document', {}, [tree]); pages.set(key, page);
@@ -413,4 +414,33 @@ test('explicit initial focus wins over earlier buttons and inputs', async () => 
   tree.querySelector('form').append(preferred); h.respond(0, {tree}); await pending;
   const child = h.remote(); assert.equal(preferred.focused, true);
   assert.notEqual(child.querySelector('button').focused, true); assert.notEqual(child.querySelector('input').focused, true);
+});
+
+test('market preview replaces only its child form and query-again uses the submitter action', async () => {
+ const h=harness(),parent=h.native(),draft=parent.querySelector('input');draft.value='unsaved parent';
+ const link=h.link(parent,'','market-editor');link.href='/admin/market?dialog=market-editor';
+ const loading=h.api.open(link);const tree=fragment();tree.id='market-editor';tree.querySelector('form').setAttribute('data-drawer-step','');h.respond(0,{tree});await loading;
+ const child=h.remote(),original=child.querySelector('form');submit(h,original);
+ const preview=fragment();preview.id='market-editor';preview.querySelector('form').setAttribute('data-drawer-step','');preview.querySelector('input').value='confirmed model';h.respond(1,{tree:preview});await settle();
+ const form=child.querySelector('form');assert.notEqual(form,original);assert.equal(form.querySelector('input').value,'confirmed model');assert.equal(draft.value,'unsaved parent');
+ const button=el('button',{name:'query_again',formaction:'/admin/market/preview'});button.value='1';form.append(button);
+ h.api.submit({target:form,submitter:button,preventDefault(){}});
+ assert.equal(h.requests[2].url,'/admin/market/preview');assert.equal(h.requests[2].options.body.get('query_again'),'1');
+ h.respond(2,{tree:fragment()});await settle();assert.equal(child.open,true);assert.equal(parent.open,true);
+});
+test('market creation selects a reused quote in a standalone asset form without duplicates', async () => {
+ const h=harness(),form=el('form'),select=el('select',{name:'market_item_id'}),option=el('option');option.value='shared';option.textContent='Shared';select.append(option);form.append(select);h.body.append(form);
+ const link=el('a',{href:'/admin/market?dialog=market-editor','data-drawer-target':'market-editor'});form.append(link);
+ const pending=h.api.open(link);h.respond(0);await pending;const child=h.remote();submit(h,child.querySelector('form'));
+ h.respond(1,{json:{kind:'market-item',id:'shared',name:'Shared',enabled:true}});await settle();
+ assert.equal(select.value,'shared');assert.equal(select.options.length,1);assert.equal(child.isConnected,false);
+});
+
+test('an already-open SSR market drawer registers before its first submit', async()=>{
+ const dialog=fragment();dialog.id='market-editor';dialog.open=true;
+ const form=dialog.querySelector('form');form.method='post';form.action='/admin/market/discover';form.setAttribute('data-drawer-step','');
+ const h=harness({initialDrawer:dialog});const button=el('button',{name:'action'});button.value='find';form.append(button);
+ assert.equal(h.api.submit({target:form,submitter:button,preventDefault(){}}),true);
+ assert.equal(h.requests.length,1);assert.equal(h.requests[0].options.body.get('action'),'find');
+ h.respond(0,{tree:fragment()});await settle();assert.equal(dialog.open,true);
 });

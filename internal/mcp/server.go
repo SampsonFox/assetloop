@@ -24,6 +24,7 @@ type Identity struct {
 type Authenticate func(context.Context, *http.Request) (Identity, error)
 
 type Services struct {
+	Market         *application.MarketService
 	Catalog        *application.CatalogService
 	Specifications *application.SpecificationService
 	Lifecycle      *application.LifecycleService
@@ -55,6 +56,7 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	registerMedia(server, services)
 	registerConfiguration(server, services)
 	registerImport(server, services)
+	registerMarket(server, services)
 	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, &sdk.StreamableHTTPOptions{Stateless: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -72,8 +74,12 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	})
 }
 
-func register[I any](server *sdk.Server, name, description, scope string, capability application.Capability, run func(context.Context, application.Principal, I) (any, error)) {
-	sdk.AddTool(server, &sdk.Tool{Name: name, Description: description, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: scope == ScopeRead}},
+func register[I any](server *sdk.Server, name, description, scope string, capability application.Capability, run func(context.Context, application.Principal, I) (any, error), readOnlyOverride ...bool) {
+	readOnly := scope == ScopeRead
+	if len(readOnlyOverride) > 0 {
+		readOnly = readOnlyOverride[0]
+	}
+	sdk.AddTool(server, &sdk.Tool{Name: name, Description: description, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: readOnly}},
 		func(ctx context.Context, _ *sdk.CallToolRequest, input I) (*sdk.CallToolResult, Result, error) {
 			identity, ok := ctx.Value(identityKey{}).(Identity)
 			allowed := false
@@ -99,6 +105,14 @@ func register[I any](server *sdk.Server, name, description, scope string, capabi
 				return failure("not_found", "The requested resource does not exist.", false)
 			case errors.Is(err, application.ErrModel3DReferenced):
 				return failure("referenced", "The resource is still referenced.", false)
+			case errors.Is(err, application.ErrMarketUnavailable), errors.Is(err, application.ErrMarketAuth):
+				return failure(application.MarketErrorCode(err), "Market provider is not configured or its authorization failed.", false)
+			case errors.Is(err, application.ErrMarketDraft), errors.Is(err, application.ErrMarketSelectionChanged), errors.Is(err, application.ErrMarketMismatch), errors.Is(err, application.ErrMarketScope), errors.Is(err, application.ErrMarketProductGone):
+				return failure(application.MarketErrorCode(err), "Read current product specifications and preview the matched market scope again before confirming.", false)
+			case errors.Is(err, application.ErrMarketBusy), errors.Is(err, application.ErrMarketTemporary), errors.Is(err, application.ErrMarketRateLimit):
+				return failure(application.MarketErrorCode(err), "Market operation is temporarily unavailable; retry with the same request key.", true)
+			case errors.Is(err, application.ErrMarketInvalid):
+				return failure(application.MarketErrorCode(err), "The market query or provider response is invalid.", false)
 			case errors.Is(err, application.ErrAlreadyVoided):
 				return failure("conflict", "This event is already voided. Read current history before issuing a new correction.", false)
 			default:

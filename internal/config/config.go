@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -24,7 +25,12 @@ type Blob struct {
 
 type OSS struct{ Endpoint, Region, Bucket, AccessKeyID, AccessKeySecret, PathPrefix string }
 
+type Market struct {
+	Token string
+}
+
 type Config struct {
+	Market      Market
 	Environment string
 	HTTPAddr    string
 	LogLevel    string
@@ -41,6 +47,7 @@ type MCP struct {
 
 func Load(dotenvPath string) (Config, error) {
 	values := map[string]string{
+		"ZHUANZHUAN_MCP_TOKEN":     "",
 		"APP_ENV":                  "local",
 		"HTTP_ADDR":                "127.0.0.1:8080",
 		"LOG_LEVEL":                "info",
@@ -57,6 +64,10 @@ func Load(dotenvPath string) (Config, error) {
 		"ALIYUN_OSS_ACCESS_KEY_ID": "", "ALIYUN_OSS_ACCESS_KEY_SECRET": "", "ALIYUN_OSS_PATH_PREFIX": "",
 	}
 	if err := loadDotenv(dotenvPath, values); err != nil {
+		return Config{}, err
+	}
+	// A separate ignored provider file is useful for existing local installs.
+	if err := loadDotenv(filepath.Join(filepath.Dir(dotenvPath), ".env.zhuanzhuan.local"), values); err != nil {
 		return Config{}, err
 	}
 	for key := range values {
@@ -102,6 +113,7 @@ func Load(dotenvPath string) (Config, error) {
 	}
 
 	return Config{
+		Market:      Market{Token: strings.TrimSpace(values["ZHUANZHUAN_MCP_TOKEN"])},
 		Environment: values["APP_ENV"],
 		HTTPAddr:    values["HTTP_ADDR"],
 		LogLevel:    values["LOG_LEVEL"],

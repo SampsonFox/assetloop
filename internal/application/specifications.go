@@ -35,6 +35,7 @@ type SaveModelSpecification struct {
 }
 type ModelConfigurationDetails struct{ CategoryID, Name string }
 type SaveSpecificationAsset struct {
+	MarketItemID *string
 	// Nil preserves the binding; an empty value explicitly restores inheritance.
 	ResourceID                                                     *string
 	ID, ModelID, DisplayName, SerialNumber, PurchaseChannel, Notes string
@@ -321,6 +322,21 @@ func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, c
 				return err
 			}
 			result.Model3DResourceID = id
+		}
+		if cmd.MarketItemID != nil {
+			id := *cmd.MarketItemID
+			if id != "" {
+				if err := validID("market item ID", id); err != nil {
+					return err
+				}
+				if _, err := store.GetMarketItem(ctx, actor.TenantID, id); err != nil {
+					return err
+				}
+			}
+			if err := store.BindAssetMarket(ctx, actor.TenantID, result.ID, id); err != nil {
+				return err
+			}
+			result.MarketItemID = id
 		}
 		state.HydrateSelection(&result, ids)
 		return nil

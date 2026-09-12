@@ -5,7 +5,7 @@ const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 test('drawer actions have breathing room and the shell requests the updated stylesheet', () => {
   assert.match(read('./static/app.css'), /\.drawer-heading-actions \{[^}]*gap:12px/);
-  assert.match(read('./templates/base.html'), /app\.css\?v=asset-resource-choice-1/);
+  assert.match(read('./templates/base.html'), /app\.css\?v=market-discovery-2/);
 });
 
 test('appearance reset has separation from transfer panels', () => {
@@ -13,7 +13,7 @@ test('appearance reset has separation from transfer panels', () => {
   assert.match(read('./static/app.css'), /\.transfer-heading \{[^}]*margin-bottom:16px/);
 });
 test('icon actions retain accessible names and tooltips while tabs retain text', () => {
-  for (const name of ['specifications', 'resources', 'resource', 'event_types', 'catalog_drawers', 'appearance']) {
+  for (const name of ['specifications', 'resources', 'resource', 'event_types', 'catalog_drawers', 'appearance', 'market']) {
     const html = read(`./templates/${name}.html`);
     const actions = [...html.matchAll(/<(?:a|button)\b([^>]+)>{{template "ui-icon" "[^"]+"}}/g)];
     assert.ok(actions.length >= 2, name);
@@ -82,3 +82,7 @@ test('resource layout combines file metadata and preserves full attribution on d
   assert.match(read('./static/app.css'), /resource-name-col \{ width:36%/);
   assert.match(read('./static/app.css'), /@media \(max-width:700px\)/);
 });
+
+test("market discovery preserves icon labels, explicit scope and the refreshed list filter",()=>{const html=read("./templates/market.html");assert.match(html,/name="accept_scope" value="1" required/);assert.match(html,/name="candidate"/);assert.match(html,/market.product_scope_help/);assert.match(read("./static/drawer-stack.js"),/:scope > \.management-filters/);assert.doesNotMatch(html,/<img/);});
+
+test("market controls do not shadow native form routing properties",()=>{assert.doesNotMatch(read("./templates/market.html"),/name="(?:action|method|submit)"/);});

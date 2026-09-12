@@ -77,8 +77,8 @@ func Migrate(ctx context.Context, db *sql.DB, cfg config.Database) error {
 		dialect = goose.DialectSQLite3
 	}
 	provider, err := goose.NewProvider(dialect, db, migrationFS,
-		goose.WithExcludeNames([]string{specificationMigrationName, specificationContractMigrationName}),
-		goose.WithGoMigrations(specificationMigration(cfg.Driver), specificationContractMigration(cfg.Driver)))
+		goose.WithExcludeNames([]string{specificationMigrationName, specificationContractMigrationName, marketMigrationName, marketSelectionMigrationName}),
+		goose.WithGoMigrations(specificationMigration(cfg.Driver), specificationContractMigration(cfg.Driver), marketMigration(cfg.Driver), marketSelectionMigration(cfg.Driver)))
 	if err != nil {
 		return fmt.Errorf("initialize migrations: %w", err)
 	}

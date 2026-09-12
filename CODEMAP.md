@@ -2,7 +2,7 @@
 
 Purpose: give agents and contributors the smallest useful reading set before they search the repository. Keep this file concise and update it whenever paths or ownership change.
 
-Status: v0.1 foundation plus authentication/RBAC, asset catalog, append-only lifecycle, and product-model 3D media vertical slices are implemented. MCP is in development (see `docs/MCP_IMPLEMENTATION.md`); general attachments, market and scheduler remain later slices.
+Status: Core assets, lifecycle, media and OAuth MCP are implemented. Zhuanzhuan daily quotes, FX and scheduler are integrated with 10 semantic MCP market tools on the development branch. General evidence attachments remain later work.
 
 ## Authority map
 
@@ -29,7 +29,7 @@ the named full-element scenario calls the shared image scenario on both database
 
 | Path | Responsibility |
 |---|---|
-| `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, and Windows double-click launch handling |
+| `cmd/assetloop/` | Single binary; defaults to `serve` (SQLite check/upgrade then Web), explicit `migrate`, `refresh-market`, `install-scheduler`, and Windows double-click launch handling |
 | `internal/web/` | HTTP transport; asset-list-first SSR UI, server-filtered/sorted/paged tables, detail-style asset create/edit pages, inherited GLB viewer, code-defined zh-CN/en language packs, account menu, semantic light/dark themes with user accent palettes, shared catalog drawers, inline custom lifecycle event types, and progressively disclosed FX evidence forms |
 | `internal/web/resources.go`, `resource_tags.go`, `resources_i18n.go`, `templates/resources.html`, `templates/resource.html` | Paged 3D library with shared list backdrop and wide preview/edit drawer; atomic metadata/tag save, attribution, reference navigation and deletion retry |
 | `internal/web/shared_rename.test.mjs` | Conditional shared-name confirmation, no-JS confirmation fallback and unified resource editor form coverage |
@@ -50,7 +50,7 @@ the named full-element scenario calls the shared image scenario on both database
 | `internal/web/oauth.go`, `templates/oauth.html`, `oauth_test.go` | Account-authenticated consent and per-user authorized-client revocation; native forms reuse CSRF and login continuation; bilingual content inherits existing theme |
 | `internal/mcp/oauth.go`, `oauth_test.go` | OAuth discovery/token/revocation HTTP formatting, configured-origin/Host guard and bearer resolver; real SQLite HTTP exchange/revocation tests; consent UI and runtime mounting pending |
 | `internal/web/login_return_test.go` | Safe login continuation for OAuth consent, preserving retries and existing sessions while rejecting external and encoded redirect bypasses |
-| `internal/scheduler/` | Refresh-job entry adapters |
+| `cmd/assetloop/market.go`, `market_scheduler.go` | Shared refresh CLI and Windows task installer; OS task invokes the same binary |
 | `internal/application/` | Authentication, catalog, model-media, lifecycle use cases, validation, and inward ports shared by Web and semantic MCP writes |
 | `internal/application/oauth.go`, `oauth_test.go` | OAuth application policy and persistence port: registered callbacks, S256 PKCE, audience/scopes, code exchange, rotating refresh, replay revocation and current-role authorization; HTTP wiring pending |
 | both Store `oauth.go` / `oauth.sql`, paired `00015_oauth.sql` | Hash-only OAuth credentials, tenant-bound grants and serialized token exchanges; `internal/integration/oauth_test.go` covers cross-connection persistence and replay; `internal/store/oauth_migration_test.go` covers schema-14 upgrade rollback/retry |
@@ -70,8 +70,8 @@ the named full-element scenario calls the shared image scenario on both database
 | `internal/blob/local/` | Local filesystem BlobStore | blob port |
 | `internal/blob/aliyun/` | Aliyun OSS BlobStore | blob port, Aliyun SDK |
 | `internal/blob/key_mapper.go` | Shared tenant-scoped logical object keys | application key-mapper port |
-| `internal/market/onebound/` | OneBound request/response adapter | market port |
-| `internal/market/manual/` | Manual/imported market observations | market port |
+| `internal/market/zhuanzhuan/` | Streamable HTTP MCP market_price adapter and recorded quote fixture | MarketDataProvider |
+| `internal/market/frankfurter/` | v2 blended daily rates, prior-date selection and exact decimal mapping | FXProvider |
 | `migrations/sqlite/` | SQLite forward migrations | none |
 | `migrations/postgres/` | PostgreSQL forward migrations | none |
 
@@ -88,14 +88,20 @@ catalog transaction suite), and the expanded full-element MCP import walkthrough
 |---|---|---|
 | `BlobStore` | `internal/application/ports.go` | Local, Aliyun OSS |
 | `ObjectKeyMapper` | `internal/blob/key_mapper.go` | one shared mapper |
-| `MarketDataProvider` | `internal/application/ports.go` | OneBound, Manual |
-| `FXProvider` | `internal/application/ports.go` | selected FX source |
+| `MarketDataProvider` | `internal/application/market_ports.go` | Zhuanzhuan |
+| `FXProvider` | `internal/application/market_ports.go` | Frankfurter v2 |
+| `MarketStore` | `internal/application/market_ports.go` | SQLite, PostgreSQL |
 | `AuthStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `CatalogStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `LifecycleStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 | `ModelMediaStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 
 ## Regression spine
+
+Market discovery: `internal/application/market_discovery.go` owns principal-scoped drafts, candidate/detail selection, explicit specification prefill, quote-scope acceptance and save-time revalidation; `ProductDiscoveryProvider` is implemented by `internal/market/zhuanzhuan/discovery.go`. JSON/text fixtures cover live search and specification details. Paired 00016 adds immutable optional selection snapshots; `market_selection_migration_test.go` verifies old-price and binding preservation. Web management uses the existing market drawer through `/admin/market/discover`.
+
+Market quotes: `internal/application/market.go` owns preview/create/bind/refresh, maximum-price policy, FX repair, daily selection and 90-day tail. Both Store `market.sql`/`market.go` adapters implement paired 00015 migrations and fenced leases. `storetest/market.go`, `market_migration_test.go` and the full-element scenario cover sharing, isolation, daily idempotency, failures, concurrency, locking and upgrade preservation. `internal/web/market.go`, `market_i18n.go`, `templates/market.html`, `market_summary.html` provide management and asset integration. Both database scenarios and 14→15 upgrades have executed successfully; PostgreSQL used an isolated temporary 17-alpine container. Provider evidence and operation instructions: `docs/market-integration.md`.
+
 
 Specification-tag refactor: `internal/domain/specifications.go` owns optional typed selections, retained disabled values, per-model appearance overrides and deterministic confirmed-rule matching. Paired `00013` SQL files define the direct asset/model relation and typed associations; `internal/store/specification_upgrade.go` executes their DDL and Unicode-aware legacy backfill in one Goose transaction. `specification_migration_test.go` covers rollback/retry, old colors/descriptions, conflicting GLBs and preserved history. `internal/application/specifications.go`, `specification_queries.go` and `specification_ports.go` provide transactional tag/model/asset/resource maintenance, references, candidates and effective appearance resolution. Both Store `specifications.go` adapters use generated `specification.sql` queries and the shared tenant write lock. `storetest/specifications.go` tests these application paths over both adapters (PostgreSQL execution needs its test DSN). Tag Web integration and migrations 13–14 are deployed to local 8080; development evidence is recorded in `docs/specification-acceptance.md`; PostgreSQL live validation remains a UAT gate.
 
@@ -142,7 +148,7 @@ covers atomic rollback; Web transport retains ordinary form and drawer save path
 | Add database field | both migration directories | both sqlc query directories, Store conformance tests |
 | Add attachment behavior | blob port and key mapper | local and Aliyun adapters, attachment application service |
 | Change product 3D media | `internal/application/model_media.go` | resource library, model/appearance/asset bindings, Blob adapters, both Store mappings, Web asset/catalog/resource templates |
-| Add market provider | market port | provider adapter plus shared normalization pipeline |
+| Add market provider | market port | provider adapter plus application quote policy |
 | Change MCP tool | `internal/mcp/` | called application service; never inspect Store unless service contract changes |
 | Configure/use MCP | `docs/MCP.md` | `docs/MCP_IMPLEMENTATION.md` for current verification evidence and remaining acceptance |
 | Codex MCP setup/troubleshooting and skill source notes | `docs/CODEX_MCP_ACCEPTANCE.md` | Verified native-tool lifecycle, authentication/connection layers, Windows process lifetime and remaining cleanup |
@@ -184,7 +190,7 @@ Browser -> Web handler -> application use case -> Store
 
 Market refresh:
 Scheduler/CLI -> refresh use case -> MarketDataProvider
-              -> normalization -> FX conversion -> Store
+              -> quote policy -> dated FX conversion -> Store
 
 Attachment read:
 Web/MCP -> attachment use case -> attachment metadata Store
@@ -248,3 +254,22 @@ retaining/discarding drafts, upload changes and duplicate close requests.
 Standalone form pages use the same visible discard prompt for ordinary same-tab
 links (including Return/Cancel); confirmed navigation bypasses the duplicate
 native unload warning. Browser refresh/tab close retains native unload protection.
+
+## Combined market / MCP development slice
+
+`internal/mcp/market.go` exposes 10 market tools and public DTOs; `server.go`
+registers them with existing OAuth scopes and safe market errors. `main.go`
+wires one shared MarketService into Web, MCP and startup collection.
+`internal/application/market_management.go` adds receipt-backed create/update/
+bind/refresh and authorized series-history reads; provider calls happen outside
+management transactions. Store market writes reuse only a matching tenant's
+management transaction. Late duplicate refreshes release their own fenced lease.
+
+Accepted OAuth/receipts/images retain 00015–00017. Market SQL is now paired
+00018/00019. `internal/store/market_upgrade.go` owns the forward compatibility
+bridge for already-used market-branch 15/16 databases; it preserves Goose history,
+prices and selection snapshots while supplying missing OAuth/receipt tables.
+Migration tests cover old market 15/16, accepted MCP 17, rollback and retry.
+`internal/integration/mcp_market_test.go` extends the same OAuth full-element
+scenario to all 50 tools, Web-visible prices and unchanged lifecycle costs;
+the transaction suite covers failed receipts, cross-connection replay and policy.

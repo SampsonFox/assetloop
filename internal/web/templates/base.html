@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   {{if eq .Theme "dark"}}<meta name="theme-color" content="#111714">{{else if eq .Theme "light"}}<meta name="theme-color" content="#f7f8f5">{{else}}<meta name="theme-color" content="#f7f8f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111714" media="(prefers-color-scheme: dark)">{{end}}
   <title>{{.Title}} · {{t $s "app.name"}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=asset-resource-choice-1">
-  <script src="/static/app.js?v=event-type-create-option-1" defer></script>
-  <script src="/static/drawer-stack.js?v=drawer-width-1" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v=market-discovery-2">
+  <script src="/static/app.js?v=market-discovery-2" defer></script>
+  <script src="/static/drawer-stack.js?v=market-discovery-2" defer></script>
   <script type="module" src="/static/tag-transfer.js"></script>
   {{if .SettingsSection}}<script src="/static/settings.js" defer></script>{{end}}
 </head>
@@ -45,6 +45,7 @@
 {{if ne .Principal.Role "viewer"}}<a data-settings-tab="catalog" href="/admin/catalog" {{if eq .SettingsSection "catalog"}}aria-current="page"{{end}}>{{t $s "settings.catalog"}}</a>{{end}}
 <a data-settings-tab="tags" href="/admin/tags" {{if eq .SettingsSection "tags"}}aria-current="page"{{end}}>{{t $s "settings.tags"}}</a>
 <a data-settings-tab="3d" href="/admin/3d" {{if eq .SettingsSection "3d"}}aria-current="page"{{end}}>{{t $s "settings.resources"}}</a>
+<a data-settings-tab="market" href="/admin/market" {{if eq .SettingsSection "market"}}aria-current="page"{{end}}>{{t $s "market.title"}}</a>
 <a data-settings-tab="event-types" href="/admin/event-types" {{if eq .SettingsSection "event-types"}}aria-current="page"{{end}}>{{t $s "settings.events"}}</a>
 </nav>
 <div class="settings-feedback" hidden role="status" data-settings-feedback data-loading="{{t $s "settings.loading"}}" data-failure="{{t $s "settings.failure"}}" data-login="{{t $s "settings.login"}}" data-discard="{{t $s "common.discard_changes"}}"><span></span> <button type="button" class="link-button" data-settings-retry>{{t $s "settings.retry"}}</button><a href="/login" data-settings-login hidden>{{t $s "settings.login_link"}}</a></div>
