@@ -222,4 +222,4 @@ the business wrapper. Missing/expired/revoked credentials require login, not a n
 mutation key. Unexpected infrastructure errors do not expose raw internal details.
 
 No tools provide arbitrary SQL, filesystem access, account/member administration,
-general attachment upload, or market integration.
+general attachment upload, or hypothetical sale/portfolio market valuation.

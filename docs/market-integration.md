@@ -172,3 +172,32 @@ See [MCP tool contract](MCP.md#secondhand-prices) for the ten added market tools
 They share the exact Web price/FX/lease rules and add durable successful-command
 replay. Search/preview are not persistent business writes; saving requires actual
 matched-scope acceptance and revalidation. No market value changes lifecycle costs.
+
+### Combined validation evidence
+
+Application checkpoint: `6aa492f072157a81476a48caaabd5961dbab2eea`, merging accepted
+MCP `e8ab8f9` and market `110b621` on `dev-market-mcp`.
+[Development CI](https://github.com/SampsonFox/assetloop/actions/runs/34688715060)
+completed successfully on 2026-09-12. `REQUIRE_POSTGRES_TEST=true` was set:
+PostgreSQL 17 and SQLite full Go/Store/upgrade tests passed, followed by a separate
+unfiltered `TestFullElementScenario`, 142/142 Web tests, sqlc cleanliness, vet and
+full-history secret-scan. Local PostgreSQL was not used or counted as a pass.
+
+The combined OAuth scenario calls all 50 tools over SDK HTTP, verifies MCP prices
+are visible in authenticated Web, retains exact lifecycle totals, and proves
+revocation still blocks MCP while Web remains signed in. Tests also cover explicit
+scope acceptance, changed specifications, shared history, failed refresh retention,
+receipt rollback, restart/cross-connection replay, role/scope/tenant denial, and
+a late duplicate releasing its own newly acquired lease. Old market 15/16 and
+accepted MCP 17 upgrade paths preserve records; legacy bridge collision/retry is
+exercised on both databases. An initial old-market upgrade failure and late-lease
+failure were reproduced before their fixes.
+
+Local full Go suite and vet passed. A freshly compiled Windows binary started
+Web and OAuth/MCP together with isolated temporary SQLite data; `/healthz` and
+`/setup` returned 200, MCP rejected unauthenticated requests, and schema 19 had
+both OAuth/management/media and market tables. The smoke process was stopped.
+Providers in this combined automated run use deterministic secret-free fixtures;
+this is not a new live Zhuanzhuan or native-client manual acceptance claim.
+Documentation follow-up changes do not modify this tested application tree.
+This development checkpoint does not promote UAT or production.
