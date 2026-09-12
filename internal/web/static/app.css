@@ -154,6 +154,8 @@ table { width:100%; border-collapse:collapse; } th,td { padding:12px 10px; borde
 .button { display:inline-block; width:auto; padding:10px 15px; border:1px solid var(--accent); border-radius:10px; background:var(--accent); color:var(--accent-contrast); font-weight:800; }
 button.auto { width:auto; }
 button.secondary { border-color:var(--line); background:var(--field); color:var(--accent); }
+.button.danger,button.danger.auto { color:var(--danger); background:var(--danger-bg); border-color:var(--danger-line); }
+.button.danger:hover,button.danger.auto:hover { color:var(--danger); background:var(--danger-bg); border-color:var(--danger); }
 .view-switcher { display:flex; gap:3px; padding:3px; border:1px solid var(--line); border-radius:11px; background:var(--field); }
 .view-switcher a { padding:6px 11px; border-radius:8px; color:var(--muted); }
 .view-switcher a.is-active { background:var(--accent-soft); color:var(--accent); font-weight:800; }

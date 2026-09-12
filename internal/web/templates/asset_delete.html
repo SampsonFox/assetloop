@@ -3,5 +3,5 @@
 <p>{{t $s "asset.delete_warning"}}</p><p class="muted">{{t $s "asset.delete_shared"}}</p>
 <form method="post" action="/assets/{{.Asset.ID}}/delete" class="stack"><input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 <label class="checkbox"><input type="checkbox" name="confirm_delete" value="yes" required>{{t $s "asset.delete_confirm"}}</label>
-<div class="heading-actions"><a class="button secondary auto" href="/assets/{{.Asset.ID}}">{{t $s "common.cancel"}}</a><button class="danger auto" type="submit">{{t $s "asset.delete_permanent"}}</button></div></form></section>
+<div class="heading-actions"><a class="auto" href="/assets/{{.Asset.ID}}">{{t $s "common.cancel"}}</a><button class="danger auto" type="submit">{{t $s "asset.delete_permanent"}}</button></div></form></section>
 {{end}}
