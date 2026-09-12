@@ -29,7 +29,7 @@
 
       {{if .MarketEnabled}}<div class="form-field"><div class="field-heading"><label for="asset-market">{{t $s "market.reference"}}</label><a href="/admin/market?dialog=market-editor" data-drawer-target="market-editor" data-market-prefill>{{t $s "market.create"}}</a></div><select id="asset-market" name="market_item_id"><option value="">{{t $s "market.unbound"}}</option>{{range .Market.Items}}<option value="{{.ID}}" {{if eq $.Asset.MarketItemID .ID}}selected{{end}}>{{.Name}}{{if not .Enabled}} · {{t $s "types.disabled"}}{{end}}</option>{{end}}</select><p class="muted">{{t $s "market.shared"}}</p></div>{{end}}
       <div class="asset-editor-fields">
-        <label>{{t $s "assets.display_name"}}<input name="display_name" value="{{.Asset.DisplayName}}" required maxlength="200" placeholder="{{t $s "assets.display_placeholder"}}"></label>
+        <label>{{t $s "assets.display_name"}}<input name="display_name" value="{{.Asset.DisplayName}}" maxlength="200" placeholder="{{t $s "assets.display_placeholder"}}"></label>
         <label>{{t $s "assets.serial_number"}}<input name="serial_number" value="{{.Asset.SerialNumber}}" maxlength="200"></label>
         <label>{{t $s "assets.purchase_channel"}}<input name="purchase_channel" value="{{.Asset.PurchaseChannel}}" maxlength="160"></label>
         <label class="wide">{{t $s "common.notes"}}<textarea name="notes" maxlength="2000" rows="4">{{.Asset.Notes}}</textarea></label>

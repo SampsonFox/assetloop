@@ -284,7 +284,7 @@ func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, c
 			required    bool
 			target      *string
 		}{
-			{"display name", cmd.DisplayName, 200, true, &result.DisplayName}, {"serial number", cmd.SerialNumber, 200, false, &result.SerialNumber},
+			{"display name", cmd.DisplayName, 200, false, &result.DisplayName}, {"serial number", cmd.SerialNumber, 200, false, &result.SerialNumber},
 			{"purchase channel", cmd.PurchaseChannel, 160, false, &result.PurchaseChannel}, {"notes", cmd.Notes, 2000, false, &result.Notes},
 		} {
 			value, err := catalogText(field.name, field.value, field.max, field.required)

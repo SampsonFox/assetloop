@@ -46,6 +46,11 @@ func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
 		}
 	}
 	switch tool.Name {
+	case "save_asset":
+		if slices.Contains(input.Required, "display_name") {
+			t.Fatal("custom item name must be optional")
+		}
+		assertMeaning(decode(input.Properties["display_name"]).Description, "Optional custom", "model name", "omission clears")
 	case "record_event":
 		assertMeaning(tool.Description, "list_event_types", "notes", "purchase")
 		assertMeaning(decode(input.Properties["type_id"]).Description, "reusable", "not a product")

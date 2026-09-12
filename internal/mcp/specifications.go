@@ -38,7 +38,7 @@ type SaveAssetInput struct {
 	RequestKey      string   `json:"request_key"`
 	ID              string   `json:"id,omitempty" jsonschema:"Omit to create a new item; provide existing ID to update."`
 	ModelID         string   `json:"model_id"`
-	DisplayName     string   `json:"display_name"`
+	DisplayName     string   `json:"display_name,omitempty" jsonschema:"Optional custom item name. Omit or send empty to use the model name in Web titles; do not assemble model/specification tags into a name. On update, omission clears the custom name."`
 	SerialNumber    string   `json:"serial_number"`
 	PurchaseChannel string   `json:"purchase_channel"`
 	Notes           string   `json:"notes"`

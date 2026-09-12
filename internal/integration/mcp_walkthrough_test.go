@@ -59,6 +59,8 @@ func runMCPToolWalkthrough(t *testing.T, call func(string, any, any), resourceID
 	check("save_model_configuration", args{"request_key": "walk-model-config", "model_id": modelID, "tag_ids": []string{tagID}, "appearance_overrides": args{}}, modelID)
 	check("get_model_configuration", args{"id": modelID}, modelID, tagID)
 	itemID := id(invoke("save_asset", args{"request_key": "walk-item", "model_id": modelID, "display_name": "Walkthrough item", "serial_number": "WALK-001", "purchase_channel": "test", "notes": "Disposable walkthrough", "tag_ids": []string{tagID}}))
+	check("get_asset", args{"id": itemID}, itemID, "Walkthrough item", "WALK-001", tagID)
+	check("save_asset", args{"request_key": "walk-clear-name", "id": itemID, "model_id": modelID, "serial_number": "WALK-001", "purchase_channel": "test", "notes": "Disposable walkthrough", "tag_ids": []string{tagID}}, itemID)
 	check("get_asset", args{"id": itemID}, itemID, "WALK-001", tagID)
 	check("list_assets", args{"query": "WALK-001"}, itemID)
 	check("save_3d_resource_metadata", args{"request_key": "walk-resource", "resource_id": resourceID, "tag_ids": []string{tagID}, "category_ids": []string{categoryID}, "details": args{"name": "Walkthrough GLB", "source_url": "", "author": "Fixture", "license": "CC0"}}, resourceID)

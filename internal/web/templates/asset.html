@@ -1,10 +1,10 @@
 {{define "content"}}{{template "asset-detail-content" .}}{{end}}
 {{define "fragment-asset-detail"}}{{$s := .Strings}}
-<dialog data-management-drawer class="drawer" id="asset-detail" aria-labelledby="asset-detail-title"><div class="drawer-panel"><header class="drawer-heading"><h2 id="asset-detail-title">{{.Asset.DisplayName}}</h2><div class="drawer-heading-actions"><button type="button" class="secondary auto" data-dialog-close>{{t $s "common.close"}}</button>{{if .CanManageCatalog}}<a class="button auto" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor">{{t $s "assets.edit"}}</a>{{end}}</div></header><div class="drawer-body">{{template "asset-detail-profile" .}}</div></div></dialog>
+<dialog data-management-drawer class="drawer" id="asset-detail" aria-labelledby="asset-detail-title"><div class="drawer-panel"><header class="drawer-heading"><h2 id="asset-detail-title">{{assetTitle .Asset}}</h2><div class="drawer-heading-actions"><button type="button" class="secondary auto" data-dialog-close>{{t $s "common.close"}}</button>{{if .CanManageCatalog}}<a class="button auto" href="/assets/{{.Asset.ID}}/edit" data-drawer-target="asset-editor">{{t $s "assets.edit"}}</a>{{end}}</div></header><div class="drawer-body">{{template "asset-detail-profile" .}}</div></div></dialog>
 {{end}}
 {{define "asset-detail-content"}}{{$s := .Strings}}
 <div class="page-heading asset-detail-heading">
-  <h1>{{.Asset.DisplayName}}</h1>
+  <h1>{{assetTitle .Asset}}</h1>
 	<div class="heading-actions asset-detail-actions">
 		<a class="icon-button" href="/" aria-label="{{t $s "common.back_assets"}}" title="{{t $s "common.back_assets"}}">
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>

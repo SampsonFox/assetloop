@@ -46,7 +46,7 @@ func (s *Server) saveDrawerAsset(w http.ResponseWriter, r *http.Request) {
 		s.renderAssetMutationError(w, r, actor, assetFromForm(r, id), err)
 		return
 	}
-	if drawerSaved(w, "asset", asset.ID, asset.DisplayName, true) {
+	if drawerSaved(w, "asset", asset.ID, assetTitle(asset), true) {
 		return
 	}
 	http.Redirect(w, r, "/assets/"+asset.ID, http.StatusSeeOther)

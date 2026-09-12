@@ -193,6 +193,7 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 	}
 	templates := map[string]*template.Template{}
 	funcs := template.FuncMap{
+		"assetTitle": assetTitle,
 		"derefMinor": func(v *int64) int64 {
 			if v == nil {
 				return 0
@@ -835,7 +836,7 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 	}
 	s.render(w, status, "asset", pageData{
 		Market: marketPageData{Latest: latest}, MarketEnabled: s.options.Market != nil,
-		Title: asset.DisplayName, CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(), ImageURLs: s.imageURLs(r.Context(), principal, []domain.Asset{asset}),
+		Title: assetTitle(asset), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(), ImageURLs: s.imageURLs(r.Context(), principal, []domain.Asset{asset}),
 		Asset: &asset, CanManageCatalog: principal.Can(application.CapabilityManageCatalog), Events: result.Events,
 		Summary: result.Summary, Cost: cost, BaseCurrency: result.Summary.BaseCurrency, BaseCurrencyLocked: locked,
 		NowValue:           nowValue,
@@ -1877,4 +1878,12 @@ func formatRate(value int64) string {
 		return fmt.Sprintf("%d", whole)
 	}
 	return fmt.Sprintf("%d.%s", whole, fraction)
+}
+
+// assetTitle keeps an optional custom name separate from its model fallback.
+func assetTitle(asset domain.Asset) string {
+	if name := strings.TrimSpace(asset.DisplayName); name != "" {
+		return name
+	}
+	return asset.Model
 }
