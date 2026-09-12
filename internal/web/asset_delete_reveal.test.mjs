@@ -65,12 +65,26 @@ test('bottom anchor resists a light wheel pull and closes again on upward scroll
   p.wait(300);p.send('wheel',{deltaY:60});assert.equal(p.footer.hidden,true);
   p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.hidden,false);
 });
-test('scrollbar or keyboard return hides the footer; paused small pulls do not accumulate',()=>{
+test('passive scroll adjustments preserve the latch; keyboard return releases it and resets the pull',()=>{
   const p=page();p.bottom();p.wait(300);p.send('wheel',{deltaY:100});p.wait(300);p.send('wheel',{deltaY:140});assert.equal(p.footer.hidden,true);
   p.wait(50);p.send('wheel',{deltaY:100});assert.equal(p.footer.hidden,false);
-  p.root.scrollTop=1180;p.send('scroll');assert.equal(p.footer.hidden,true);
-  p.bottom();p.send('keydown',{key:'End'});assert.equal(p.footer.hidden,false);
+  p.root.scrollTop=1180;p.send('scroll');assert.equal(p.footer.hidden,false);
   p.send('keydown',{key:'Home'});assert.equal(p.footer.hidden,true);
+  p.bottom();p.wait(300);p.send('wheel',{deltaY:100});assert.equal(p.footer.hidden,true);
+});
+test('reveal remains latched through smooth scrolling, layout adjustment and downward momentum',()=>{
+  for(const reduced of [false,true]){
+    const p=page();if(reduced)p.reduced();p.bottom();p.wait(300);p.send('wheel',{deltaY:240});
+    p.root.scrollHeight=1900;
+    for(const top of [1220,1250,1230,1300,1295,1300]){
+      p.root.scrollTop=top;p.send('scroll');p.wait(30);p.send('wheel',{deltaY:20});assert.equal(p.footer.hidden,false);
+    }
+    p.wait(2000);p.send('scroll');assert.equal(p.footer.hidden,false);assert.equal(p.footer.calls.length,1);
+    p.send('wheel',{deltaY:-10});assert.equal(p.footer.hidden,true);
+    p.send('wheel',{deltaY:500});assert.equal(p.footer.hidden,true);
+    p.wait(300);p.send('wheel',{deltaY:60});assert.equal(p.footer.hidden,true);
+    p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.hidden,false);
+  }
 });
 test('line and page wheel units also cross the anchor',()=>{
   for(const values of [{deltaY:15,deltaMode:1},{deltaY:1,deltaMode:2}]){

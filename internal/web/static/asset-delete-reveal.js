@@ -12,7 +12,7 @@
     return true;
   };
   let revealed = false;
-  let wheelPull = 0, lastScrollTop = root.scrollTop;
+  let wheelPull = 0;
   function hide() {
     if (!revealed) return;
     revealed = false;
@@ -24,7 +24,6 @@
   function reveal(keyboard = false) {
     if (revealed) return;
     revealed = true;
-    lastScrollTop = root.scrollTop;
     footer.hidden = false;
     footer.scrollIntoView({block:'end', behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
     if (keyboard) footer.querySelector('a').focus({preventScroll:true});
@@ -33,8 +32,8 @@
   // Reaching the bottom cannot turn that same gesture into a reveal command.
   let bottomSince = atBottom() ? performance.now() : Infinity;
   window.addEventListener('scroll', () => {
-    if (root.scrollTop < lastScrollTop - 2) hide();
-    lastScrollTop = root.scrollTop;
+    // Scroll position also changes during smooth reveal, layout and browser
+    // anchoring. Only explicit upward input below may release the open latch.
     if (!atBottom()) bottomSince = Infinity;
     else if (!Number.isFinite(bottomSince)) bottomSince = performance.now();
   }, {passive:true});
