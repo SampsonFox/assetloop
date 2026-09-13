@@ -1,6 +1,6 @@
 (() => {
   const initialized = new WeakSet();
-  let active = null, pinned = false, timer;
+  let active = null, closing = null, pinned = false, timer;
   const close = () => {
     clearTimeout(timer);
     if (active) {
@@ -8,17 +8,27 @@
       const details = active.querySelector('.timeline-details');
       details.hidden = true;
       details.inert = true;
+      closing = details;
     }
     active = null;
     pinned = false;
   };
   const open = (item) => {
-    if (active !== item) close();
-    active = item;
     const details = item.querySelector('.timeline-details');
+    const previous = active ? active.querySelector('.timeline-details') : closing;
+    const top = previous && previous !== details ? item.getBoundingClientRect().top : null;
+    if (previous && previous !== details) {
+      close();
+      // A collapsing row above the target must not pull its heading upward.
+      // Settle that collapse before measuring; the new details still animate down.
+      previous.getAnimations().forEach(animation => animation.finish());
+    }
+    closing = null;
+    active = item;
     details.hidden = false;
     details.inert = false;
     item.querySelector('.timeline-trigger').setAttribute('aria-expanded', 'true');
+    if (top !== null) window.scrollBy({top:item.getBoundingClientRect().top - top, behavior:'instant'});
   };
   const initialize = () => { for (const item of document.querySelectorAll('[data-timeline-item]')) {
     if (initialized.has(item)) continue;
