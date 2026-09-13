@@ -285,8 +285,8 @@ Web asset_deletion.go and templates/asset_delete.html implement explicit confirm
 Regression spine: permissions_deletion_test.go in Web and integration, MCP permissions_test.go,
 plus the named full-element scenario and V19 upgrade preservation scenario.
 
-Asset deletion disclosure: static/asset-delete-reveal.js reveals the full-width footer only
-after a deliberate pull across the bottom threshold, latches open through passive scroll
-adjustments, and hides only on explicit upward input;
+Asset deletion disclosure: static/asset-delete-reveal.js keeps the footer in document flow
+behind a scroll anchor; progressive pulling uncovers an inert preview, release rebounds,
+and crossing the threshold latches it open until explicit upward input;
 keyboard and no-JS fallbacks remain. asset_delete_reveal.test.mjs covers wheel momentum,
-pull thresholds, repeated reveal/hide, touch, nested scroll and keyboard input.
+pull thresholds, preview/rebound, repeated reveal/hide, touch, nested scroll and keyboard input.
