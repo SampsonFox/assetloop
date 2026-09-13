@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -32,6 +33,13 @@ type RecordEvent struct {
 	Source            string
 	ExternalReference string
 	Notes             string
+
+	// RelatedAssetID is the optional neutral counterpart of this event on another
+	// existing asset of the same tenant. Absent (nil) means no relation; on a
+	// correction, nil preserves the existing relation and an explicit empty value
+	// clears it. The name and specification snapshot are always resolved from the
+	// tenant-owned target under the write lock, never from caller input.
+	RelatedAssetID *string `json:",omitempty"`
 }
 
 type CreateAssetEventType struct {
@@ -90,11 +98,20 @@ func (s *LifecycleService) record(ctx context.Context, actor Principal, cmd Reco
 	if !eventType.Enabled {
 		return domain.AssetEvent{}, NewInputError("validation.event_type_disabled")
 	}
+	// Paired trade-in types are evidence owned by the dedicated trade-in service.
+	// Creating one through the ordinary record path would produce an unpaired
+	// relation, so it is refused regardless of how the type was addressed.
+	if domain.IsTradeInSystemType(eventType.SystemCode) {
+		return domain.AssetEvent{}, NewInputError("validation.trade_in_route")
+	}
 	if err := s.validateLifecycle(ctx, actor, cmd.AssetID, eventType.SystemCode); err != nil {
 		return domain.AssetEvent{}, err
 	}
 	transaction, event, err := s.prepareEvent(ctx, actor, cmd, eventType, "")
 	if err != nil {
+		return domain.AssetEvent{}, err
+	}
+	if err := s.attachRelatedAsset(ctx, actor, cmd.RelatedAssetID, event.AssetID, &event); err != nil {
 		return domain.AssetEvent{}, err
 	}
 	if err := s.store.AppendAssetEvent(ctx, transaction, event); err != nil {
@@ -137,6 +154,12 @@ func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID
 	if original.IsVoided || original.Kind() == domain.AssetEventVoid {
 		return domain.AssetEvent{}, ErrAlreadyVoided
 	}
+	// A paired trade-in event is corrected, cancelled or re-linked only through
+	// its stable link ID; the ordinary replacement path must not leave one side of
+	// a pair pointing at a voided partner.
+	if original.TradeInLinkID != "" || domain.IsTradeInSystemType(original.Kind()) {
+		return domain.AssetEvent{}, NewInputError("validation.trade_in_route")
+	}
 	cmd.AssetID = original.AssetID
 	cmd.Type = original.Type
 	value := original.Type
@@ -166,6 +189,23 @@ func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID
 	transaction, replacement, err := s.prepareEvent(ctx, actor, cmd, eventType, original.ID)
 	if err != nil {
 		return domain.AssetEvent{}, err
+	}
+	// Omitted relation preserves the original reference and its snapshot without
+	// re-reading the target, so a preserved reference to a purged asset stays
+	// correctable. An explicit empty relation clears it; any other value is
+	// validated as a live same-tenant target.
+	switch {
+	case cmd.RelatedAssetID == nil:
+		replacement.RelatedAssetID = original.RelatedAssetID
+		replacement.RelatedAssetName = original.RelatedAssetName
+		replacement.RelatedAssetSpec = original.RelatedAssetSpec
+		// The original read projection already resolved whether the target is
+		// gone; the replacement must report the same surviving state.
+		replacement.RelatedAssetDeleted = original.RelatedAssetID != "" && original.RelatedAssetDeleted
+	default:
+		if err := s.attachRelatedAsset(ctx, actor, cmd.RelatedAssetID, replacement.AssetID, &replacement); err != nil {
+			return domain.AssetEvent{}, err
+		}
 	}
 	voidEvent := domain.AssetEvent{
 		ID: newID(), TenantID: actor.TenantID, AssetID: original.AssetID,
@@ -315,9 +355,14 @@ func (s *LifecycleService) EventTypes(ctx context.Context, actor Principal) ([]d
 	}
 	result := make([]domain.AssetEventTypeDefinition, 0, len(custom))
 	for _, item := range custom {
-		if item.SystemCode != domain.AssetEventVoid {
-			result = append(result, item)
+		// Only the technical void row stays hidden: it is internal append-only
+		// history, not a selectable user option. The two trade-in pairing types are
+		// selectable from the dedicated record form and are still refused by the
+		// ordinary record/correct paths.
+		if item.SystemCode == domain.AssetEventVoid {
+			continue
 		}
+		result = append(result, item)
 	}
 	return result, nil
 }
@@ -440,8 +485,47 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 		Type: domain.AssetEventType(eventType.Name), TypeID: eventType.ID, SystemType: eventType.SystemCode, BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency, FX: fx,
 		Notes: strings.TrimSpace(cmd.Notes), ReplacesEventID: replacesID, OccurredAt: occurredAt,
 		CreatedByUserID: actor.UserID, CreatedAt: createdAt,
+		// The grouping-transaction metadata is projected from persisted rows on
+		// reads; carrying it here keeps an immediate result identical to a re-read.
+		Source: transaction.Source, ExternalReference: transaction.ExternalReference,
 	}
 	return transaction, event, nil
+}
+
+// attachRelatedAsset validates the optional counterpart of a neutral relation
+// under the caller's write lock. The target must be an existing asset of the same
+// tenant and must not be the event's own asset, so a cross-tenant or dangling ID
+// is refused and never disclosed. The name/specification snapshot is copied from
+// the tenant-scoped read so it survives an administrator purge of the target.
+func (s *LifecycleService) attachRelatedAsset(ctx context.Context, actor Principal, relatedAssetID *string, assetID string, event *domain.AssetEvent) error {
+	if relatedAssetID == nil {
+		return nil
+	}
+	related := strings.TrimSpace(*relatedAssetID)
+	if related == "" {
+		return nil
+	}
+	if err := validID("related asset ID", related); err != nil {
+		return err
+	}
+	if related == assetID {
+		return NewInputError("validation.related_asset_self")
+	}
+	asset, err := s.store.GetAsset(ctx, actor.TenantID, related)
+	if errors.Is(err, sql.ErrNoRows) {
+		return NewInputError("validation.related_asset_unavailable")
+	}
+	if err != nil {
+		return fmt.Errorf("get related asset: %w", err)
+	}
+	summaries, err := assetTagSummaries(ctx, s.store, actor.TenantID, []string{asset.ID})
+	if err != nil {
+		return fmt.Errorf("read related asset tag summary: %w", err)
+	}
+	event.RelatedAssetID = asset.ID
+	event.RelatedAssetName = relatedAssetName(asset)
+	event.RelatedAssetSpec = relatedAssetSpecification(asset, summaries)
+	return nil
 }
 
 func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principal, assetID string, eventType domain.AssetEventType) error {
@@ -532,6 +616,8 @@ func builtInEventTypes() []domain.AssetEventTypeDefinition {
 		{Name: string(domain.AssetEventPurchase), NormalizedName: string(domain.AssetEventPurchase), Cashflow: domain.AssetEventExpense, BuiltIn: true},
 		{Name: string(domain.AssetEventRepair), NormalizedName: string(domain.AssetEventRepair), Cashflow: domain.AssetEventExpense, BuiltIn: true},
 		{Name: string(domain.AssetEventSale), NormalizedName: string(domain.AssetEventSale), Cashflow: domain.AssetEventIncome, BuiltIn: true},
+		{Name: string(domain.AssetEventTradeInSource), NormalizedName: string(domain.AssetEventTradeInSource), Cashflow: domain.AssetEventNeutral, BuiltIn: true},
+		{Name: string(domain.AssetEventTradeInDestination), NormalizedName: string(domain.AssetEventTradeInDestination), Cashflow: domain.AssetEventNeutral, BuiltIn: true},
 	}
 }
 

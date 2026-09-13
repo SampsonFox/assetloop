@@ -18,15 +18,24 @@ type Store interface {
 	application.ModelMediaStore
 	application.SpecificationStore
 	application.MarketStore
+	application.TradeInStore
 }
 
-func Run(t *testing.T, store Store) {
+// ManagementStore adds the tenant-locked management receipt surface used by
+// multi-result writes such as trade-in. Both supported adapters implement it.
+type ManagementStore interface {
+	Store
+	application.ManagementStore
+}
+
+func Run(t *testing.T, store ManagementStore) {
 	t.Helper()
 	t.Run("auth", func(t *testing.T) { runAuth(t, store) })
 	t.Run("catalog", func(t *testing.T) { runCatalog(t, store) })
 	t.Run("lifecycle", func(t *testing.T) { runLifecycle(t, store) })
 	t.Run("custom lifecycle costs", func(t *testing.T) { RunCustomLifecycleCosts(t, store) })
 	t.Run("concurrent lifecycle", func(t *testing.T) { runConcurrentLifecycle(t, store) })
+	t.Run("trade-in", func(t *testing.T) { RunTradeIn(t, store) })
 }
 
 func runLifecycle(t *testing.T, store Store) {
@@ -63,8 +72,24 @@ func runLifecycle(t *testing.T, store Store) {
 		t.Fatal("duplicate custom event type should fail")
 	}
 	eventTypes, err := service.EventTypes(ctx, owner)
-	if err != nil || len(eventTypes) != 4 || eventTypes[3].Name != "保养" {
-		t.Fatalf("list built-in and custom event types: types=%+v err=%v", eventTypes, err)
+	if err != nil || len(eventTypes) != 6 {
+		t.Fatalf("list built-in, pairing and custom event types: types=%+v err=%v", eventTypes, err)
+	}
+	var customFound, sourceFound, destinationFound bool
+	for _, item := range eventTypes {
+		switch {
+		case item.Name == "保养":
+			customFound = true
+		case item.SystemCode == domain.AssetEventTradeInSource:
+			sourceFound = true
+		case item.SystemCode == domain.AssetEventTradeInDestination:
+			destinationFound = true
+		case item.SystemCode == domain.AssetEventVoid:
+			t.Fatal("the technical void type must stay hidden")
+		}
+	}
+	if !customFound || !sourceFound || !destinationFound {
+		t.Fatalf("selectable event types mismatch: %+v", eventTypes)
 	}
 	maintenance, err := service.Record(ctx, owner, application.RecordEvent{
 		AssetID: asset.ID, Type: domain.AssetEventType("保养"), AmountMinor: 0, Currency: "CNY",

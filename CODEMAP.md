@@ -46,6 +46,9 @@ the MCP walkthrough imports, uploads, replays and re-reads the image offline.
 | `internal/web/templates/ui_icons.html`, `management_ui.test.mjs`, `resource_presentation_test.go` | Shared named action icons; consistent compact catalog/tag/resource/event-type row actions and drawer controls; accessible-label/layout regression checks |
 | `internal/web/model_configuration.go`, `model_configuration.test.mjs`, `templates/catalog_drawers.html` | Unified model metadata/tag/appearance submission and transactional save; management drawers share `data-management-drawer` fixed heading actions and independent scrolling, covered by `management_ui.test.mjs` |
 | `internal/mcp/` | Opt-in Streamable HTTP semantic query adapter calling application services; SDK HTTP regression tests; mounted alongside Web by the existing serve entry point |
+| `internal/web/trade_in.go`, `templates/trade_in.html`, `trade_in_test.go`, `trade_in.test.mjs` | Existing-asset selection, economic-record review, atomic submit, paired correction/cancellation and timeline links; shared application policy remains authoritative |
+| `internal/mcp/trade_in.go`, `trade_in_test.go` | Four semantic trade-in tools with explicit economic selections, required write keys and expected paired-event IDs; contract and scope checks |
+| `internal/application/trade_in_queries.go` | Tenant-scoped relation projections for Web detail/edit pages, including cancelled history |
 | `internal/mcp/lifecycle.go`, `lifecycle_test.go` | Required-key record/correct tools reuse lifecycle transactions and durable receipts; `correct_event` takes an optional top-level `type_id` for the scoped reclassification of an already recorded event into an enabled custom type with the same cash-flow direction; HTTP tests cover retry, conflict, append-only correction, reclassification defaults/denials and permission denial |
 | `internal/application/management.go`, both Store `management.go` / `management.sql`, paired `00016_management_requests.sql` | Transactional tenant/user/key receipts replay original JSON results; currently wraps category create/update and model create; failure-injected receipt rollback is covered in `catalog_transaction_test.go` |
 | `internal/mcp/catalog.go` | Required-key category create/update and product model create adapters using the shared management service |
@@ -108,6 +111,17 @@ catalog transaction suite), and the expanded full-element MCP import walkthrough
 | `ModelMediaStore` | `internal/application/ports.go` | SQLite, PostgreSQL (implemented) |
 
 ## Regression spine
+
+Trade-ins: `internal/application/trade_in.go`, `trade_in_write.go` and
+`trade_in_ports.go` own preview, explicit purchase/sale reuse, atomic paired
+neutral events, durable replay, correction and cancellation. The existing
+management transaction supplies the tenant lock; ordinary lifecycle commands
+support optional related-asset references but reject one-sided trade-in writes.
+Both Store `trade_in.go` / `trade_in.sql` adapters and migration `00021_trade_in.sql`
+persist the relationships on append-only events. `storetest/trade_in.go` covers
+the shared scenario. `internal/store/trade_in_upgrade.go` runs migration DDL,
+collision-safe type seeding and foreign-key verification in the same transaction.
+Product/accounting rules live in `docs/trade-in.md`.
 
 Market discovery: `internal/application/market_discovery.go` owns principal-scoped drafts, candidate/detail selection, explicit specification prefill, quote-scope acceptance and save-time revalidation; `ProductDiscoveryProvider` is implemented by `internal/market/zhuanzhuan/discovery.go`. JSON/text fixtures cover live search and specification details. Paired 00019 adds immutable optional selection snapshots; `market_selection_migration_test.go` verifies old-price and binding preservation. Web management uses the existing market drawer through `/admin/market/discover`.
 
@@ -282,7 +296,7 @@ bridge for already-used market-branch 15/16 databases; it preserves Goose histor
 prices and selection snapshots while supplying missing OAuth/receipt tables.
 Migration tests cover old market 15/16, accepted MCP 17, rollback and retry.
 `internal/integration/mcp_market_test.go` extends the same OAuth full-element
-scenario to all 53 tools, Web-visible prices and unchanged lifecycle costs;
+scenario to all 57 tools, Web-visible prices and unchanged lifecycle costs;
 the transaction suite covers failed receipts, cross-connection replay and policy.
 
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -16,9 +17,78 @@ import (
 
 type schemaContract struct {
 	Type        string
+	Types       []string
 	Description string
 	Required    []string
 	Properties  map[string]json.RawMessage
+	Items       json.RawMessage
+}
+
+// UnmarshalJSON accepts both the plain `"type":"object"` form and the nullable
+// `"type":["object","null"]` union the SDK advertises for an optional pointer
+// field. Type keeps the single meaningful name so a schema assertion can compare
+// names, while Types retains every advertised alternative including "null": a
+// nullable integer is still integer money, and a nullable string is still not.
+func (s *schemaContract) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type        json.RawMessage            `json:"type"`
+		Description string                     `json:"description"`
+		Required    []string                   `json:"required"`
+		Properties  map[string]json.RawMessage `json:"properties"`
+		Items       json.RawMessage            `json:"items"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	s.Description, s.Required, s.Properties, s.Items = raw.Description, raw.Required, raw.Properties, raw.Items
+	s.Type, s.Types = "", nil
+	if len(raw.Type) == 0 {
+		return nil
+	}
+	var single string
+	if err := json.Unmarshal(raw.Type, &single); err == nil {
+		s.Type, s.Types = single, []string{single}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(raw.Type, &many); err != nil {
+		return fmt.Errorf("unsupported schema type %s", raw.Type)
+	}
+	s.Types = many
+	for _, name := range many {
+		// "null" marks optionality, never the schema's own type.
+		if name != "null" {
+			s.Type = name
+			break
+		}
+	}
+	return nil
+}
+
+// allows reports whether name is one of the advertised alternatives, so a
+// nullable union still proves the type it may hold.
+func (s schemaContract) allows(name string) bool {
+	for _, item := range s.Types {
+		if item == name {
+			return true
+		}
+	}
+	return s.Type == name
+}
+
+// isExact reports the schema advertises exactly this type, optionally nullable.
+// A union with any other type fails, so money stays integer money instead of
+// accepting a shape that merely also allows an integer.
+func (s schemaContract) isExact(name string) bool {
+	if s.Type != name {
+		return false
+	}
+	for _, item := range s.Types {
+		if item != name && item != "null" {
+			return false
+		}
+	}
+	return true
 }
 
 func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
@@ -78,7 +148,7 @@ func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
 		assertMeaning(tool.Description, "visually verify", "color", "shared model", "3D", "lifecycle", "Reuse request_key")
 		assertMeaning(decode(input.Properties["content_base64"]).Description, "Base64", "8 MiB", "No local path")
 	}
-	if input.Type != "object" || output.Type != "object" || output.Properties["data"] == nil || output.Properties["error"] == nil {
+	if !input.allows("object") || !output.allows("object") || output.Properties["data"] == nil || output.Properties["error"] == nil {
 		t.Fatalf("%s has an invalid input/result envelope", tool.Name)
 	}
 	if !write {
@@ -90,12 +160,12 @@ func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
 		}
 		input = decode(input.Properties["replacement"])
 	}
-	if !slices.Contains(input.Required, "request_key") || decode(input.Properties["request_key"]).Type != "string" {
+	if !slices.Contains(input.Required, "request_key") || !decode(input.Properties["request_key"]).isExact("string") {
 		t.Fatalf("%s does not require a string request_key", tool.Name)
 	}
 	if tool.Name == "record_event" || tool.Name == "correct_event" {
 		for _, field := range []string{"amount_minor", "fx_rate_scaled"} {
-			if decode(input.Properties[field]).Type != "integer" {
+			if !decode(input.Properties[field]).isExact("integer") {
 				t.Fatalf("%s %s is not an integer", tool.Name, field)
 			}
 		}

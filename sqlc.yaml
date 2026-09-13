@@ -9,6 +9,7 @@ sql:
       - internal/store/sqlite/management.sql
       - internal/store/sqlite/images.sql
       - internal/store/sqlite/market.sql
+      - internal/store/sqlite/trade_in.sql
     gen:
       go:
         package: sqlitedb
@@ -23,6 +24,7 @@ sql:
       - internal/store/postgres/management.sql
       - internal/store/postgres/images.sql
       - internal/store/postgres/market.sql
+      - internal/store/postgres/trade_in.sql
     gen:
       go:
         package: postgresdb

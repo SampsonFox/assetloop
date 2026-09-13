@@ -134,10 +134,21 @@ func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (do
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
-	return postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID.String(), row.SystemCode,
+	event := postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID.String(), row.SystemCode,
 		row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 		row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
-		row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided), nil
+		row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided,
+		eventRelated{
+			AssetID: row.RelatedAssetID.UUID.String(), HasAsset: row.RelatedAssetID.Valid,
+			Label: row.RelatedAssetLabel, Spec: row.RelatedAssetSpecLabel, Deleted: row.RelatedAssetDeleted,
+			LinkID: row.TradeInLinkID.UUID.String(), HasLink: row.TradeInLinkID.Valid, State: row.TradeInState,
+		},
+		eventOrigin{Source: row.Source, ExternalReference: row.ExternalReference})
+	events := []domain.AssetEvent{event}
+	if err := s.decorateRelatedSpecification(ctx, tenantID, events); err != nil {
+		return domain.AssetEvent{}, err
+	}
+	return events[0], nil
 }
 
 func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) ([]domain.AssetEvent, error) {
@@ -154,7 +165,16 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID.String(), row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
-			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided))
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided,
+			eventRelated{
+				AssetID: row.RelatedAssetID.UUID.String(), HasAsset: row.RelatedAssetID.Valid,
+				Label: row.RelatedAssetLabel, Spec: row.RelatedAssetSpecLabel, Deleted: row.RelatedAssetDeleted,
+				LinkID: row.TradeInLinkID.UUID.String(), HasLink: row.TradeInLinkID.Valid, State: row.TradeInState,
+			},
+			eventOrigin{Source: row.Source, ExternalReference: row.ExternalReference}))
+	}
+	if err := s.decorateRelatedSpecification(ctx, tenantID, result); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -179,7 +199,16 @@ func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID strin
 		result = append(result, postgresEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID.String(), row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
-			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided))
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided,
+			eventRelated{
+				AssetID: row.RelatedAssetID.UUID.String(), HasAsset: row.RelatedAssetID.Valid,
+				Label: row.RelatedAssetLabel, Spec: row.RelatedAssetSpecLabel, Deleted: row.RelatedAssetDeleted,
+				LinkID: row.TradeInLinkID.UUID.String(), HasLink: row.TradeInLinkID.Valid, State: row.TradeInState,
+			},
+			eventOrigin{Source: row.Source, ExternalReference: row.ExternalReference}))
+	}
+	if err := s.decorateRelatedSpecification(ctx, tenantID, result); err != nil {
+		return nil, 0, err
 	}
 	return result, total, nil
 }
@@ -259,11 +288,21 @@ func postgresEventParams(event domain.AssetEvent) (postgresdb.CreateAssetEventPa
 	if err != nil {
 		return postgresdb.CreateAssetEventParams{}, err
 	}
+	relatedID, err := nullableUUID(event.RelatedAssetID)
+	if err != nil {
+		return postgresdb.CreateAssetEventParams{}, err
+	}
+	linkID, err := nullableUUID(event.TradeInLinkID)
+	if err != nil {
+		return postgresdb.CreateAssetEventParams{}, err
+	}
 	params := postgresdb.CreateAssetEventParams{
 		ID: id, TenantID: tenantID, AssetID: assetID, TransactionID: transactionID,
 		EventType: event.StorageType(), EventTypeID: typeID, BaseAmountMinor: event.BaseAmountMinor, BaseCurrency: event.BaseCurrency,
 		Notes: event.Notes, VoidsEventID: voidsID, ReplacesEventID: replacesID,
 		OccurredAt: event.OccurredAt, CreatedByUserID: userID, CreatedAt: event.CreatedAt,
+		RelatedAssetID: relatedID, RelatedAssetName: event.RelatedAssetName,
+		RelatedAssetSpec: event.RelatedAssetSpec, TradeInLinkID: linkID, TradeInState: string(event.TradeInState),
 	}
 	if event.FX != nil {
 		params.OriginalAmountMinor = sql.NullInt64{Int64: event.FX.OriginalAmountMinor, Valid: true}
@@ -275,14 +314,35 @@ func postgresEventParams(event domain.AssetEvent) (postgresdb.CreateAssetEventPa
 	return params, nil
 }
 
+// eventRelated carries the optional neutral relation projection of one event row.
+// The label is the current asset name or its write-time snapshot.
+type eventRelated struct {
+	AssetID  string
+	HasAsset bool
+	Label    string
+	Spec     string
+	Deleted  bool
+	LinkID   string
+	HasLink  bool
+	State    string
+}
+
+// eventOrigin carries the grouping-transaction metadata read back with an event:
+// the surface that recorded it and the record's own order reference.
+type eventOrigin struct {
+	Source            string
+	ExternalReference string
+}
+
 func postgresEvent(id, tenantID, assetID, transactionID uuid.UUID, eventType, typeID, systemType string, baseAmount int64,
 	baseCurrency string, originalAmount sql.NullInt64, originalCurrency sql.NullString, rate sql.NullInt64,
 	rateDate sql.NullTime, rateSource sql.NullString, notes string, voidsID, replacesID uuid.NullUUID,
-	occurredAt time.Time, userID uuid.UUID, createdAt time.Time, isVoided bool) domain.AssetEvent {
+	occurredAt time.Time, userID uuid.UUID, createdAt time.Time, isVoided bool, related eventRelated, origin eventOrigin) domain.AssetEvent {
 	event := domain.AssetEvent{
 		ID: id.String(), TenantID: tenantID.String(), AssetID: assetID.String(), TransactionID: transactionID.String(),
 		TypeID: typeID, SystemType: domain.AssetEventType(systemType), Type: domain.AssetEventType(eventType), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency,
 		Notes: notes, OccurredAt: occurredAt, CreatedByUserID: userID.String(), CreatedAt: createdAt, IsVoided: isVoided,
+		Source: origin.Source, ExternalReference: origin.ExternalReference,
 	}
 	if voidsID.Valid {
 		event.VoidsEventID = voidsID.UUID.String()
@@ -290,6 +350,16 @@ func postgresEvent(id, tenantID, assetID, transactionID uuid.UUID, eventType, ty
 	if replacesID.Valid {
 		event.ReplacesEventID = replacesID.UUID.String()
 	}
+	if related.HasAsset {
+		event.RelatedAssetID = related.AssetID
+		event.RelatedAssetName = related.Label
+		event.RelatedAssetSpec = related.Spec
+		event.RelatedAssetDeleted = related.Deleted
+	}
+	if related.HasLink {
+		event.TradeInLinkID = related.LinkID
+	}
+	event.TradeInState = domain.TradeInState(related.State)
 	if originalAmount.Valid {
 		event.FX = &domain.FXEvidence{
 			OriginalAmountMinor: originalAmount.Int64, OriginalCurrency: originalCurrency.String,

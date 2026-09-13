@@ -49,6 +49,9 @@ type Options struct {
 	Specifications    *application.SpecificationService
 	OAuth             *application.OAuthService
 	OAuthIssuer       string
+	// Management owns the receipt-backed trade-in writes. It is optional so a
+	// deployment without it simply has no trade-in routes, never a second policy.
+	Management *application.ManagementService
 }
 
 type Server struct {
@@ -165,6 +168,9 @@ type pageData struct {
 	Appearance             appearancePageData
 	OAuth                  oauthPageData
 	OAuthEnabled           bool
+	TradeIn                tradeInPageData
+	RelatedAssets          []relatedAssetOption
+	TradeInActions         map[string]tradeInAction
 }
 
 type eventFormData struct {
@@ -180,6 +186,20 @@ type eventFormData struct {
 	FXRateDate        string
 	FXRateSource      string
 	Notes             string
+	// The optional neutral relation of an ordinary event. An omitted field keeps
+	// an existing relation on a correction; an explicit empty value clears it.
+	RelatedAssetID      string
+	RelatedAssetLabel   string
+	RelatedAssetSpec    string
+	RelatedAssetDeleted bool
+}
+
+// relatedAssetOption is one selectable counterpart of an ordinary neutral
+// relation, labelled with the current asset name and specification summary.
+type relatedAssetOption struct {
+	AssetID string
+	Label   string
+	Spec    string
 }
 
 type eventTypeFormData struct {
@@ -270,8 +290,12 @@ func New(auth *application.AuthService, catalog *application.CatalogService, lif
 			return "↓"
 		},
 		"rate": formatRate, "canCorrect": func(event domain.AssetEvent) bool { return event.Type != domain.AssetEventVoid && !event.IsVoided },
+		// Each rendered trade-in cancel action carries its own stable request key,
+		// so retrying the same rendered page replays instead of writing twice.
+		"randomKey":      func() string { return randomToken() },
+		"isTradeInEvent": func(event domain.AssetEvent) bool { return domain.IsTradeInSystemType(event.Kind()) },
 	}
-	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "asset_delete", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth", "model_image", "market"} {
+	for _, page := range []string{"setup", "login", "dashboard", "members", "assets", "catalog", "asset", "asset_form", "asset_delete", "event_correct", "error", "resources", "resource", "event_types", "specifications", "appearance", "resource_binding", "oauth", "model_image", "market", "trade_in"} {
 		parsed, err := template.New("base.html").Funcs(funcs).ParseFS(assets, "templates/base.html", "templates/ui_icons.html", "templates/catalog_drawers.html", "templates/cost_dashboard.html", "templates/market_summary.html", "templates/resources.html", "templates/"+page+".html")
 		if err != nil {
 			return nil, fmt.Errorf("parse %s template: %w", page, err)
@@ -349,6 +373,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/3d/{id}/delete", s.deleteResource)
 	mux.HandleFunc("POST /admin/3d/bind/{kind}/{id}", s.bindResource)
 	mux.HandleFunc("POST /assets/{id}/events", s.createAssetEvent)
+	mux.HandleFunc("GET /assets/{id}/trade-in", s.tradeInForm)
+	mux.HandleFunc("POST /assets/{id}/trade-in", s.recordTradeIn)
+	mux.HandleFunc("POST /assets/{id}/trade-in/preview", s.tradeInPreview)
+	mux.HandleFunc("GET /assets/{id}/trade-in/{link}/edit", s.tradeInLinkForm)
+	mux.HandleFunc("POST /assets/{id}/trade-in/{link}/edit", s.correctTradeInLink)
+	mux.HandleFunc("POST /assets/{id}/trade-in/{link}/cancel", s.cancelTradeInLink)
 	mux.HandleFunc("POST /admin/event-types", s.createAssetEventType)
 	mux.HandleFunc("GET /admin/event-types", s.eventTypesPage)
 	mux.HandleFunc("GET /admin/market", s.marketPage)
@@ -748,10 +778,31 @@ func (s *Server) renderCorrectionForm(w http.ResponseWriter, r *http.Request, st
 			break
 		}
 	}
+	relatedAssets, err := s.relatedAssetOptions(r.Context(), principal, event.AssetID)
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	// A preserved relation to a purged asset cannot be addressed by the live
+	// picker, so the field is omitted and the relation stays preserved unless the
+	// user explicitly clears it. Omitting the field is what means "keep".
+	switch {
+	case r.FormValue("clear_related") == "1":
+		form.RelatedAssetID, form.RelatedAssetLabel, form.RelatedAssetSpec, form.RelatedAssetDeleted = "", "", "", false
+	case event.RelatedAssetID != "" && event.RelatedAssetDeleted:
+		form.RelatedAssetID, form.RelatedAssetDeleted = event.RelatedAssetID, true
+		form.RelatedAssetLabel, form.RelatedAssetSpec = event.RelatedAssetName, event.RelatedAssetSpec
+	case r.Method == http.MethodPost:
+		form.RelatedAssetID = strings.TrimSpace(r.FormValue("related_asset_id"))
+	default:
+		form.RelatedAssetID = event.RelatedAssetID
+		form.RelatedAssetLabel, form.RelatedAssetSpec = event.RelatedAssetName, event.RelatedAssetSpec
+	}
 	s.render(w, status, "event_correct", pageData{
 		Title: textFor(principal.Locale, "correct.heading"), CSRFToken: s.ensureCSRF(w, r), Principal: &principal, Error: message, ReturnTo: r.URL.RequestURI(),
 		Events: []domain.AssetEvent{event}, BaseCurrency: baseCurrency, BaseCurrencyLocked: locked, EventForm: form,
 		CanManageLifecycle: principal.Can(application.CapabilityManageLifecycle),
+		RelatedAssets:      relatedAssets,
 	})
 }
 
@@ -827,6 +878,13 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 			form.Cashflow = string(item.Cashflow)
 		}
 	}
+	// The optional neutral relation of an ordinary event is chosen from the
+	// tenant's existing assets, never from the current asset itself.
+	relatedAssets, err := s.relatedAssetOptions(r.Context(), principal, asset.ID)
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
 	var model3D *domain.ProductModel3D
 	var modelBinding *application.Model3DBinding
 	if s.modelMedia != nil {
@@ -843,6 +901,30 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		if err != nil {
 			s.renderError(w, r, 500, err)
 			return
+		}
+	}
+	// A dedicated correction or cancellation action needs both expected event IDs
+	// of its relation, so each distinct link is resolved once through the shared
+	// read-only application query. A relation that cannot be resolved as an active
+	// pair renders no action instead of a form that would always conflict.
+	tradeInActions := map[string]tradeInAction{}
+	if s.options.Management != nil {
+		for _, event := range result.Events {
+			linkID := strings.TrimSpace(event.TradeInLinkID)
+			if linkID == "" {
+				continue
+			}
+			if _, found := tradeInActions[linkID]; found {
+				continue
+			}
+			link, linkErr := s.options.Management.TradeInLink(r.Context(), principal, application.TradeInLinkQuery{OwningAssetID: asset.ID, LinkID: linkID})
+			if linkErr != nil {
+				continue
+			}
+			tradeInActions[linkID] = tradeInAction{
+				LinkID: link.LinkID, SourceEventID: link.SourceEventID, DestinationEventID: link.DestinationEventID,
+				Editable: tradeInLinkEditable(link),
+			}
 		}
 	}
 	s.render(w, status, "asset", pageData{
@@ -864,6 +946,8 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		TableAdvanced:   eventType != "" || sortKey != "occurred" || direction != "asc" || showVoided,
 		Model3D:         model3D,
 		Binding:         modelBinding,
+		RelatedAssets:   relatedAssets,
+		TradeInActions:  tradeInActions,
 	})
 }
 
@@ -901,6 +985,7 @@ func eventFormFromRequest(r *http.Request, baseCurrency, nowValue string) eventF
 	form.FXRateDate = r.FormValue("fx_rate_date")
 	form.FXRateSource = r.FormValue("fx_rate_source")
 	form.Notes = r.FormValue("notes")
+	form.RelatedAssetID = strings.TrimSpace(r.FormValue("related_asset_id"))
 	return form
 }
 
@@ -931,6 +1016,16 @@ func (s *Server) recordEventFromForm(r *http.Request, principal application.Prin
 		AssetID:    assetID, Type: eventType, AmountMinor: amount, Currency: currency,
 		OccurredAt: occurredAt, Source: r.FormValue("source"),
 		ExternalReference: r.FormValue("external_reference"), Notes: r.FormValue("notes"),
+	}
+	// The optional neutral relation survives an omitted field on a correction and
+	// is cleared by an explicit empty value or the clear control.
+	switch {
+	case r.FormValue("clear_related") == "1":
+		cleared := ""
+		cmd.RelatedAssetID = &cleared
+	case r.PostForm.Has("related_asset_id"):
+		related := strings.TrimSpace(r.PostForm.Get("related_asset_id"))
+		cmd.RelatedAssetID = &related
 	}
 	if _, err := uuid.Parse(string(eventType)); err == nil {
 		cmd.TypeID = string(eventType)

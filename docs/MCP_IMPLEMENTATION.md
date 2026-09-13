@@ -1,6 +1,25 @@
 # MCP implementation and acceptance
 
-## Current checkpoint — 2026-09-12
+## Development increment — trade-ins, 2026-09-13
+
+The approved trade-in increment adds `preview_trade_in`, `record_trade_in`,
+`correct_trade_in_link` and `cancel_trade_in_link`. The read tool previews existing
+asset selections and economic records; the lifecycle writes compose missing
+purchase/sale events with paired zero-value relationships in the existing tenant
+management transaction. Explicit reused event IDs are checked again at commit.
+Corrections and cancellations preserve economic entries and append paired history.
+Ordinary record/correct inputs also support one optional related asset; trade-in
+pairs cannot be written or corrected through those ordinary tools.
+
+The development server advertises 57 semantic tools. Contract tests validate
+the four trade-in tools over SDK discovery, and the named MCP walkthrough invokes
+every advertised tool. Monetary inputs use integer minor units; nested new-event
+inputs share the outer command's request key.
+
+See [trade-in semantics and MCP scope](trade-in.md). This is a development
+increment; the dated UAT evidence below does not authorize promoting it.
+
+## Earlier UAT checkpoint — 2026-09-12
 
 The user has explicitly authorized UAT promotion of this batch. The current
 capability summary, changes, limitations and acceptance gates are maintained in

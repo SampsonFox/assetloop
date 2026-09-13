@@ -105,10 +105,23 @@ func (s *Store) GetAssetEvent(ctx context.Context, tenantID, eventID string) (do
 	if err != nil {
 		return domain.AssetEvent{}, err
 	}
-	return sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID, row.SystemCode,
+	event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID, row.SystemCode,
 		row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 		row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
-		row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
+		row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided,
+		eventRelated{
+			AssetID: row.RelatedAssetID.String, Label: row.RelatedAssetLabel, Spec: row.RelatedAssetSpecLabel,
+			Deleted: row.RelatedAssetDeleted != 0, LinkID: row.TradeInLinkID.String, State: row.TradeInState,
+		},
+		eventOrigin{Source: row.Source, ExternalReference: row.ExternalReference})
+	if err != nil {
+		return domain.AssetEvent{}, err
+	}
+	events := []domain.AssetEvent{event}
+	if err := s.decorateRelatedSpecification(ctx, tenantID, events); err != nil {
+		return domain.AssetEvent{}, err
+	}
+	return events[0], nil
 }
 
 func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) ([]domain.AssetEvent, error) {
@@ -121,11 +134,19 @@ func (s *Store) ListAssetEvents(ctx context.Context, tenantID, assetID string) (
 		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID, row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
-			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided,
+			eventRelated{
+				AssetID: row.RelatedAssetID.String, Label: row.RelatedAssetLabel, Spec: row.RelatedAssetSpecLabel,
+				Deleted: row.RelatedAssetDeleted != 0, LinkID: row.TradeInLinkID.String, State: row.TradeInState,
+			},
+			eventOrigin{Source: row.Source, ExternalReference: row.ExternalReference})
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, event)
+	}
+	if err := s.decorateRelatedSpecification(ctx, tenantID, result); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -150,11 +171,19 @@ func (s *Store) ListAssetEventsPage(ctx context.Context, tenantID, assetID strin
 		event, err := sqliteEvent(row.ID, row.TenantID, row.AssetID, row.TransactionID, row.EventType, row.EventTypeID, row.SystemCode,
 			row.BaseAmountMinor, row.BaseCurrency, row.OriginalAmountMinor, row.OriginalCurrency,
 			row.FxRateScaled, row.FxRateDate, row.FxRateSource, row.Notes, row.VoidsEventID,
-			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided)
+			row.ReplacesEventID, row.OccurredAt, row.CreatedByUserID, row.CreatedAt, row.IsVoided,
+			eventRelated{
+				AssetID: row.RelatedAssetID.String, Label: row.RelatedAssetLabel, Spec: row.RelatedAssetSpecLabel,
+				Deleted: row.RelatedAssetDeleted != 0, LinkID: row.TradeInLinkID.String, State: row.TradeInState,
+			},
+			eventOrigin{Source: row.Source, ExternalReference: row.ExternalReference})
 		if err != nil {
 			return nil, 0, err
 		}
 		result = append(result, event)
+	}
+	if err := s.decorateRelatedSpecification(ctx, tenantID, result); err != nil {
+		return nil, 0, err
 	}
 	return result, total, nil
 }
@@ -200,6 +229,9 @@ func sqliteEventParams(event domain.AssetEvent) sqlitedb.CreateAssetEventParams 
 		Notes: event.Notes, VoidsEventID: nullableString(event.VoidsEventID),
 		ReplacesEventID: nullableString(event.ReplacesEventID), OccurredAt: sqliteTime(event.OccurredAt),
 		CreatedByUserID: event.CreatedByUserID, CreatedAt: sqliteTime(event.CreatedAt),
+		RelatedAssetID: nullableString(event.RelatedAssetID), RelatedAssetName: event.RelatedAssetName,
+		RelatedAssetSpec: event.RelatedAssetSpec, TradeInLinkID: nullableString(event.TradeInLinkID),
+		TradeInState: string(event.TradeInState),
 	}
 	if event.FX != nil {
 		params.OriginalAmountMinor = sql.NullInt64{Int64: event.FX.OriginalAmountMinor, Valid: true}
@@ -211,9 +243,28 @@ func sqliteEventParams(event domain.AssetEvent) sqlitedb.CreateAssetEventParams 
 	return params
 }
 
+// eventRelated carries the optional neutral relation projection of one event row.
+// The label is the current asset name or its write-time snapshot.
+type eventRelated struct {
+	AssetID string
+	Label   string
+	Spec    string
+	Deleted bool
+	LinkID  string
+	State   string
+}
+
+// eventOrigin carries the grouping-transaction metadata read back with an event:
+// the surface that recorded it and the record's own order reference.
+type eventOrigin struct {
+	Source            string
+	ExternalReference string
+}
+
 func sqliteEvent(id, tenantID, assetID, transactionID, eventType, typeID, systemType string, baseAmount int64, baseCurrency string,
 	originalAmount sql.NullInt64, originalCurrency sql.NullString, rate sql.NullInt64, rateDate, rateSource sql.NullString,
-	notes string, voidsID, replacesID sql.NullString, occurredAt, userID, createdAt string, isVoided bool) (domain.AssetEvent, error) {
+	notes string, voidsID, replacesID sql.NullString, occurredAt, userID, createdAt string, isVoided bool,
+	related eventRelated, origin eventOrigin) (domain.AssetEvent, error) {
 	occurred, err := time.Parse(time.RFC3339Nano, occurredAt)
 	if err != nil {
 		return domain.AssetEvent{}, fmt.Errorf("parse event occurred_at: %w", err)
@@ -227,6 +278,10 @@ func sqliteEvent(id, tenantID, assetID, transactionID, eventType, typeID, system
 		TypeID: typeID, SystemType: domain.AssetEventType(systemType), Type: domain.AssetEventType(eventType), BaseAmountMinor: baseAmount, BaseCurrency: baseCurrency,
 		Notes: notes, VoidsEventID: voidsID.String, ReplacesEventID: replacesID.String,
 		OccurredAt: occurred, CreatedByUserID: userID, CreatedAt: created, IsVoided: isVoided,
+		RelatedAssetID: related.AssetID, RelatedAssetName: related.Label, RelatedAssetSpec: related.Spec,
+		RelatedAssetDeleted: related.AssetID != "" && related.Deleted,
+		TradeInLinkID:       related.LinkID, TradeInState: domain.TradeInState(related.State),
+		Source: origin.Source, ExternalReference: origin.ExternalReference,
 	}
 	if originalAmount.Valid {
 		date, err := time.Parse("2006-01-02", rateDate.String)

@@ -22,6 +22,7 @@ type ManagementStore interface {
 	LifecycleStore
 	ModelMediaStore
 	ModelImageStore
+	TradeInStore
 	WithManagementWrite(context.Context, string, func(ManagementStore) error) error
 	FindManagementRequest(context.Context, string, string, string) (ManagementRequest, bool, error)
 	SaveManagementRequest(context.Context, ManagementRequest) error

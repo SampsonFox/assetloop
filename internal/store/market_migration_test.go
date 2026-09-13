@@ -56,7 +56,7 @@ func testMarketUpgradeFromBaseline(t *testing.T, version int) {
 			for table, n := range counts {
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM "+table, n)
 			}
-			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 20)
+			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 21)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM market_items", 0)
 			if version >= 17 {
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM oauth_grants WHERE client_id='existing-client'", 1)

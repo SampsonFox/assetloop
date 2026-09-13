@@ -29,6 +29,10 @@ import (
 
 type bearerTransport struct{ token string }
 
+// mcpStringPointer supplies the optional related-asset value of an ordinary
+// record without changing the command's omission semantics.
+func mcpStringPointer(value string) *string { return &value }
+
 // Network behavior is tested by modeldownload; this port fixture keeps the
 // cumulative dual-store MCP scenario deterministic and offline.
 type modelDownloadFixture struct{}
@@ -157,7 +161,7 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	}
 	defer mcpClient.Close()
 	list, err := mcpClient.ListTools(ctx, &sdk.ListToolsParams{})
-	if err != nil || len(list.Tools) != 53 {
+	if err != nil || len(list.Tools) != 57 {
 		t.Fatal("OAuth MCP discovery failed")
 	}
 	called := map[string]bool{}
@@ -367,6 +371,163 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	_, customSummary, err := lifecycle.Timeline(ctx, session.Principal, assetID)
 	if err != nil || customSummary.ExpenseMinor != 60_924 || customSummary.IncomeMinor != 0 {
 		t.Fatalf("MCP custom cost totals mismatch: %+v %v", customSummary, err)
+	}
+
+	// Trade-in: two fresh items reuse one confirmed purchase and let the command
+	// record exactly one sale, then the paired relation is previewed, replayed,
+	// corrected, cancelled and refused when a stale version or a one-sided paired
+	// event is submitted.
+	var tradeInSourceTypeID string
+	for _, kind := range types.Data.Types {
+		if kind.SystemCode == domain.AssetEventTradeInSource {
+			tradeInSourceTypeID = kind.ID
+		}
+	}
+	if tradeInSourceTypeID == "" {
+		t.Fatal("the trade_in_source system type is absent")
+	}
+	var tradeInNew, tradeInOld, tradeInOldTwo, tradeInNewTwo struct{ Data domain.Asset }
+	call("save_asset", transport.SaveAssetInput{RequestKey: "full-mcp-trade-in-new", ModelID: modelID, DisplayName: "MCP trade-in new item", TagIDs: []string{}}, &tradeInNew)
+	call("save_asset", transport.SaveAssetInput{RequestKey: "full-mcp-trade-in-old", ModelID: modelID, DisplayName: "MCP trade-in old item", TagIDs: []string{}}, &tradeInOld)
+	call("save_asset", transport.SaveAssetInput{RequestKey: "full-mcp-trade-in-old-two", ModelID: modelID, DisplayName: "MCP trade-in second old item", TagIDs: []string{}}, &tradeInOldTwo)
+	call("save_asset", transport.SaveAssetInput{RequestKey: "full-mcp-trade-in-new-two", ModelID: modelID, DisplayName: "MCP trade-in second new item", TagIDs: []string{}}, &tradeInNewTwo)
+	if tradeInNew.Data.ID == "" || tradeInOld.Data.ID == "" || tradeInOldTwo.Data.ID == "" || tradeInNewTwo.Data.ID == "" {
+		t.Fatal("MCP trade-in assets were not created")
+	}
+	newPurchase := transport.EventInput{AssetID: tradeInNew.Data.ID, TypeID: purchaseID, EventFields: transport.EventFields{RequestKey: "full-mcp-trade-in-new-purchase", AmountMinor: 600_000, Currency: "CNY", OccurredAt: "2026-08-06T10:00:00Z"}}
+	call("record_event", newPurchase, &event)
+	newPurchaseID := event.Data.ID
+	oldPurchase := newPurchase
+	oldPurchase.AssetID, oldPurchase.RequestKey, oldPurchase.AmountMinor = tradeInOld.Data.ID, "full-mcp-trade-in-old-purchase", 250_000
+	call("record_event", oldPurchase, &event)
+	secondOldPurchase := oldPurchase
+	secondOldPurchase.AssetID, secondOldPurchase.RequestKey, secondOldPurchase.AmountMinor = tradeInOldTwo.Data.ID, "full-mcp-trade-in-old-two-purchase", 210_000
+	call("record_event", secondOldPurchase, &event)
+	secondNewPurchase := newPurchase
+	secondNewPurchase.AssetID, secondNewPurchase.RequestKey, secondNewPurchase.AmountMinor = tradeInNewTwo.Data.ID, "full-mcp-trade-in-new-two-purchase", 640_000
+	call("record_event", secondNewPurchase, &event)
+	secondNewPurchaseID := event.Data.ID
+	// The old item has no sale yet: the confirmed trade-in records exactly one.
+	tradeInInput := transport.RecordTradeInInput{
+		PreviewTradeInInput: transport.PreviewTradeInInput{
+			CurrentAssetID: tradeInNew.Data.ID, Direction: "source",
+			Current: transport.TradeInEconomicInput{AssetID: tradeInNew.Data.ID, ExistingEventID: newPurchaseID},
+			Counterparts: []transport.TradeInEconomicInput{{
+				AssetID:  tradeInOld.Data.ID,
+				NewEvent: &transport.TradeInNewEventInput{AmountMinor: 180_000, Currency: "CNY", OccurredAt: "2026-08-06T10:00:00Z"},
+			}},
+			OccurredAt: "2026-08-06T10:00:00Z", ExternalReference: "MCP-TRADE-1", Notes: "confirmed trade-in",
+		},
+		RequestKey: "full-mcp-trade-in-record",
+	}
+	var tradeIn struct{ Data transport.TradeInResult }
+	call("record_trade_in", tradeInInput, &tradeIn)
+	pair := tradeIn.Data.Pairs[0]
+	if len(tradeIn.Data.Pairs) != 1 || pair.LinkID == "" || pair.SourceEventID == "" || pair.DestinationEventID == "" ||
+		pair.LinkStatus != "created" || pair.NewEconomicEventID != newPurchaseID || pair.NewEconomicStatus != "reused" || pair.OldEconomicStatus != "created" {
+		t.Fatalf("MCP trade-in result mismatch: %+v", tradeIn.Data)
+	}
+	call("record_trade_in", tradeInInput, &tradeIn)
+	if len(tradeIn.Data.Pairs) != 1 || tradeIn.Data.Pairs[0].LinkID != pair.LinkID || tradeIn.Data.Pairs[0].SourceEventID != pair.SourceEventID {
+		t.Fatal("MCP trade-in replay changed the result")
+	}
+	if _, _, err := lifecycle.Timeline(ctx, session.Principal, tradeInOld.Data.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, tradeInSummary, err := lifecycle.Timeline(ctx, session.Principal, tradeInNew.Data.ID)
+	if err != nil || tradeInSummary.IncomeMinor != 0 {
+		t.Fatalf("neutral paired events changed the new item's money: %+v %v", tradeInSummary, err)
+	}
+	var preview struct{ Data transport.TradeInPreview }
+	call("preview_trade_in", tradeInInput.PreviewTradeInInput, &preview)
+	if !preview.Data.Ready || len(preview.Data.Pairs) != 1 || preview.Data.Pairs[0].NewSelection != "linked" ||
+		preview.Data.Pairs[0].OldSelection != "linked" || preview.Data.Pairs[0].LinkID != pair.LinkID ||
+		preview.Data.Pairs[0].NewEventID != newPurchaseID || preview.Data.Pairs[0].OldEventID != pair.OldEconomicEventID {
+		t.Fatalf("MCP trade-in preview mismatch: %+v", preview.Data)
+	}
+	correct := transport.CorrectTradeInLinkInput{
+		RequestKey: "full-mcp-trade-in-correct", LinkID: pair.LinkID,
+		ExpectedSourceEventID: pair.SourceEventID, ExpectedDestinationEventID: pair.DestinationEventID,
+		NewAssetID: tradeInNew.Data.ID, OldAssetID: tradeInOld.Data.ID,
+		OccurredAt: "2026-08-07T10:00:00Z", ExternalReference: "MCP-TRADE-R", Notes: "association date corrected",
+	}
+	call("correct_trade_in_link", correct, &tradeIn)
+	corrected := tradeIn.Data.Pairs[0]
+	if corrected.LinkStatus != "corrected" || corrected.LinkID != pair.LinkID ||
+		corrected.SourceEventID == pair.SourceEventID || corrected.DestinationEventID == pair.DestinationEventID {
+		t.Fatalf("MCP trade-in correction mismatch: %+v", corrected)
+	}
+	call("correct_trade_in_link", correct, &tradeIn)
+	if tradeIn.Data.Pairs[0].SourceEventID != corrected.SourceEventID || tradeIn.Data.Pairs[0].DestinationEventID != corrected.DestinationEventID {
+		t.Fatal("MCP trade-in correction replay changed the result")
+	}
+	cancelInput := transport.CancelTradeInLinkInput{
+		RequestKey: "full-mcp-trade-in-cancel", LinkID: corrected.LinkID,
+		ExpectedSourceEventID: corrected.SourceEventID, ExpectedDestinationEventID: corrected.DestinationEventID,
+		OccurredAt: "2026-08-08T10:00:00Z", Notes: "no longer traded",
+	}
+	call("cancel_trade_in_link", cancelInput, &tradeIn)
+	if tradeIn.Data.Pairs[0].LinkStatus != "cancelled" || tradeIn.Data.Pairs[0].SourceEventID == corrected.SourceEventID {
+		t.Fatalf("MCP trade-in cancellation mismatch: %+v", tradeIn.Data)
+	}
+	call("cancel_trade_in_link", cancelInput, &tradeIn)
+	denied("cancel_trade_in_link", transport.CancelTradeInLinkInput{
+		RequestKey: "full-mcp-trade-in-cancel-stale", LinkID: pair.LinkID,
+		ExpectedSourceEventID: pair.SourceEventID, ExpectedDestinationEventID: pair.DestinationEventID,
+	})
+	// One old item against two new items: the sale is recorded once while both
+	// purchases are reused, and no pair is inferred.
+	multi := transport.RecordTradeInInput{
+		PreviewTradeInInput: transport.PreviewTradeInInput{
+			CurrentAssetID: tradeInOldTwo.Data.ID, Direction: "destination",
+			Current: transport.TradeInEconomicInput{AssetID: tradeInOldTwo.Data.ID, NewEvent: &transport.TradeInNewEventInput{AmountMinor: 120_000, Currency: "CNY", OccurredAt: "2026-08-10T10:00:00Z"}},
+			Counterparts: []transport.TradeInEconomicInput{
+				{AssetID: tradeInNew.Data.ID, ExistingEventID: newPurchaseID},
+				{AssetID: tradeInNewTwo.Data.ID, ExistingEventID: secondNewPurchaseID},
+			},
+			OccurredAt: "2026-08-10T10:00:00Z", Notes: "one old item, two new items",
+		},
+		RequestKey: "full-mcp-trade-in-multi",
+	}
+	call("record_trade_in", multi, &tradeIn)
+	if len(tradeIn.Data.Pairs) != 2 {
+		t.Fatalf("MCP multi-counterpart trade-in mismatch: %+v", tradeIn.Data)
+	}
+	links := map[string]bool{}
+	for _, item := range tradeIn.Data.Pairs {
+		if item.OldAssetID != tradeInOldTwo.Data.ID || item.OldEconomicStatus != "created" || item.NewEconomicStatus != "reused" {
+			t.Fatalf("MCP multi-counterpart pair mismatch: %+v", item)
+		}
+		links[item.LinkID] = true
+	}
+	if len(links) != 2 {
+		t.Fatalf("MCP multi-counterpart links are not distinct: %+v", links)
+	}
+	// A paired system type, a self counterpart and an unknown asset are refused
+	// through the shared service instead of writing a one-sided relation.
+	denied("record_event", transport.EventInput{AssetID: tradeInNew.Data.ID, TypeID: tradeInSourceTypeID, EventFields: transport.EventFields{RequestKey: "full-mcp-trade-in-direct", Currency: "CNY", OccurredAt: "2026-08-11T10:00:00Z"}})
+	denied("record_trade_in", transport.RecordTradeInInput{
+		PreviewTradeInInput: transport.PreviewTradeInInput{
+			CurrentAssetID: tradeInNew.Data.ID, Direction: "source",
+			Current:      transport.TradeInEconomicInput{AssetID: tradeInNew.Data.ID, ExistingEventID: newPurchaseID},
+			Counterparts: []transport.TradeInEconomicInput{{AssetID: tradeInNew.Data.ID, ExistingEventID: newPurchaseID}},
+			OccurredAt:   "2026-08-11T10:00:00Z",
+		},
+		RequestKey: "full-mcp-trade-in-self",
+	})
+	denied("record_trade_in", transport.RecordTradeInInput{
+		PreviewTradeInInput: transport.PreviewTradeInInput{
+			CurrentAssetID: tradeInNew.Data.ID, Direction: "source",
+			Current:      transport.TradeInEconomicInput{AssetID: tradeInNew.Data.ID, ExistingEventID: newPurchaseID},
+			Counterparts: []transport.TradeInEconomicInput{{AssetID: "99999999-9999-4999-8999-999999999999", NewEvent: &transport.TradeInNewEventInput{AmountMinor: 1_000, Currency: "CNY", OccurredAt: "2026-08-11T10:00:00Z"}}},
+			OccurredAt:   "2026-08-11T10:00:00Z",
+		},
+		RequestKey: "full-mcp-trade-in-unknown",
+	})
+	// An ordinary record keeps its optional neutral relation on another item.
+	call("record_event", transport.EventInput{AssetID: tradeInNew.Data.ID, TypeID: serviceType.Data.ID, EventFields: transport.EventFields{RequestKey: "full-mcp-related-asset", AmountMinor: 5_000, Currency: "CNY", OccurredAt: "2026-08-11T10:00:00Z", RelatedAssetID: mcpStringPointer(tradeInOld.Data.ID)}}, &event)
+	if event.Data.RelatedAssetID != tradeInOld.Data.ID || event.Data.RelatedAssetName == "" {
+		t.Fatalf("MCP related asset was not recorded: %+v", event.Data)
 	}
 
 	call("bind_asset_market", transport.BindMarketInput{AssetID: assetID, MarketItemID: "", RequestKey: "mcp-market-finish-unbind"}, new(any))

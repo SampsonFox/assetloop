@@ -291,6 +291,44 @@ negative, income is positive, and neutral events are zero. Web controls require 
 every expense or income type and switch to zero only for the selected neutral type, while MCP and other
 transport adapters receive the same normalization through the shared use case.
 
+### 5.1 Trade-in relationships
+
+Trade-ins compose ordinary acquisition and sale use cases with paired neutral
+events. A new asset records its full purchase amount and an old asset records its
+sale proceeds once; their difference is the settlement, not an additional expense.
+One command selects explicit old/new pairs from existing assets, supporting both
+many-to-one and one-to-many exchanges without inferring extra pairs.
+
+Two immutable system codes identify the relationship direction:
+`trade_in_source` belongs to the new asset and references the old asset;
+`trade_in_destination` belongs to the old asset and references the new asset.
+Both have zero amount and no acquisition, sale, cost, or duration effect.
+Each pair carries a stable relationship ID and an active/cancelled state. Events
+remain the source of truth; there is no separate mutable workflow service.
+
+A dedicated application use case reuses the tenant management transaction and
+durable request receipt. It rechecks explicitly selected effective economic event
+IDs, creates missing valid economic records, and appends both relationship events
+atomically. A stale economic selection conflicts instead of silently selecting a
+different amount. Repeated request keys replay the original result; another key
+cannot duplicate an already effective pair. Neither transport owns these rules.
+
+Ordinary lifecycle commands may include one optional tenant-scoped related asset.
+Trade-in pairs must use the dedicated command, including corrections and
+cancellations. Both sides are voided and replaced together under the same stable
+relationship ID; cancellation writes cancelled replacements. These operations
+never modify the shared acquisition or sale records. Cancelled and voided links
+remain queryable through history, and a cancelled pair may be established again.
+
+Related references retain a minimal asset name/specification snapshot. Reads use
+the current target label while it exists and the snapshot with a deleted marker
+after deletion. References deliberately do not use a target foreign key that
+blocks whole-item deletion or cascades into another item's history. Purging one
+endpoint removes only its owned events, preserves the surviving endpoint's
+history, and removes a transaction group only when no event still references it.
+Broken pairs cannot be edited to recreate a deleted endpoint. See `trade-in.md`
+for the confirmed interaction and accounting contract.
+
 ## 6. Money architecture
 
 Money is represented as:

@@ -183,8 +183,9 @@ INSERT INTO asset_events
     (id, tenant_id, asset_id, transaction_id, event_type, base_amount_minor,
      base_currency, original_amount_minor, original_currency, fx_rate_scaled,
      fx_rate_date, fx_rate_source, notes, voids_event_id, replaces_event_id,
-     occurred_at, created_by_user_id, created_at, event_type_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+     occurred_at, created_by_user_id, created_at, event_type_id,
+     related_asset_id, related_asset_name, related_asset_spec, trade_in_link_id, trade_in_state)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 `
 
 type CreateAssetEventParams struct {
@@ -207,6 +208,11 @@ type CreateAssetEventParams struct {
 	CreatedByUserID     uuid.UUID
 	CreatedAt           time.Time
 	EventTypeID         uuid.UUID
+	RelatedAssetID      uuid.NullUUID
+	RelatedAssetName    string
+	RelatedAssetSpec    string
+	TradeInLinkID       uuid.NullUUID
+	TradeInState        string
 }
 
 func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventParams) error {
@@ -230,6 +236,11 @@ func (q *Queries) CreateAssetEvent(ctx context.Context, arg CreateAssetEventPara
 		arg.CreatedByUserID,
 		arg.CreatedAt,
 		arg.EventTypeID,
+		arg.RelatedAssetID,
+		arg.RelatedAssetName,
+		arg.RelatedAssetSpec,
+		arg.TradeInLinkID,
+		arg.TradeInState,
 	)
 	return err
 }
@@ -699,12 +710,21 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
        e.created_by_user_id, e.created_at,
+       COALESCE(tx.source, '')::text AS source,
+       COALESCE(tx.external_reference, '')::text AS external_reference,
+       e.related_asset_id, e.trade_in_link_id, e.trade_in_state,
+       COALESCE(NULLIF(ra.display_name, ''), rm.name, e.related_asset_name)::text AS related_asset_label,
+       COALESCE(rm.name, e.related_asset_spec)::text AS related_asset_spec_label,
+       CASE WHEN e.related_asset_id IS NULL THEN FALSE WHEN ra.id IS NULL THEN TRUE ELSE FALSE END AS related_asset_deleted,
        EXISTS (
            SELECT 1 FROM asset_events v
            WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
        ) AS is_voided
 FROM asset_events e
 JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
+LEFT JOIN asset_transactions tx ON tx.tenant_id = e.tenant_id AND tx.id = e.transaction_id
+LEFT JOIN assets ra ON ra.tenant_id = e.tenant_id AND ra.id = e.related_asset_id
+LEFT JOIN product_models rm ON rm.tenant_id = ra.tenant_id AND rm.id = ra.model_id
 WHERE e.tenant_id = $1 AND e.id = $2
 `
 
@@ -714,27 +734,35 @@ type GetAssetEventParams struct {
 }
 
 type GetAssetEventRow struct {
-	ID                  uuid.UUID
-	TenantID            uuid.UUID
-	AssetID             uuid.UUID
-	TransactionID       uuid.UUID
-	EventType           string
-	EventTypeID         uuid.UUID
-	SystemCode          string
-	BaseAmountMinor     int64
-	BaseCurrency        string
-	OriginalAmountMinor sql.NullInt64
-	OriginalCurrency    sql.NullString
-	FxRateScaled        sql.NullInt64
-	FxRateDate          sql.NullTime
-	FxRateSource        sql.NullString
-	Notes               string
-	VoidsEventID        uuid.NullUUID
-	ReplacesEventID     uuid.NullUUID
-	OccurredAt          time.Time
-	CreatedByUserID     uuid.UUID
-	CreatedAt           time.Time
-	IsVoided            bool
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	AssetID               uuid.UUID
+	TransactionID         uuid.UUID
+	EventType             string
+	EventTypeID           uuid.UUID
+	SystemCode            string
+	BaseAmountMinor       int64
+	BaseCurrency          string
+	OriginalAmountMinor   sql.NullInt64
+	OriginalCurrency      sql.NullString
+	FxRateScaled          sql.NullInt64
+	FxRateDate            sql.NullTime
+	FxRateSource          sql.NullString
+	Notes                 string
+	VoidsEventID          uuid.NullUUID
+	ReplacesEventID       uuid.NullUUID
+	OccurredAt            time.Time
+	CreatedByUserID       uuid.UUID
+	CreatedAt             time.Time
+	Source                string
+	ExternalReference     string
+	RelatedAssetID        uuid.NullUUID
+	TradeInLinkID         uuid.NullUUID
+	TradeInState          string
+	RelatedAssetLabel     string
+	RelatedAssetSpecLabel string
+	RelatedAssetDeleted   bool
+	IsVoided              bool
 }
 
 func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (GetAssetEventRow, error) {
@@ -761,6 +789,14 @@ func (q *Queries) GetAssetEvent(ctx context.Context, arg GetAssetEventParams) (G
 		&i.OccurredAt,
 		&i.CreatedByUserID,
 		&i.CreatedAt,
+		&i.Source,
+		&i.ExternalReference,
+		&i.RelatedAssetID,
+		&i.TradeInLinkID,
+		&i.TradeInState,
+		&i.RelatedAssetLabel,
+		&i.RelatedAssetSpecLabel,
+		&i.RelatedAssetDeleted,
 		&i.IsVoided,
 	)
 	return i, err
@@ -1200,12 +1236,21 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
        e.created_by_user_id, e.created_at,
+       COALESCE(tx.source, '')::text AS source,
+       COALESCE(tx.external_reference, '')::text AS external_reference,
+       e.related_asset_id, e.trade_in_link_id, e.trade_in_state,
+       COALESCE(NULLIF(ra.display_name, ''), rm.name, e.related_asset_name)::text AS related_asset_label,
+       COALESCE(rm.name, e.related_asset_spec)::text AS related_asset_spec_label,
+       CASE WHEN e.related_asset_id IS NULL THEN FALSE WHEN ra.id IS NULL THEN TRUE ELSE FALSE END AS related_asset_deleted,
        EXISTS (
            SELECT 1 FROM asset_events v
            WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
        ) AS is_voided
 FROM asset_events e
 JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
+LEFT JOIN asset_transactions tx ON tx.tenant_id = e.tenant_id AND tx.id = e.transaction_id
+LEFT JOIN assets ra ON ra.tenant_id = e.tenant_id AND ra.id = e.related_asset_id
+LEFT JOIN product_models rm ON rm.tenant_id = ra.tenant_id AND rm.id = ra.model_id
 WHERE e.tenant_id = $1 AND e.asset_id = $2
 ORDER BY e.occurred_at, e.created_at, e.id
 `
@@ -1216,27 +1261,35 @@ type ListAssetEventsParams struct {
 }
 
 type ListAssetEventsRow struct {
-	ID                  uuid.UUID
-	TenantID            uuid.UUID
-	AssetID             uuid.UUID
-	TransactionID       uuid.UUID
-	EventType           string
-	EventTypeID         uuid.UUID
-	SystemCode          string
-	BaseAmountMinor     int64
-	BaseCurrency        string
-	OriginalAmountMinor sql.NullInt64
-	OriginalCurrency    sql.NullString
-	FxRateScaled        sql.NullInt64
-	FxRateDate          sql.NullTime
-	FxRateSource        sql.NullString
-	Notes               string
-	VoidsEventID        uuid.NullUUID
-	ReplacesEventID     uuid.NullUUID
-	OccurredAt          time.Time
-	CreatedByUserID     uuid.UUID
-	CreatedAt           time.Time
-	IsVoided            bool
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	AssetID               uuid.UUID
+	TransactionID         uuid.UUID
+	EventType             string
+	EventTypeID           uuid.UUID
+	SystemCode            string
+	BaseAmountMinor       int64
+	BaseCurrency          string
+	OriginalAmountMinor   sql.NullInt64
+	OriginalCurrency      sql.NullString
+	FxRateScaled          sql.NullInt64
+	FxRateDate            sql.NullTime
+	FxRateSource          sql.NullString
+	Notes                 string
+	VoidsEventID          uuid.NullUUID
+	ReplacesEventID       uuid.NullUUID
+	OccurredAt            time.Time
+	CreatedByUserID       uuid.UUID
+	CreatedAt             time.Time
+	Source                string
+	ExternalReference     string
+	RelatedAssetID        uuid.NullUUID
+	TradeInLinkID         uuid.NullUUID
+	TradeInState          string
+	RelatedAssetLabel     string
+	RelatedAssetSpecLabel string
+	RelatedAssetDeleted   bool
+	IsVoided              bool
 }
 
 func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams) ([]ListAssetEventsRow, error) {
@@ -1269,6 +1322,14 @@ func (q *Queries) ListAssetEvents(ctx context.Context, arg ListAssetEventsParams
 			&i.OccurredAt,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
+			&i.Source,
+			&i.ExternalReference,
+			&i.RelatedAssetID,
+			&i.TradeInLinkID,
+			&i.TradeInState,
+			&i.RelatedAssetLabel,
+			&i.RelatedAssetSpecLabel,
+			&i.RelatedAssetDeleted,
 			&i.IsVoided,
 		); err != nil {
 			return nil, err
@@ -1300,6 +1361,12 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.
        e.original_currency, e.fx_rate_scaled, e.fx_rate_date, e.fx_rate_source,
        e.notes, e.voids_event_id, e.replaces_event_id, e.occurred_at,
        e.created_by_user_id, e.created_at,
+       COALESCE(tx.source, '')::text AS source,
+       COALESCE(tx.external_reference, '')::text AS external_reference,
+       e.related_asset_id, e.trade_in_link_id, e.trade_in_state,
+       COALESCE(NULLIF(ra.display_name, ''), rm.name, e.related_asset_name)::text AS related_asset_label,
+       COALESCE(rm.name, e.related_asset_spec)::text AS related_asset_spec_label,
+       CASE WHEN e.related_asset_id IS NULL THEN FALSE WHEN ra.id IS NULL THEN TRUE ELSE FALSE END AS related_asset_deleted,
        EXISTS (
            SELECT 1 FROM asset_events v
            WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
@@ -1308,12 +1375,16 @@ SELECT e.id, e.tenant_id, e.asset_id, e.transaction_id, t.name AS event_type, e.
 FROM asset_events e
 JOIN asset_event_types t ON t.tenant_id = e.tenant_id AND t.id = e.event_type_id
 JOIN event_lineage lineage ON lineage.id = e.id
+LEFT JOIN asset_transactions tx ON tx.tenant_id = e.tenant_id AND tx.id = e.transaction_id
+LEFT JOIN assets ra ON ra.tenant_id = e.tenant_id AND ra.id = e.related_asset_id
+LEFT JOIN product_models rm ON rm.tenant_id = ra.tenant_id AND rm.id = ra.model_id
 WHERE e.tenant_id = $1 AND e.asset_id = $2
   AND t.system_code != 'void'
   AND ($3::boolean OR NOT EXISTS (
       SELECT 1 FROM asset_events v
       WHERE v.tenant_id = e.tenant_id AND v.voids_event_id = e.id
   ))
+  AND ($3::boolean OR e.trade_in_state <> 'cancelled')
   AND ($4::text = '' OR e.notes ILIKE '%' || $4::text || '%' OR COALESCE(e.fx_rate_source, '') ILIKE '%' || $4::text || '%')
   AND ($5::text = '' OR e.event_type_id::text = $5::text)
 ORDER BY
@@ -1344,28 +1415,36 @@ type ListAssetEventsPageParams struct {
 }
 
 type ListAssetEventsPageRow struct {
-	ID                  uuid.UUID
-	TenantID            uuid.UUID
-	AssetID             uuid.UUID
-	TransactionID       uuid.UUID
-	EventType           string
-	EventTypeID         uuid.UUID
-	SystemCode          string
-	BaseAmountMinor     int64
-	BaseCurrency        string
-	OriginalAmountMinor sql.NullInt64
-	OriginalCurrency    sql.NullString
-	FxRateScaled        sql.NullInt64
-	FxRateDate          sql.NullTime
-	FxRateSource        sql.NullString
-	Notes               string
-	VoidsEventID        uuid.NullUUID
-	ReplacesEventID     uuid.NullUUID
-	OccurredAt          time.Time
-	CreatedByUserID     uuid.UUID
-	CreatedAt           time.Time
-	IsVoided            bool
-	TotalCount          int64
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
+	AssetID               uuid.UUID
+	TransactionID         uuid.UUID
+	EventType             string
+	EventTypeID           uuid.UUID
+	SystemCode            string
+	BaseAmountMinor       int64
+	BaseCurrency          string
+	OriginalAmountMinor   sql.NullInt64
+	OriginalCurrency      sql.NullString
+	FxRateScaled          sql.NullInt64
+	FxRateDate            sql.NullTime
+	FxRateSource          sql.NullString
+	Notes                 string
+	VoidsEventID          uuid.NullUUID
+	ReplacesEventID       uuid.NullUUID
+	OccurredAt            time.Time
+	CreatedByUserID       uuid.UUID
+	CreatedAt             time.Time
+	Source                string
+	ExternalReference     string
+	RelatedAssetID        uuid.NullUUID
+	TradeInLinkID         uuid.NullUUID
+	TradeInState          string
+	RelatedAssetLabel     string
+	RelatedAssetSpecLabel string
+	RelatedAssetDeleted   bool
+	IsVoided              bool
+	TotalCount            int64
 }
 
 func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPageParams) ([]ListAssetEventsPageRow, error) {
@@ -1408,6 +1487,14 @@ func (q *Queries) ListAssetEventsPage(ctx context.Context, arg ListAssetEventsPa
 			&i.OccurredAt,
 			&i.CreatedByUserID,
 			&i.CreatedAt,
+			&i.Source,
+			&i.ExternalReference,
+			&i.RelatedAssetID,
+			&i.TradeInLinkID,
+			&i.TradeInState,
+			&i.RelatedAssetLabel,
+			&i.RelatedAssetSpecLabel,
+			&i.RelatedAssetDeleted,
 			&i.IsVoided,
 			&i.TotalCount,
 		); err != nil {

@@ -49,4 +49,9 @@ func testWorkerTools(t *testing.T, s Services, admin application.Principal, cate
 	}
 	identity.Principal.Role = application.RoleViewer
 	call("save_asset", args, true) // Authorization also precedes durable receipt replay.
+	// A viewer may review a trade-in but never record, correct or cancel one; the
+	// capability gate precedes any service call, so no store is touched here.
+	for _, name := range []string{"record_trade_in", "correct_trade_in_link", "cancel_trade_in_link"} {
+		call(name, map[string]any{"request_key": "worker-" + name}, true)
+	}
 }

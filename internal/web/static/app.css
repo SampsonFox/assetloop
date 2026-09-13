@@ -715,3 +715,32 @@ dialog .asset-editor-fields { grid-template-columns:repeat(auto-fit,minmax(min(1
   .member-role-form label { flex:0 1 170px; }
 }
 @media(pointer:coarse) { .member-role-form .icon-button { width:44px; height:44px; min-height:44px; } }
+
+/* Trade-in selection/review flow and paired-relation timeline rows. */
+.timeline-heading-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.timeline-relation { margin:6px 0 0; font-size:.85rem; overflow-wrap:anywhere; }
+.timeline-entry-footer form { display:inline; margin:0; }
+.trade-in-heading { align-items:flex-start; }
+.trade-in-card { display:grid; gap:16px; }
+.trade-in-card h2 { margin:0; font-size:18px; }
+.trade-in-card h3 { margin:0; font-size:16px; }
+.trade-in-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.trade-in-actions form { margin:0; }
+.trade-in-search input { width:100%; }
+.trade-in-candidates { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+.trade-in-candidates li { border-bottom:1px solid var(--line); }
+.trade-in-candidate { display:flex; align-items:center; gap:12px; padding:12px 4px; font-weight:500; }
+.trade-in-candidate input[type="checkbox"] { flex:none; width:20px; height:20px; margin:0; accent-color:var(--accent); }
+.trade-in-candidate-name { font-weight:600; }
+.trade-in-economic { padding:16px 0; border-top:1px solid var(--line); }
+.trade-in-economic header { margin-bottom:12px; }
+.trade-in-economic header p { margin:4px 0 0; font-size:.85rem; }
+.trade-in-evidence { display:grid; gap:8px; margin:0; }
+.trade-in-evidence > div { display:grid; grid-template-columns:minmax(90px,1fr) minmax(0,2fr); gap:12px; }
+.trade-in-evidence dt { color:var(--muted); }
+.trade-in-evidence dd { margin:0; overflow-wrap:anywhere; }
+.trade-in-pairs { display:grid; gap:8px; margin:0; padding-inline-start:20px; }
+@media (max-width:600px) {
+  .timeline-heading-actions { width:100%; }
+  .trade-in-evidence > div { grid-template-columns:minmax(0,1fr); gap:2px; }
+}

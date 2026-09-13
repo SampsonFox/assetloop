@@ -47,6 +47,11 @@ type AssetEvent struct {
 	CreatedByUserID     string
 	CreatedAt           string
 	EventTypeID         string
+	RelatedAssetID      sql.NullString
+	RelatedAssetName    string
+	RelatedAssetSpec    string
+	TradeInLinkID       sql.NullString
+	TradeInState        string
 }
 
 type AssetEventType struct {

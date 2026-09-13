@@ -35,6 +35,10 @@ type scenarioStore interface {
 	application.ModelImageStore
 	application.SpecificationStore
 	application.MarketStore
+	// The trade-in relation and its receipt-backed ManagementStore surface are
+	// part of the shared conformance scenario both supported adapters implement.
+	application.TradeInStore
+	application.ManagementStore
 }
 
 func TestFullElementScenario(t *testing.T) {
@@ -438,6 +442,7 @@ func runFullElementScenario(t *testing.T, db *sql.DB, store scenarioStore, drive
 		t.Fatalf("expected setup, two membership and login audit events, got %d", auditCount)
 	}
 	t.Run("custom lifecycle costs and reclassification", func(t *testing.T) { storetest.RunCustomLifecycleCosts(t, store) })
+	t.Run("trade-in relations", func(t *testing.T) { storetest.RunTradeIn(t, store) })
 	t.Run("MCP OAuth lifecycle", func(t *testing.T) {
 		runMCPFullElement(t, db, store, ownerSession, model.ID)
 	})

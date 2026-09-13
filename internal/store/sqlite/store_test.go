@@ -29,6 +29,7 @@ func TestStoreConformanceAndSafeRemigration(t *testing.T) {
 	}
 	defer other.Close()
 	storetest.RunLifecycleRetries(t, sqlite.New(db), sqlite.New(other))
+	storetest.RunTradeInRetries(t, sqlite.New(db), sqlite.New(other))
 	storetest.AssertAssetEventsAppendOnly(t, db, "sqlite")
 	storetest.AssertBaseCurrencyLocked(t, db, "sqlite")
 	storetest.RunModelResources(t, sqlite.New(db), sqlite.New(other), db, "sqlite")

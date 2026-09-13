@@ -57,6 +57,7 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	server := sdk.NewServer(&sdk.Implementation{Name: "assetloop", Version: "0.1.0"}, nil)
 	registerQueries(server, services)
 	registerLifecycle(server, services)
+	registerTradeIn(server, services)
 	registerCatalog(server, services)
 	registerSpecifications(server, services)
 	registerEventTypes(server, services)

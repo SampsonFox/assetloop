@@ -1,0 +1,139 @@
+{{define "content"}}{{$s := .Strings}}{{$t := .TradeIn}}
+<div class="page-heading trade-in-heading">
+  <div>
+    <p class="eyebrow">{{t $s "trade_in.eyebrow"}}</p>
+    <h1>{{t $s "trade_in.heading"}} · {{assetTitle .Asset}}</h1>
+    <p class="muted">{{$t.DirectionLabel}}</p>
+  </div>
+  <a href="/assets/{{.Asset.ID}}">{{t $s "common.back"}}</a>
+</div>
+{{if eq $t.Mode "link"}}{{$l := $t.LinkEdit}}
+<section class="card trade-in-card">
+  <h2>{{t $s "trade_in.correct_heading"}}</h2>
+  <p class="muted">{{t $s "trade_in.correct_help"}}</p>
+  {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
+  <dl class="trade-in-evidence">
+    <div><dt>{{t $s "trade_in.pair_new"}}</dt><dd>{{$l.NewAssetName}} <span class="muted">{{$l.NewAssetSpec}}</span></dd></div>
+    <div><dt>{{t $s "trade_in.pair_old"}}</dt><dd>{{$l.OldAssetName}} <span class="muted">{{$l.OldAssetSpec}}</span></dd></div>
+  </dl>
+  <form class="form-grid section-gap" action="/assets/{{.Asset.ID}}/trade-in/{{$l.LinkID}}/edit" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="request_key" value="{{$t.RequestKey}}">
+    <input type="hidden" name="direction" value="{{$l.Direction}}">
+    <input type="hidden" name="source_event_id" value="{{$l.SourceEventID}}">
+    <input type="hidden" name="destination_event_id" value="{{$l.DestinationEventID}}">
+    <label>{{t $s "trade_in.new_asset"}}<input name="new_asset_id" list="trade-in-assets" value="{{$l.NewAssetID}}" required autocomplete="off" spellcheck="false"></label>
+    <label>{{t $s "trade_in.old_asset"}}<input name="old_asset_id" list="trade-in-assets" value="{{$l.OldAssetID}}" required autocomplete="off" spellcheck="false"></label>
+    <datalist id="trade-in-assets">{{range $t.Choices}}<option value="{{.AssetID}}">{{.Name}} · {{.Spec}}</option>{{end}}</datalist>
+    <label>{{t $s "trade_in.association_date"}}<input type="datetime-local" name="association_date" value="{{$t.AssociationDate}}" required></label>
+    <label>{{t $s "trade_in.association_reference"}}<input name="association_reference" value="{{$t.AssociationRef}}" maxlength="200"></label>
+    <label class="wide">{{t $s "trade_in.association_notes"}}<textarea name="association_notes" maxlength="2000" rows="3">{{$t.AssociationNotes}}</textarea></label>
+    <div class="trade-in-actions wide">
+      <button class="auto" type="submit">{{t $s "trade_in.save_link"}}</button>
+    </div>
+  </form>
+  <form class="section-gap" action="/assets/{{.Asset.ID}}/trade-in/{{$l.LinkID}}/cancel" method="post" data-confirm="{{t $s "trade_in.cancel_confirm"}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="request_key" value="{{$t.RequestKey}}">
+    <input type="hidden" name="source_event_id" value="{{$l.SourceEventID}}">
+    <input type="hidden" name="destination_event_id" value="{{$l.DestinationEventID}}">
+    <button class="secondary auto" type="submit">{{t $s "trade_in.cancel_link"}}</button>
+  </form>
+</section>
+{{else}}
+<section class="card trade-in-card">
+  <p class="muted">{{if eq $t.Mode "select"}}{{t $s "trade_in.step_select"}}{{else}}{{t $s "trade_in.step_review"}}{{end}}</p>
+  {{if .Error}}<p class="error" role="alert" aria-live="assertive" tabindex="-1" data-error-summary>{{.Error}}</p>{{end}}
+  {{if eq $t.Mode "select"}}
+  <form class="stack section-gap" action="/assets/{{.Asset.ID}}/trade-in/preview" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="direction" value="{{$t.Direction}}">
+    <input type="hidden" name="page" value="{{$t.Page}}">
+    <div class="trade-in-actions">
+      <span class="muted">{{$t.DirectionLabel}}</span>
+      <a class="button secondary auto" href="/assets/{{.Asset.ID}}/trade-in?direction=source">{{t $s "trade_in.switch_source"}}</a>
+      <a class="button secondary auto" href="/assets/{{.Asset.ID}}/trade-in?direction=destination">{{t $s "trade_in.switch_destination"}}</a>
+    </div>
+    <label class="trade-in-search">{{t $s "trade_in.search"}}<input type="search" name="q" value="{{$t.Query}}" placeholder="{{t $s "trade_in.search_placeholder"}}"></label>
+    <p class="muted">{{$t.SelectionLabel}} · {{t $s "trade_in.limit"}} · {{t $s "trade_in.exclude_current"}}</p>
+    {{range $t.SelectedIDs}}<input type="hidden" name="retain" value="{{.}}">{{end}}
+    <ul class="trade-in-candidates">
+      {{range $t.Candidates}}
+      <li><input type="hidden" name="displayed" value="{{.AssetID}}"><label class="trade-in-candidate"><input type="checkbox" name="selected" value="{{.AssetID}}"{{if .Selected}} checked{{end}}><span class="trade-in-candidate-name">{{.Name}}</span><span class="muted">{{.Spec}}</span><span class="muted">{{statusLabel $s .Status}}</span></label></li>
+      {{else}}
+      <li class="muted">{{t $s "trade_in.no_candidates"}} · {{t $s "trade_in.no_candidates_help"}}</li>
+      {{end}}
+    </ul>
+    <div class="trade-in-actions">
+      <button class="secondary auto" type="submit" name="step" value="search" formnovalidate>{{t $s "assets.search"}}</button>
+      {{if $t.PreviousPage}}<button class="secondary auto" type="submit" name="goto" value="{{$t.PreviousPage}}" formnovalidate>{{t $s "assets.previous"}}</button>{{end}}
+      {{if $t.NextPage}}<button class="secondary auto" type="submit" name="goto" value="{{$t.NextPage}}" formnovalidate>{{t $s "assets.next"}}</button>{{end}}
+      <button class="auto" type="submit" name="step" value="review">{{t $s "trade_in.continue"}}</button>
+    </div>
+  </form>
+  {{else}}
+  <form class="stack section-gap" action="/assets/{{.Asset.ID}}/trade-in" method="post" data-guard-dirty data-discard-confirm="{{t $s "common.discard_changes"}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="request_key" value="{{$t.RequestKey}}">
+    <input type="hidden" name="direction" value="{{$t.Direction}}">
+    {{range $t.SelectedIDs}}<input type="hidden" name="counterpart_id" value="{{.}}">{{end}}
+    <p class="muted">{{$t.SelectionLabel}}</p>
+    <p class="muted" role="status">{{if $t.PreviewReady}}{{t $s "trade_in.ready"}}{{else}}{{t $s "trade_in.not_ready"}}{{end}}</p>
+    <h2>{{t $s "trade_in.money_title"}}</h2>
+    <p class="muted">{{t $s "trade_in.association_help"}}</p>
+    {{range $t.Economics}}
+    <article class="trade-in-economic" data-trade-in-money>
+      <header>
+        <h3>{{.AssetName}}</h3>
+        <p class="muted">{{.AssetSpec}} · {{.RoleLabel}}{{if not .Stale}} · {{if .Editing}}{{if eq .Selection "missing"}}{{t $s "trade_in.missing"}}{{else}}{{t $s "trade_in.create"}}{{end}}{{else}}{{t $s "trade_in.reuse"}}{{end}}{{end}}</p>
+      </header>
+      {{if .Editing}}
+      <div class="form-grid">
+        <label>{{t $s "asset.amount"}}<span class="money-input-group"><input name="amount_{{.AssetID}}" inputmode="decimal" value="{{.Form.Amount}}" placeholder="0.00" autocomplete="off"><input class="currency-suffix" name="currency_{{.AssetID}}" value="{{.Form.Currency}}" list="trade-in-currencies" maxlength="3" pattern="[A-Za-z]{3}" spellcheck="false" autocomplete="off" data-trade-in-currency data-trade-in-base="{{$.BaseCurrency}}" aria-label="{{t $s "asset.original_currency"}}"></span></label>
+        <label>{{t $s "asset.occurred_at"}}<input type="datetime-local" name="occurred_{{.AssetID}}" value="{{.Form.OccurredAt}}"></label>
+        <label data-trade-in-fx>{{t $s "asset.fx_rate"}}<input name="fx_rate_{{.AssetID}}" value="{{.Form.FXRate}}" inputmode="decimal" autocomplete="off"></label>
+        <label data-trade-in-fx>{{t $s "asset.fx_date"}}<input type="date" name="fx_date_{{.AssetID}}" value="{{.Form.FXRateDate}}"></label>
+        <label data-trade-in-fx>{{t $s "asset.fx_source"}}<input name="fx_source_{{.AssetID}}" value="{{.Form.FXRateSource}}" maxlength="120"></label>
+        <label>{{t $s "asset.reference"}}<input name="reference_{{.AssetID}}" value="{{.Form.Reference}}" maxlength="200"></label>
+        <label>{{t $s "common.notes"}}<input name="notes_{{.AssetID}}" value="{{.Form.Notes}}" maxlength="2000"></label>
+      </div>
+      {{else}}
+      <input type="hidden" name="existing_{{.AssetID}}" value="{{.ExistingID}}">
+      {{if .Stale}}<p class="error" role="alert">{{t $s "validation.trade_in_event_stale"}}</p>{{end}}
+      {{if .Event}}
+      <dl class="trade-in-evidence">
+        <div><dt>{{t $s "asset.amount"}}</dt><dd>{{money .Event.BaseAmountMinor .Event.BaseCurrency}}</dd></div>
+        <div><dt>{{t $s "asset.occurred_at"}}</dt><dd>{{dateTime .Event.OccurredAt}}</dd></div>
+        {{if .Event.FX}}<div><dt>{{t $s "asset.fx_evidence"}}</dt><dd>{{money .Event.FX.OriginalAmountMinor .Event.FX.OriginalCurrency}} × {{rate .Event.FX.RateScaled}}<span class="muted"> {{date .Event.FX.RateDate}} · {{.Event.FX.RateSource}}</span></dd></div>{{end}}
+        {{if .Event.ExternalReference}}<div><dt>{{t $s "asset.reference"}}</dt><dd>{{.Event.ExternalReference}}</dd></div>{{end}}
+        {{if .Event.Notes}}<div><dt>{{t $s "common.notes"}}</dt><dd>{{.Event.Notes}}</dd></div>{{end}}
+      </dl>
+      {{else if not .Stale}}
+      <p class="muted">{{t $s "trade_in.amount_required"}}</p>
+      {{end}}
+      {{end}}
+    </article>
+    {{end}}
+    <datalist id="trade-in-currencies">{{range currencyOptions}}<option value="{{.}}"></option>{{end}}</datalist>
+    <h2>{{t $s "trade_in.pairs"}}</h2>
+    <ul class="trade-in-pairs">
+      {{range $t.Links}}
+      <li><span>{{t $s "trade_in.pair_new"}} {{.NewAssetName}} <span class="muted">{{.NewAssetSpec}}</span></span> → <span>{{t $s "trade_in.pair_old"}} {{.OldAssetName}} <span class="muted">{{.OldAssetSpec}}</span></span> <span class="muted">{{t $s "trade_in.no_money"}}</span></li>
+      {{end}}
+    </ul>
+    <h2>{{t $s "trade_in.association"}}</h2>
+    <div class="form-grid">
+      <label>{{t $s "trade_in.association_date"}}<input type="datetime-local" name="association_date" value="{{$t.AssociationDate}}" required></label>
+      <label>{{t $s "trade_in.association_reference"}}<input name="association_reference" value="{{$t.AssociationRef}}" maxlength="200"></label>
+      <label class="wide">{{t $s "trade_in.association_notes"}}<textarea name="association_notes" maxlength="2000" rows="3">{{$t.AssociationNotes}}</textarea></label>
+    </div>
+    <div class="trade-in-actions">
+      <a class="button secondary auto" href="/assets/{{.Asset.ID}}/trade-in?direction={{$t.Direction}}">{{t $s "trade_in.back_to_select"}}</a>
+      <button class="auto" type="submit">{{t $s "trade_in.review"}}</button>
+    </div>
+  </form>
+  {{end}}
+</section>
+{{end}}
+<script type="module" src="/static/trade-in.js"></script>
+{{end}}

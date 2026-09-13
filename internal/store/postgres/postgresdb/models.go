@@ -51,6 +51,11 @@ type AssetEvent struct {
 	CreatedByUserID     uuid.UUID
 	CreatedAt           time.Time
 	EventTypeID         uuid.UUID
+	RelatedAssetID      uuid.NullUUID
+	RelatedAssetName    string
+	RelatedAssetSpec    string
+	TradeInLinkID       uuid.NullUUID
+	TradeInState        string
 }
 
 type AssetEventType struct {

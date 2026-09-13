@@ -25,6 +25,9 @@
     <label data-fx-field hidden>{{t $s "asset.fx_source"}}<input name="fx_rate_source" value="{{.EventForm.FXRateSource}}" data-fx-required></label>{{end}}
     <label>{{t $s "correct.source"}}<input name="source" value="{{.EventForm.Source}}"></label>
     <label class="wide">{{t $s "correct.notes"}}<textarea name="notes" required maxlength="2000" rows="3">{{.EventForm.Notes}}</textarea></label>
+    <label>{{t $s "trade_in.related_asset"}}{{if .EventForm.RelatedAssetDeleted}}<span class="muted">{{.EventForm.RelatedAssetLabel}}{{if .EventForm.RelatedAssetSpec}} · {{.EventForm.RelatedAssetSpec}}{{end}} · {{t $s "trade_in.related_deleted"}}</span>{{else}}<input name="related_asset_id" list="correction-related-assets" value="{{.EventForm.RelatedAssetID}}" autocomplete="off" spellcheck="false"><small class="muted">{{t $s "trade_in.related_help"}}</small>{{end}}</label>
+    {{if .EventForm.RelatedAssetID}}<label class="switch-control"><input type="checkbox" name="clear_related" value="1"><span class="switch-track" aria-hidden="true"></span><span>{{t $s "trade_in.related_clear"}}</span></label>{{end}}
+    <datalist id="correction-related-assets">{{range .RelatedAssets}}<option value="{{.AssetID}}">{{.Label}}{{if .Spec}} · {{.Spec}}{{end}}</option>{{end}}</datalist>
     <button type="submit">{{t $s "correct.submit"}}</button>
   </form>
 </section>

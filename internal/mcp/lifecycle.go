@@ -20,6 +20,11 @@ type EventFields struct {
 	FXConfirmed       bool   `json:"fx_confirmed,omitempty"`
 	ExternalReference string `json:"external_reference,omitempty"`
 	Notes             string `json:"notes,omitempty" jsonschema:"Details of this individual event: the product or service name and relevant context. A purchased service or accessory keeps its specific product name here; the reusable cost category is chosen with type_id."`
+	// RelatedAssetID is the optional neutral counterpart of this event on another
+	// existing asset of the same data space. Omitting it on a correction preserves
+	// the current relation; an explicit empty string clears it. Paired trade-in
+	// events stay owned by the dedicated trade-in tools.
+	RelatedAssetID *string `json:"related_asset_id,omitempty" jsonschema:"Optional ID of another existing asset this record relates to. Omitted on a correction preserves the current relation; an explicit empty string clears it. A paired trade-in event is refused here."`
 }
 
 type EventInput struct {
@@ -49,7 +54,7 @@ func (input EventFields) command() (application.RecordEvent, error) {
 			return application.RecordEvent{}, application.NewInputError("validation.fx_rate_date")
 		}
 	}
-	return application.RecordEvent{RequestKey: input.RequestKey, AmountMinor: input.AmountMinor, Currency: input.Currency, OccurredAt: when, FXRateScaled: input.FXRateScaled, FXRateDate: rateDate, FXRateSource: input.FXRateSource, FXConfirmed: input.FXConfirmed, Source: "mcp", ExternalReference: input.ExternalReference, Notes: input.Notes}, nil
+	return application.RecordEvent{RequestKey: input.RequestKey, AmountMinor: input.AmountMinor, Currency: input.Currency, OccurredAt: when, FXRateScaled: input.FXRateScaled, FXRateDate: rateDate, FXRateSource: input.FXRateSource, FXConfirmed: input.FXConfirmed, Source: "mcp", ExternalReference: input.ExternalReference, Notes: input.Notes, RelatedAssetID: input.RelatedAssetID}, nil
 }
 
 func registerLifecycle(server *sdk.Server, s Services) {

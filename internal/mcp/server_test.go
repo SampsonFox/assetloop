@@ -68,12 +68,15 @@ func TestHTTPQueries(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(list.Tools) != 53 {
-				t.Fatalf("tools = %d, want 53", len(list.Tools))
+			if len(list.Tools) != 57 {
+				t.Fatalf("tools = %d, want 57", len(list.Tools))
 			}
 			for _, tool := range list.Tools {
 				write := strings.HasPrefix(tool.Name, "save_") || strings.HasPrefix(tool.Name, "create_") || strings.HasPrefix(tool.Name, "update_") || strings.HasPrefix(tool.Name, "delete_") || strings.HasPrefix(tool.Name, "set_") || tool.Name == "record_event" || tool.Name == "correct_event"
 				write = write || tool.Name == "bind_asset_market" || tool.Name == "refresh_market_price" || tool.Name == "bind_3d_resource" || tool.Name == "import_3d_resource_from_url" || tool.Name == "import_model_image_from_url" || tool.Name == "upload_model_image"
+				// The three trade-in mutations are semantic writes through the shared
+				// management service; only preview_trade_in is read-only.
+				write = write || tool.Name == "record_trade_in" || tool.Name == "correct_trade_in_link" || tool.Name == "cancel_trade_in_link"
 				if tool.Annotations == nil || tool.Annotations.ReadOnlyHint == write {
 					t.Errorf("%s is not annotated read-only", tool.Name)
 				}

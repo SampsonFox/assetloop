@@ -124,7 +124,10 @@ func run(args []string) error {
 		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
 		modelImages := application.NewModelImageService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
 		marketService := newMarketService(appStore, cfg)
-		options := webtransport.Options{Market: marketService, AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore)}
+		// The receipt-backed management service is created once and shared by Web
+		// and MCP, so Web trade-ins are available even when MCP is disabled.
+		management := application.NewManagementService(appStore, blobStores)
+		options := webtransport.Options{Market: marketService, AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore), Management: management}
 		options.ModelImages = modelImages
 		options.ImageDownloader = modeldownload.New()
 		var oauthHTTP *mcptransport.OAuthHTTP
@@ -158,7 +161,6 @@ func run(args []string) error {
 			}
 			mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
 			mux.Handle("/oauth/revoke", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Revoke)))
-			management := application.NewManagementService(appStore, blobStores)
 			importer := application.NewModelImportService(management, modelMedia, modeldownload.New())
 			imageImporter := application.NewModelImageImportService(management, modelImages, modeldownload.New())
 			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Market: marketService, Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: management, Import: importer, Images: modelImages, ImageImport: imageImporter}, oauthHTTP.Authenticate)))

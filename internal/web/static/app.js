@@ -79,6 +79,21 @@
     return true;
   };
 
+  // The two neutral pairing types are never submitted through the ordinary
+  // record form: selecting one opens the dedicated trade-in flow. The same
+  // mapping is served natively by the explicit trade-in links, so a no-JavaScript
+  // user reaches the same form without weakening amount validation here.
+  const tradeInDirectionBySystemCode = {trade_in_source: 'source', trade_in_destination: 'destination'};
+  const openTradeInForm = (select) => {
+    const code = select.selectedOptions[0]?.dataset.systemCode || '';
+    const direction = tradeInDirectionBySystemCode[code];
+    const base = select.dataset.tradeInBase;
+    if (!direction || !base) return false;
+    select.value = select.dataset.selectedType || '';
+    window.location.assign(`${base}?direction=${direction}`);
+    return true;
+  };
+
   const syncEventTypeFields = (select) => {
     select.dataset.selectedType = select.value;
     const create = select.querySelector('[data-event-type-create]');
@@ -339,6 +354,7 @@
     if (event.target.closest("[data-transfer-ui]")) return;
     const eventType = event.target.closest("[data-event-type-select]");
     if (eventType && chooseEventType(eventType)) return;
+    if (eventType && openTradeInForm(eventType)) return;
     const dirty = event.target.closest("form[data-guard-dirty]");
     updateDirty(dirty);
     const currency = event.target.closest("[data-currency-select]");

@@ -53,6 +53,7 @@ func TestStoreConformance(t *testing.T) {
 	}
 	defer other.Close()
 	storetest.RunLifecycleRetries(t, postgres.New(db), postgres.New(other))
+	storetest.RunTradeInRetries(t, postgres.New(db), postgres.New(other))
 	storetest.AssertAssetEventsAppendOnly(t, db, "postgres")
 	storetest.AssertBaseCurrencyLocked(t, db, "postgres")
 	storetest.RunModelResources(t, postgres.New(db), postgres.New(other), db, "postgres")

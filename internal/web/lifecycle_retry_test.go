@@ -177,7 +177,18 @@ func TestLifecycleFormsEnforceUniquePurchaseAndNeutralGift(t *testing.T) {
 			t.Fatalf("purchase amount control missing %q: %s", want, page.Body.String())
 		}
 	}
-	if strings.Contains(page.Body.String(), "data-system-code=") || strings.Contains(page.Body.String(), "data-nonnegative-pattern=") {
+	// The purchase option owns the positive-amount policy. The same page now also
+	// offers the enabled trade-in pairing types, which legitimately carry their own
+	// data-system-code, so the zero-amount assertion is scoped to the purchase
+	// option instead of the whole page.
+	purchaseOption := regexp.MustCompile(`<option[^>]*data-system-code="purchase"[^>]*>`).FindString(page.Body.String())
+	if purchaseOption == "" {
+		t.Fatalf("the purchase option is missing: %s", page.Body.String())
+	}
+	if !strings.Contains(purchaseOption, `data-cashflow="expense"`) || strings.Contains(purchaseOption, "data-nonnegative-pattern=") {
+		t.Fatalf("the purchase option must not advertise a zero-amount policy: %s", purchaseOption)
+	}
+	if strings.Contains(page.Body.String(), "data-nonnegative-pattern=") {
 		t.Fatalf("purchase must not advertise a zero-amount policy: %s", page.Body.String())
 	}
 	purchase := url.Values{"request_key": {"web-purchase"}, "event_type": {"purchase"}, "amount": {"100.00"}, "currency": {"CNY"}, "occurred_at": {"2026-08-26T12:00"}, "source": {"manual"}, "notes": {"device"}}

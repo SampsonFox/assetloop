@@ -1043,6 +1043,9 @@ func newTestHandlerWithBlob(t *testing.T, wrap func(application.BlobStore) appli
 	}
 	modelMedia := application.NewModelMediaService(adapter, blob.Registry{"local": testBlob}, blob.ObjectKeyMapper{}, "local")
 	options := Options{AuthMode: "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(adapter)}
+	// The receipt-backed management service owns trade-in writes; the fixture
+	// supplies it so the Web trade-in routes are exercised for real.
+	options.Management = application.NewManagementService(adapter, blob.Registry{"local": testBlob})
 	options.ModelImages = application.NewModelImageService(adapter, blob.Registry{"local": testBlob}, blob.ObjectKeyMapper{}, "local")
 	server, err := New(auth, catalog, lifecycle, db, options)
 	if err != nil {
