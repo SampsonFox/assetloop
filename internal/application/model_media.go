@@ -310,7 +310,7 @@ func (s *ModelMediaService) ListResources(ctx context.Context, actor Principal, 
 	return s.store.ListModel3DResources(ctx, actor.TenantID, opts)
 }
 func (s *ModelMediaService) Bind(ctx context.Context, actor Principal, cmd BindModel3DResource) error {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
+	if err := actor.Require(BindingCapability(cmd.Kind)); err != nil {
 		return err
 	}
 	if cmd.Kind != "model" && cmd.Kind != "asset" {
@@ -484,4 +484,12 @@ func modelMediaURL(value string) (string, error) {
 		return "", errors.New("model source URL must be HTTP or HTTPS")
 	}
 	return value, nil
+}
+
+// BindingCapability distinguishes item selection from shared configuration.
+func BindingCapability(kind string) Capability {
+	if kind == "asset" {
+		return CapabilityManageAssets
+	}
+	return CapabilityManageCatalog
 }

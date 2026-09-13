@@ -382,7 +382,7 @@ func oauthAllows(actor Principal, scopes []string) bool {
 		switch scope {
 		case OAuthRead:
 		case OAuthCatalog:
-			capability = CapabilityManageCatalog
+			capability = CapabilityManageAssets
 		case OAuthLifecycle:
 			capability = CapabilityManageLifecycle
 		default:

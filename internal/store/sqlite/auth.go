@@ -143,3 +143,39 @@ func sqliteTime(value time.Time) string {
 func nullableString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: value != ""}
 }
+
+func (s *Store) ChangeMemberRole(ctx context.Context, actor application.Principal, userID string, role application.Role, event application.SecurityEvent) error {
+	tenant, target, actorID := actor.TenantID, userID, actor.UserID
+	return s.WithManagementWrite(ctx, actor.TenantID, func(store application.ManagementStore) error {
+		st := store.(*Store)
+		current, err := st.queries().GetMemberRole(ctx, sqlitedb.GetMemberRoleParams{TenantID: tenant, UserID: actorID})
+		if err != nil {
+			return err
+		}
+		if current != "owner" {
+			return application.ErrForbidden
+		}
+		old, err := st.queries().GetMemberRole(ctx, sqlitedb.GetMemberRoleParams{TenantID: tenant, UserID: target})
+		if err != nil {
+			return err
+		}
+		if old == string(role) {
+			return nil
+		}
+		if old == "owner" && role != application.RoleOwner {
+			count, err := st.queries().CountAdministrators(ctx, tenant)
+			if err != nil {
+				return err
+			}
+			if count <= 1 {
+				return application.NewInputError("validation.last_administrator")
+			}
+		}
+		_, err = st.queries().ChangeMemberRole(ctx, sqlitedb.ChangeMemberRoleParams{TenantID: tenant, UserID: target, Role: string(role)})
+		if err != nil {
+			return err
+		}
+		event.Detail = old + " -> " + string(role)
+		return st.queries().CreateSecurityAuditEvent(ctx, sqliteSecurityEvent(event))
+	})
+}

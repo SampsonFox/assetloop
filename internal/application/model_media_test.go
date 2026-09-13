@@ -154,7 +154,7 @@ func TestModelMediaUploadReplaceAndRead(t *testing.T) {
 	blobs := &memoryBlob{data: map[string][]byte{"old.glb": []byte("old")}}
 	service := NewModelMediaService(store, mediaRegistry{"local": blobs}, mediaKeys{}, "local")
 	service.now = func() time.Time { return time.Unix(100, 0) }
-	actor := Principal{TenantID: tenant, UserID: uuid.NewString(), Role: RoleEditor}
+	actor := Principal{TenantID: tenant, UserID: uuid.NewString(), Role: RoleOwner}
 	media, err := service.Update(context.Background(), actor, UpdateProductModel3D{ModelID: modelID, File: testGLB(`{"asset":{"version":"2.0"}}`), Author: "Maker"})
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +184,7 @@ func TestModelMediaValidationAndPermissions(t *testing.T) {
 	if _, err := service.Update(context.Background(), viewer, UpdateProductModel3D{ModelID: modelID, File: testGLB(`{"asset":{"version":"2.0"}}`)}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("viewer error=%v", err)
 	}
-	editor := Principal{TenantID: tenant, UserID: uuid.NewString(), Role: RoleEditor}
+	editor := Principal{TenantID: tenant, UserID: uuid.NewString(), Role: RoleOwner}
 	if _, err := service.Update(context.Background(), editor, UpdateProductModel3D{ModelID: modelID, File: []byte("fake")}); err == nil {
 		t.Fatal("accepted fake GLB")
 	}

@@ -4,17 +4,41 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 function harness() {
+  const viewport = {scrollY:300, corrections:[], openAtCorrection:[]};
   const doc = {listeners:{}, addEventListener(k,fn){this.listeners[k]=fn;}, activeElement:null};
-  const items = [0,1].map(() => {
+  const items = [0,1].map(index => {
     const panel={hidden:true,inert:true};
+    panel.getAnimations=()=>[{finish(){panel.finished=true;}}];
     const trigger={listeners:{},attrs:{},setAttribute(k,v){this.attrs[k]=v;},addEventListener(k,fn){this.listeners[k]=fn;},focus(){doc.activeElement=this;}};
-    return {panel,trigger,listeners:{},querySelector(s){return s==='.timeline-trigger'?trigger:panel;},contains(x){return x===this || x===trigger || x===panel;},addEventListener(k,fn){this.listeners[k]=fn;}};
+    return {panel,trigger,listeners:{},getBoundingClientRect(){return {top:500+index*70+items.slice(0,index).filter(item=>!item.panel.hidden).length*100-viewport.scrollY};},querySelector(s){return s==='.timeline-trigger'?trigger:panel;},contains(x){return x===this || x===trigger || x===panel;},addEventListener(k,fn){this.listeners[k]=fn;}};
   });
   doc.querySelectorAll=()=>items;
   let callback;
-  vm.runInNewContext(readFileSync(new URL('./static/cost-timeline.js',import.meta.url),'utf8'),{document:doc,setTimeout(fn,ms){assert.equal(ms,150);callback=fn;return 1;},clearTimeout(){callback=null;}});
-  return {items,doc,tick(){const fn=callback;callback=null;fn?.();}};
+  vm.runInNewContext(readFileSync(new URL('./static/cost-timeline.js',import.meta.url),'utf8'),{document:doc,window:{scrollBy(options){viewport.scrollY+=options.top;viewport.corrections.push(options.top);viewport.openAtCorrection.push(items.findIndex(item=>!item.panel.hidden));assert.equal(options.behavior,'instant');}},setTimeout(fn,ms){assert.equal(ms,150);callback=fn;return 1;},clearTimeout(){callback=null;}});
+  return {items,doc,viewport,tick(){const fn=callback;callback=null;fn?.();}};
 }
+
+test('switching records keeps the new record at the same viewport position',()=>{
+  const {items:[a,b],viewport}=harness();
+  a.trigger.listeners.click();
+  const before=b.getBoundingClientRect().top;
+  b.trigger.listeners.click();
+  assert.equal(b.getBoundingClientRect().top,before);
+  assert.equal(a.panel.finished,true);
+  assert.equal(a.panel.hidden,true);
+  assert.equal(b.panel.hidden,false);
+  assert.deepEqual(viewport.corrections,[-100]);
+  assert.deepEqual(viewport.openAtCorrection,[1]);
+});
+
+test('hover switching also settles a record already closing after pointerleave',()=>{
+  const {items:[a,b],tick}=harness();
+  a.listeners.pointerenter({pointerType:'mouse'});tick();
+  a.listeners.pointerleave();
+  b.listeners.pointerenter({pointerType:'mouse'});tick();
+  assert.equal(a.panel.finished,true);
+  assert.equal(b.panel.hidden,false);
+});
 
 test('timeline delayed focus, cancellation and inline details',()=>{
   const {items:[a],tick}=harness();

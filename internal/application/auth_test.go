@@ -122,7 +122,7 @@ func TestRoleCapabilities(t *testing.T) {
 		allowed    bool
 	}{
 		{RoleOwner, CapabilityManageMembers, true},
-		{RoleEditor, CapabilityManageCatalog, true},
+		{RoleEditor, CapabilityManageCatalog, false},
 		{RoleEditor, CapabilityManageMembers, false},
 		{RoleViewer, CapabilityView, true},
 		{RoleViewer, CapabilityManageLifecycle, false},
@@ -215,4 +215,15 @@ func TestPasswordHashRejectsMalformedAndWrongPassword(t *testing.T) {
 	if !verifyPassword(hash, "a long valid password") || verifyPassword(hash, "wrong") || verifyPassword("bad", "anything") {
 		t.Fatal("password verification result was incorrect")
 	}
+}
+
+func (s *memoryAuthStore) ChangeMemberRole(_ context.Context, actor Principal, id string, role Role, event SecurityEvent) error {
+	p, ok := s.principals[id]
+	if !ok || p.TenantID != actor.TenantID {
+		return sql.ErrNoRows
+	}
+	p.Role = role
+	s.principals[id] = p
+	s.events = append(s.events, event)
+	return nil
 }

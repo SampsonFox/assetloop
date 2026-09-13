@@ -20,6 +20,13 @@ type Asset struct {
 	Model3dResourceID sql.NullString
 }
 
+type AssetDeletion struct {
+	TenantID    string
+	AssetID     string
+	ActorUserID string
+	DeletedAt   string
+}
+
 type AssetEvent struct {
 	ID                  string
 	TenantID            string
@@ -77,6 +84,13 @@ type AssetTransaction struct {
 	Notes             string
 	CreatedByUserID   string
 	CreatedAt         string
+}
+
+type DeletedLifecycleRequest struct {
+	TenantID    string
+	UserID      string
+	RequestKey  string
+	RequestHash string
 }
 
 type ImportDraft struct {

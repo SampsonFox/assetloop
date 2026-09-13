@@ -76,7 +76,7 @@ func (s *ManagementService) UpdateMarketItem(ctx context.Context, actor Principa
 
 func (s *ManagementService) BindAssetMarket(ctx context.Context, actor Principal, key, assetID, marketID string) error {
 	cmd := struct{ AssetID, MarketID string }{assetID, marketID}
-	_, err := managementWrite(ctx, s, actor, key, "bind_asset_market", CapabilityManageCatalog, cmd, func(store ManagementStore) (bool, error) {
+	_, err := managementWrite(ctx, s, actor, key, "bind_asset_market", CapabilityManageAssets, cmd, func(store ManagementStore) (bool, error) {
 		err := (&MarketService{store: store}).Bind(ctx, actor, assetID, marketID)
 		return err == nil, err
 	})

@@ -26,3 +26,8 @@ Thumbs.db
 
 # Local Go build cache
 .cache/
+
+# Local tools, auxiliary worktrees and legacy scratch paths
+/.tools/
+/.worktrees/
+/tmp/

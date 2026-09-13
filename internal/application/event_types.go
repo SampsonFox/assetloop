@@ -68,7 +68,7 @@ func (s *LifecycleService) SetEventTypeEnabled(ctx context.Context, actor Princi
 }
 
 func (s *LifecycleService) mutateEventType(ctx context.Context, actor Principal, id string, change func(*domain.AssetEventTypeDefinition, LifecycleStore) error) (domain.AssetEventTypeDefinition, error) {
-	if err := actor.Require(CapabilityManageLifecycle); err != nil {
+	if err := actor.Require(CapabilityManageCatalog); err != nil {
 		return domain.AssetEventTypeDefinition{}, err
 	}
 	if err := validID("event type ID", id); err != nil {

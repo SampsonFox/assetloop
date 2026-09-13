@@ -24,6 +24,13 @@ type Asset struct {
 	ModelID               uuid.UUID
 }
 
+type AssetDeletion struct {
+	TenantID    uuid.UUID
+	AssetID     uuid.UUID
+	ActorUserID uuid.UUID
+	DeletedAt   time.Time
+}
+
 type AssetEvent struct {
 	ID                  uuid.UUID
 	TenantID            uuid.UUID
@@ -81,6 +88,13 @@ type AssetTransaction struct {
 	Notes             string
 	CreatedByUserID   uuid.UUID
 	CreatedAt         time.Time
+}
+
+type DeletedLifecycleRequest struct {
+	TenantID    uuid.UUID
+	UserID      uuid.UUID
+	RequestKey  string
+	RequestHash string
 }
 
 type ImportDraft struct {

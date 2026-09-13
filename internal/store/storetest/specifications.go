@@ -160,7 +160,22 @@ func RunSpecifications(t *testing.T, first, second Store) {
 	}
 	one := makeAsset("128 black", black.ID, small.ID, matte.ID)
 	two := makeAsset("256 black", black.ID, large.ID)
-	empty := makeAsset("No optional tags")
+	empty := makeAsset(" \t ")
+	if empty.DisplayName != "" {
+		t.Fatal("blank custom name must remain unset")
+	}
+	renamed, err := svc.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ID: empty.ID, ModelID: model.ID, DisplayName: " My phone "})
+	if err != nil || renamed.DisplayName != "My phone" {
+		t.Fatalf("set optional name: %v", err)
+	}
+	_, err = svc.SaveAsset(ctx, actor, application.SaveSpecificationAsset{ID: empty.ID, ModelID: model.ID})
+	if err != nil {
+		t.Fatalf("clear optional name: %v", err)
+	}
+	unnamed, err := second.GetAsset(ctx, actor.TenantID, empty.ID)
+	if err != nil || unnamed.DisplayName != "" || unnamed.Model != model.Name {
+		t.Fatalf("unnamed item round trip: %v", err)
+	}
 	// This replaces the retired implicit category/model/variant creation test:
 	// reads still preserve every supported field and isolate the owning space.
 	loaded, err := reader.Asset(ctx, actor, one.ID)

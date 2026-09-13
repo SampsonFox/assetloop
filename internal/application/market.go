@@ -258,7 +258,7 @@ func (s *MarketService) Update(ctx context.Context, a Principal, id, name string
 	})
 }
 func (s *MarketService) Bind(ctx context.Context, a Principal, asset, id string) error {
-	if e := a.Require(CapabilityManageCatalog); e != nil {
+	if e := a.Require(CapabilityManageAssets); e != nil {
 		return e
 	}
 	return s.store.WithMarketWrite(ctx, a.TenantID, func(st MarketStore) error {

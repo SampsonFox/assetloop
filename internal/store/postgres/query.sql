@@ -578,3 +578,12 @@ WHERE t.tenant_id = sqlc.arg(tenant_id) AND t.system_code <> 'void'
   AND (CAST(sqlc.arg(status_filter) AS TEXT) = '' OR (CAST(sqlc.arg(status_filter) AS TEXT) = 'enabled' AND t.enabled = TRUE) OR (CAST(sqlc.arg(status_filter) AS TEXT) = 'disabled' AND t.enabled = FALSE))
 ORDER BY CASE t.system_code WHEN 'purchase' THEN 0 WHEN 'repair' THEN 1 WHEN 'sale' THEN 2 WHEN 'void' THEN 3 ELSE 4 END, t.normalized_name, t.id
 LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
+
+-- name: GetMemberRole :one
+SELECT role FROM tenant_memberships WHERE tenant_id = sqlc.arg(tenant_id) AND user_id = sqlc.arg(user_id);
+
+-- name: CountAdministrators :one
+SELECT COUNT(*) FROM tenant_memberships WHERE tenant_id = sqlc.arg(tenant_id) AND role = 'owner';
+
+-- name: ChangeMemberRole :execrows
+UPDATE tenant_memberships SET role = sqlc.arg(role) WHERE tenant_id = sqlc.arg(tenant_id) AND user_id = sqlc.arg(user_id);

@@ -38,7 +38,7 @@ type SaveAssetInput struct {
 	RequestKey      string   `json:"request_key"`
 	ID              string   `json:"id,omitempty" jsonschema:"Omit to create a new item; provide existing ID to update."`
 	ModelID         string   `json:"model_id"`
-	DisplayName     string   `json:"display_name"`
+	DisplayName     string   `json:"display_name,omitempty" jsonschema:"Optional custom item name. Omit or send empty to use the model name in Web titles; do not assemble model/specification tags into a name. On update, omission clears the custom name."`
 	SerialNumber    string   `json:"serial_number"`
 	PurchaseChannel string   `json:"purchase_channel"`
 	Notes           string   `json:"notes"`
@@ -85,7 +85,7 @@ func registerSpecifications(server *sdk.Server, s Services) {
 		err := s.Management.SaveModel(ctx, p, q.RequestKey, cmd)
 		return map[string]string{"model_id": q.ModelID}, err
 	})
-	register(server, "save_asset", "Create/update confirmed item metadata and complete selected tags. This does not record a purchase; record_event is a separate committed command. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q SaveAssetInput) (any, error) {
+	register(server, "save_asset", "Create/update confirmed item metadata and complete selected tags. This does not record a purchase; record_event is a separate committed command. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageAssets, func(ctx context.Context, p application.Principal, q SaveAssetInput) (any, error) {
 		return s.Management.SaveAsset(ctx, p, q.RequestKey, application.SaveSpecificationAsset{ID: q.ID, ModelID: q.ModelID, DisplayName: q.DisplayName, SerialNumber: q.SerialNumber, PurchaseChannel: q.PurchaseChannel, Notes: q.Notes, TagIDs: q.TagIDs, ResourceID: q.ResourceID})
 	})
 	register(server, "save_appearance_default", "Create/update a user-confirmed model appearance rule using an existing 3D resource and complete tag conditions. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q SaveAppearanceInput) (any, error) {

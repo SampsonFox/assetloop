@@ -361,7 +361,7 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 	}
 	appearancePath := "/admin/catalog/models/" + modelID + "/appearance"
 	appearancePage := request(t, h, "GET", appearancePath, nil, viewer)
-	if appearancePage.Code != 200 || !strings.Contains(appearancePage.Body.String(), "Appearance defaults") || strings.Contains(appearancePage.Body.String(), `method="post" action="`+appearancePath) {
+	if appearancePage.Code != 403 || strings.Contains(appearancePage.Body.String(), `method="post" action="`+appearancePath) {
 		t.Fatal("viewer appearance page is not localized and read-only")
 	}
 	for _, target := range []string{appearancePath, appearancePath + "/upload"} {
@@ -370,6 +370,12 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 		}
 	}
 	for _, target := range []string{"/admin/3d", path, path + "/model.glb"} {
+		if r := request(t, h, "GET", target, nil, viewer); r.Code != 403 {
+			t.Fatalf("settings exposed: %s %d", target, r.Code)
+		}
+	}
+	publicPath := strings.Replace(path, "/admin/3d/", "/resources/", 1)
+	for _, target := range []string{publicPath, publicPath + "/model.glb"} {
 		page := request(t, h, http.MethodGet, target, nil, viewer)
 		if page.Code != 200 {
 			t.Fatalf("viewer read %s=%d", target, page.Code)
@@ -382,7 +388,7 @@ func TestResourceViewerReadAndWriteDenialLocalized(t *testing.T) {
 				t.Fatalf("viewer exposed mutation %s", forbidden)
 			}
 		}
-		if !strings.Contains(page.Body.String(), `lang="en"`) || !strings.Contains(page.Body.String(), "3D resources") {
+		if !strings.Contains(page.Body.String(), `lang="en"`) {
 			t.Fatal("resource English localization missing")
 		}
 	}

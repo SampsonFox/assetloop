@@ -38,7 +38,7 @@ func registerMedia(server *sdk.Server, s Services) {
 		b, err := s.Media.Binding(ctx, p, q.Kind, q.TargetID)
 		return BindingResult{Name: b.Name, ResourceID: b.ResourceID, EffectiveResourceID: b.EffectiveResourceID, Source: b.Source, Conflict: b.Conflict}, err
 	})
-	register(server, "bind_3d_resource", "Set or clear a confirmed model default or asset override. Does not delete resources. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q BindResourceInput) (any, error) {
+	register(server, "bind_3d_resource", "Set or clear a confirmed model default or asset override. Does not delete resources. Reuse request_key on retries.", ScopeCatalog, application.CapabilityManageAssets, func(ctx context.Context, p application.Principal, q BindResourceInput) (any, error) {
 		err := s.Management.BindResource(ctx, p, q.RequestKey, application.BindModel3DResource{Kind: q.Kind, TargetID: q.TargetID, ResourceID: q.ResourceID})
 		return err == nil, err
 	})

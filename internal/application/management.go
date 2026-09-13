@@ -46,7 +46,7 @@ func (s *ManagementService) DeleteResource(ctx context.Context, actor Principal,
 }
 
 func (s *ManagementService) BindResource(ctx context.Context, actor Principal, key string, cmd BindModel3DResource) error {
-	_, err := managementWrite(ctx, s, actor, key, "bind_resource", CapabilityManageCatalog, cmd, func(store ManagementStore) (bool, error) {
+	_, err := managementWrite(ctx, s, actor, key, "bind_resource", BindingCapability(cmd.Kind), cmd, func(store ManagementStore) (bool, error) {
 		// Binding only changes metadata; no blob access is needed in this transaction.
 		err := (&ModelMediaService{store: store}).Bind(ctx, actor, cmd)
 		return err == nil, err
@@ -55,7 +55,7 @@ func (s *ManagementService) BindResource(ctx context.Context, actor Principal, k
 }
 
 func (s *ManagementService) CreateEventType(ctx context.Context, actor Principal, key string, cmd CreateAssetEventType) (domain.AssetEventTypeDefinition, error) {
-	return managementWrite(ctx, s, actor, key, "create_event_type", CapabilityManageLifecycle, cmd, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
+	return managementWrite(ctx, s, actor, key, "create_event_type", CapabilityManageCatalog, cmd, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
 		return NewLifecycleService(store).CreateEventType(ctx, actor, cmd)
 	})
 }
@@ -64,7 +64,7 @@ func (s *ManagementService) UpdateEventType(ctx context.Context, actor Principal
 		ID      string
 		Command UpdateEventType
 	}{id, cmd}
-	return managementWrite(ctx, s, actor, key, "update_event_type", CapabilityManageLifecycle, payload, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
+	return managementWrite(ctx, s, actor, key, "update_event_type", CapabilityManageCatalog, payload, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
 		return NewLifecycleService(store).UpdateEventType(ctx, actor, id, cmd)
 	})
 }
@@ -73,7 +73,7 @@ func (s *ManagementService) SetEventTypeEnabled(ctx context.Context, actor Princ
 		ID      string
 		Enabled bool
 	}{id, enabled}
-	return managementWrite(ctx, s, actor, key, "set_event_type_enabled", CapabilityManageLifecycle, payload, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
+	return managementWrite(ctx, s, actor, key, "set_event_type_enabled", CapabilityManageCatalog, payload, func(store ManagementStore) (domain.AssetEventTypeDefinition, error) {
 		return NewLifecycleService(store).SetEventTypeEnabled(ctx, actor, id, enabled)
 	})
 }
@@ -101,7 +101,7 @@ func (s *ManagementService) DeleteAppearance(ctx context.Context, actor Principa
 }
 
 func (s *ManagementService) SaveAsset(ctx context.Context, actor Principal, key string, cmd SaveSpecificationAsset) (domain.Asset, error) {
-	return managementWrite(ctx, s, actor, key, "save_asset", CapabilityManageCatalog, cmd, func(store ManagementStore) (domain.Asset, error) {
+	return managementWrite(ctx, s, actor, key, "save_asset", CapabilityManageAssets, cmd, func(store ManagementStore) (domain.Asset, error) {
 		return NewSpecificationService(store).SaveAsset(ctx, actor, cmd)
 	})
 }
@@ -150,6 +150,9 @@ func managementWrite[T any](ctx context.Context, s *ManagementService, actor Pri
 		if found {
 			if previous.Hash != receipt.Hash {
 				return NewInputError("validation.request_conflict")
+			}
+			if previous.ResultJSON == `{ "asset_deleted":true}` || previous.ResultJSON == `{"asset_deleted":true}` {
+				return NewInputError("validation.asset_deleted")
 			}
 			return json.Unmarshal([]byte(previous.ResultJSON), &result)
 		}

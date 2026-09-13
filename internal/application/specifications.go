@@ -73,8 +73,8 @@ func InitialColorTagType(tenant Tenant, locale Locale) domain.SpecificationTagTy
 	}
 	return domain.SpecificationTagType{ID: newID(), TenantID: tenant.ID, SystemCode: "color", Name: name, NormalizedName: domain.NormalizeSpecificationName(name), Enabled: true, AffectsAppearance: true, CreatedAt: tenant.CreatedAt, UpdatedAt: tenant.CreatedAt}
 }
-func (s *SpecificationService) write(ctx context.Context, actor Principal, fn func(SpecificationStore, SpecificationSnapshot) error) error {
-	if err := actor.Require(CapabilityManageCatalog); err != nil {
+func (s *SpecificationService) write(ctx context.Context, actor Principal, capability Capability, fn func(SpecificationStore, SpecificationSnapshot) error) error {
+	if err := actor.Require(capability); err != nil {
 		return err
 	}
 	return s.store.WithSpecificationWrite(ctx, actor.TenantID, func(store SpecificationStore) error {
@@ -88,7 +88,7 @@ func (s *SpecificationService) write(ctx context.Context, actor Principal, fn fu
 
 func (s *SpecificationService) SaveType(ctx context.Context, actor Principal, cmd SaveSpecificationType) (domain.SpecificationTagType, error) {
 	var result domain.SpecificationTagType
-	err := s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+	err := s.write(ctx, actor, CapabilityManageCatalog, func(store SpecificationStore, state SpecificationSnapshot) error {
 		name, err := catalogText("tag type name", cmd.Name, 120, true)
 		if err != nil {
 			return err
@@ -126,7 +126,7 @@ func (s *SpecificationService) SaveType(ctx context.Context, actor Principal, cm
 
 func (s *SpecificationService) SaveTag(ctx context.Context, actor Principal, cmd SaveSpecificationTag) (domain.SpecificationTag, error) {
 	var result domain.SpecificationTag
-	err := s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+	err := s.write(ctx, actor, CapabilityManageCatalog, func(store SpecificationStore, state SpecificationSnapshot) error {
 		name, err := catalogText("tag name", cmd.Name, 160, true)
 		if err != nil {
 			return err
@@ -165,7 +165,7 @@ func (s *SpecificationService) SaveTag(ctx context.Context, actor Principal, cmd
 }
 
 func (s *SpecificationService) SaveModel(ctx context.Context, actor Principal, cmd SaveModelSpecification) error {
-	return s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+	return s.write(ctx, actor, CapabilityManageCatalog, func(store SpecificationStore, state SpecificationSnapshot) error {
 		if err := validID("model ID", cmd.ModelID); err != nil {
 			return err
 		}
@@ -251,7 +251,7 @@ func (s *SpecificationService) SaveModel(ctx context.Context, actor Principal, c
 
 func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, cmd SaveSpecificationAsset) (domain.Asset, error) {
 	var result domain.Asset
-	err := s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+	err := s.write(ctx, actor, CapabilityManageAssets, func(store SpecificationStore, state SpecificationSnapshot) error {
 		if err := validID("model ID", cmd.ModelID); err != nil {
 			return err
 		}
@@ -284,7 +284,7 @@ func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, c
 			required    bool
 			target      *string
 		}{
-			{"display name", cmd.DisplayName, 200, true, &result.DisplayName}, {"serial number", cmd.SerialNumber, 200, false, &result.SerialNumber},
+			{"display name", cmd.DisplayName, 200, false, &result.DisplayName}, {"serial number", cmd.SerialNumber, 200, false, &result.SerialNumber},
 			{"purchase channel", cmd.PurchaseChannel, 160, false, &result.PurchaseChannel}, {"notes", cmd.Notes, 2000, false, &result.Notes},
 		} {
 			value, err := catalogText(field.name, field.value, field.max, field.required)
@@ -346,7 +346,7 @@ func (s *SpecificationService) SaveAsset(ctx context.Context, actor Principal, c
 
 func (s *SpecificationService) SaveAppearance(ctx context.Context, actor Principal, cmd SaveAppearanceDefault) (domain.AppearanceDefault, error) {
 	var result domain.AppearanceDefault
-	err := s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+	err := s.write(ctx, actor, CapabilityManageCatalog, func(store SpecificationStore, state SpecificationSnapshot) error {
 		var err error
 		result, err = saveAppearanceInTransaction(ctx, store, state, actor, cmd)
 		return err
@@ -416,7 +416,7 @@ func saveAppearanceInTransaction(ctx context.Context, store SpecificationStore, 
 }
 
 func (s *SpecificationService) DeleteAppearance(ctx context.Context, actor Principal, id string) error {
-	return s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+	return s.write(ctx, actor, CapabilityManageCatalog, func(store SpecificationStore, state SpecificationSnapshot) error {
 		for _, rule := range state.Defaults {
 			if rule.ID == id {
 				return store.DeleteAppearanceDefault(ctx, actor.TenantID, id)
@@ -427,7 +427,7 @@ func (s *SpecificationService) DeleteAppearance(ctx context.Context, actor Princ
 }
 
 func (s *SpecificationService) SaveResource(ctx context.Context, actor Principal, cmd SaveResourceSpecification) error {
-	return s.write(ctx, actor, func(store SpecificationStore, state SpecificationSnapshot) error {
+	return s.write(ctx, actor, CapabilityManageCatalog, func(store SpecificationStore, state SpecificationSnapshot) error {
 		if err := validID("resource ID", cmd.ResourceID); err != nil {
 			return err
 		}
@@ -603,4 +603,14 @@ func uniqueSpecIDs(ids []string) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+func (s *SpecificationService) DeleteAsset(ctx context.Context, actor Principal, id string) error {
+	if err := actor.Require(CapabilityDeleteAssets); err != nil {
+		return err
+	}
+	if err := validID("asset ID", id); err != nil {
+		return err
+	}
+	return s.store.PurgeAsset(ctx, actor, id, s.now().UTC())
 }

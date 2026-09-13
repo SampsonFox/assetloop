@@ -16,6 +16,11 @@ Status: Core assets, lifecycle, media and OAuth MCP are implemented. Zhuanzhuan 
 
 ## Entry points
 
+Local development: `scripts/start-preview.ps1` builds to `dist/local/` and runs
+with per-port databases/media in `data/preview-<port>/`. Logs and caches belong in
+`.cache/`; auxiliary Git worktrees in `.worktrees/`. See
+`docs/DEVELOPMENT_WORKFLOW.md` for the complete generated-file layout.
+
 `docs/MCP_RELEASE_NOTES.md` records the 2026-09-12 MCP UAT batch capabilities,
 changes and exclusions; setup and acceptance guides ship under `docs/` in packages.
 
@@ -273,3 +278,17 @@ Migration tests cover old market 15/16, accepted MCP 17, rollback and retry.
 `internal/integration/mcp_market_test.go` extends the same OAuth full-element
 scenario to all 50 tools, Web-visible prices and unchanged lifecycle costs;
 the transaction suite covers failed receipts, cross-connection replay and policy.
+
+
+Three-role permissions: application/auth.go separates item writes from shared catalog
+management; auth Store adapters serialize role changes and last-administrator checks.
+Web renders capability flags centrally and protects settings routes, while authenticated
+/resources/{id} previews support item selection. OAuth scope names remain compatible.
+Whole-item deletion: application SpecificationService.DeleteAsset calls paired Store
+asset_deletion.go adapters; migrations 00020 preserve ordinary append-only protection.
+Web asset_deletion.go and templates/asset_delete.html implement explicit confirmation.
+Regression spine: permissions_deletion_test.go in Web and integration, MCP permissions_test.go,
+plus the named full-element scenario and V19 upgrade preservation scenario.
+
+The item detail heading groups back, edit and administrator-only delete icons.
+permissions_deletion_test.go covers placement, role visibility and the no-JS confirmation flow.

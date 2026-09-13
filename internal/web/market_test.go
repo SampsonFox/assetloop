@@ -197,7 +197,7 @@ func TestMarketWebCreateBindDisplayAndPermissions(t *testing.T) {
 	}
 	viewerCookies := []*http.Cookie{{Name: sessionCookie, Value: viewer.Token}, csrf}
 	page = request(t, h, "GET", "/admin/market", nil, viewerCookies)
-	if page.Code != 200 || strings.Contains(page.Body.String(), "确认型号并保存") {
+	if page.Code != 403 || strings.Contains(page.Body.String(), "确认型号并保存") {
 		t.Fatal("viewer mutation UI")
 	}
 	for _, target := range []string{"/admin/market", "/admin/market/preview", "/admin/market/discover", "/admin/market/" + items[0].ID, "/admin/market/" + items[0].ID + "/refresh"} {

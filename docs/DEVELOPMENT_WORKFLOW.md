@@ -66,6 +66,37 @@ Passing a narrow test, finishing one bug fix, or pushing a checkpoint does not i
 
 ## Local preview launch safety
 
+### Local directory layout
+
+Keep generated files out of source directories and auxiliary Git worktrees:
+
+| Directory | Contents |
+|---|---|
+| `data/preview-<port>/` | Each local preview's SQLite database, migration backups and `blobs/` |
+| `data/test-runs/<run>/`, `data/backups/<checkpoint>/` | Disposable test databases and retained data backups |
+| `dist/local/` | Current local development executable |
+| `dist/archive/<checkpoint>/` | Retained older executables and test binaries |
+| `dist/<package>/` and archives in `dist/` | Release packaging output; no runtime databases |
+| `.cache/go-build/`, `.cache/logs/`, `.cache/work/` | Build caches, logs, scratch scripts and inspection output |
+| `.tools/` | Local downloaded development tools |
+| `.worktrees/<scope>/` | Auxiliary Git worktrees, moved with `git worktree move`; never runtime data |
+| `scripts/` | Maintained development entry points, tracked in Git |
+
+On Windows, run `pwsh -File scripts/start-preview.ps1 -Port 8081 -Build`
+from the repository to build and serve the current branch. Omit `-Build` to reuse
+`dist/local/assetloop.exe`. Stop the existing preview before rebuilding that binary.
+The script pins absolute data/blob paths, keeps login enabled and writes logs to
+`.cache/logs/preview-8081.log`. Another port gets its own data directory. An empty
+data directory starts the normal first-admin setup flow; do not restore a backup
+or create an account silently.
+
+Stop a preview before relocating its data, verify database and blob checksums
+before/after the move, then update its launcher. Do not put databases next to
+executables in `dist/`, or create numbered executables in `tmp/` or the root.
+Keep any necessary old build under `dist/archive/`; reuse the stable local binary
+path for ongoing iterations. Archived one-off scripts are evidence, not supported
+launchers. The legacy default `data/assetloop.db` remains supported by the app.
+
 When restarting an existing preview, preserve its verified database and blob directory. Pass the explicit `serve` argument and absolute `DB_DSN` (for SQLite) and `ATTACHMENT_LOCAL_ROOT` values. A no-argument Windows launch can enter double-click mode and change the working directory to the executable's directory; relative blob paths can then point at an empty `bin/data/blobs` directory even while the database remains readable. After restart, verify an existing asset's GLB endpoint returns its expected bytes, not only that the HTML page loads. Do not create a replacement preview database or relocate blobs to compensate for an incorrect launch directory.
 
 ## Promotion

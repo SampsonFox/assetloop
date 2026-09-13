@@ -23,13 +23,13 @@ type EnableEventTypeInput struct {
 }
 
 func registerEventTypes(server *sdk.Server, s Services) {
-	register(server, "create_event_type", "Create a reusable custom lifecycle action category only when list_event_types has no suitable enabled type and the user explicitly confirms creating a category. Recording a purchase does not authorize catalog expansion. Product and service names belong in event notes, not type names. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, q CreateEventTypeInput) (any, error) {
+	register(server, "create_event_type", "Create a reusable custom lifecycle action category only when list_event_types has no suitable enabled type and the user explicitly confirms creating a category. Recording a purchase does not authorize catalog expansion. Product and service names belong in event notes, not type names. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q CreateEventTypeInput) (any, error) {
 		return s.Management.CreateEventType(ctx, p, q.RequestKey, application.CreateAssetEventType{Name: q.Name, Cashflow: domain.AssetEventCashflow(q.Cashflow)})
 	})
-	register(server, "update_event_type", "Rename a custom lifecycle type; changing cashflow is forbidden after use. Built-in types cannot change. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, q UpdateEventTypeInput) (any, error) {
+	register(server, "update_event_type", "Rename a custom lifecycle type; changing cashflow is forbidden after use. Built-in types cannot change. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q UpdateEventTypeInput) (any, error) {
 		return s.Management.UpdateEventType(ctx, p, q.RequestKey, q.ID, application.UpdateEventType{Name: q.Name, Cashflow: domain.AssetEventCashflow(q.Cashflow)})
 	})
-	register(server, "set_event_type_enabled", "Enable or disable a custom lifecycle type without altering history. Built-in types cannot change. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, q EnableEventTypeInput) (any, error) {
+	register(server, "set_event_type_enabled", "Enable or disable a custom lifecycle type without altering history. Built-in types cannot change. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageCatalog, func(ctx context.Context, p application.Principal, q EnableEventTypeInput) (any, error) {
 		return s.Management.SetEventTypeEnabled(ctx, p, q.RequestKey, q.ID, q.Enabled)
 	})
 }

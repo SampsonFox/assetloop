@@ -133,7 +133,7 @@ func TestEventTypeManagementHTTP(t *testing.T) {
 	}
 	vc := []*http.Cookie{{Name: sessionCookie, Value: viewerCredential.Token}, csrf}
 	readonly := request(t, handler, "GET", "/admin/event-types", nil, vc)
-	if readonly.Code != 200 || strings.Contains(readonly.Body.String(), "data-dialog-open=\"event-type-manage\"") {
+	if readonly.Code != 403 || strings.Contains(readonly.Body.String(), "data-dialog-open=\"event-type-manage\"") {
 		t.Fatal("viewer management page is not read-only")
 	}
 	forbidden := request(t, handler, "POST", target, url.Values{"csrf_token": {csrf.Value}, "name": {"Denied"}, "cashflow": {string(domain.AssetEventExpense)}}, vc)

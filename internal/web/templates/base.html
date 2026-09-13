@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   {{if eq .Theme "dark"}}<meta name="theme-color" content="#111714">{{else if eq .Theme "light"}}<meta name="theme-color" content="#f7f8f5">{{else}}<meta name="theme-color" content="#f7f8f5" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#111714" media="(prefers-color-scheme: dark)">{{end}}
   <title>{{.Title}} · {{t $s "app.name"}}</title>
-  <link rel="stylesheet" href="/static/app.css?v=market-discovery-2">
+  <link rel="stylesheet" href="/static/app.css?v=asset-list-identity-1">
   <script src="/static/app.js?v=market-discovery-2" defer></script>
   <script src="/static/drawer-stack.js?v=market-discovery-2" defer></script>
   <script type="module" src="/static/tag-transfer.js"></script>
@@ -23,7 +23,7 @@
       <div class="account-menu-panel">
         <div class="account-identity"><span class="account-avatar">{{userInitial .Principal.Username}}</span><span><strong>{{.Principal.Username}}</strong><small>{{roleLabel $s .Principal.Role}}</small></span></div>
         <nav aria-label="{{t $s "menu.label"}}">
-          <a class="menu-item" href="/settings" {{if .SettingsSection}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "settings.title"}}</span></a>
+          {{if .CanManageSettings}}<a class="menu-item" href="/settings" {{if .SettingsSection}}aria-current="page"{{end}}>{{template "icon-grid"}}<span>{{t $s "settings.title"}}</span></a>{{end}}
           {{if .OAuthEnabled}}<a class="menu-item" href="/account/clients">{{template "icon-grid"}}<span>{{if eq .Locale "en"}}Authorized clients{{else}}已授权客户端{{end}}</span></a>{{end}}
           {{if eq .Principal.Role "owner"}}<a class="menu-item" href="/admin/members" {{if .NavMembers}}aria-current="page"{{end}}>{{template "icon-users"}}<span>{{t $s "menu.members"}}</span></a>{{end}}
         </nav>

@@ -46,6 +46,35 @@ func (q *Queries) BindModel3D(ctx context.Context, arg BindModel3DParams) (int64
 	return result.RowsAffected()
 }
 
+const changeMemberRole = `-- name: ChangeMemberRole :execrows
+UPDATE tenant_memberships SET role = ?1 WHERE tenant_id = ?2 AND user_id = ?3
+`
+
+type ChangeMemberRoleParams struct {
+	Role     string
+	TenantID string
+	UserID   string
+}
+
+func (q *Queries) ChangeMemberRole(ctx context.Context, arg ChangeMemberRoleParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, changeMemberRole, arg.Role, arg.TenantID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const countAdministrators = `-- name: CountAdministrators :one
+SELECT COUNT(*) FROM tenant_memberships WHERE tenant_id = ?1 AND role = 'owner'
+`
+
+func (q *Queries) CountAdministrators(ctx context.Context, tenantID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAdministrators, tenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countAssetsWithSummary = `-- name: CountAssetsWithSummary :one
 WITH effective_events AS (
 SELECT e.id, e.tenant_id, e.asset_id, e.base_amount_minor, e.base_currency, e.occurred_at, e.created_at, et.system_code AS event_type
@@ -788,6 +817,22 @@ func (q *Queries) GetAssetSummary(ctx context.Context, arg GetAssetSummaryParams
 		&i.Status,
 	)
 	return i, err
+}
+
+const getMemberRole = `-- name: GetMemberRole :one
+SELECT role FROM tenant_memberships WHERE tenant_id = ?1 AND user_id = ?2
+`
+
+type GetMemberRoleParams struct {
+	TenantID string
+	UserID   string
+}
+
+func (q *Queries) GetMemberRole(ctx context.Context, arg GetMemberRoleParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getMemberRole, arg.TenantID, arg.UserID)
+	var role string
+	err := row.Scan(&role)
+	return role, err
 }
 
 const getModel3DBinding = `-- name: GetModel3DBinding :one

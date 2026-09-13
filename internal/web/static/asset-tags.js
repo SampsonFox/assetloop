@@ -40,7 +40,7 @@
     });
     preview.addEventListener('click', () => {
       if (!select.value || !input.validity.valid) return;
-      window.assetloopDrawers?.open({href:'/admin/3d/' + encodeURIComponent(select.value), dataset:{drawerTarget:'resource-editor'}, get isConnected() { return preview.isConnected; }, focus: options => preview.focus(options)});
+      window.assetloopDrawers?.open({href:'/resources/' + encodeURIComponent(select.value), dataset:{drawerTarget:'resource-editor'}, get isConnected() { return preview.isConnected; }, focus: options => preview.focus(options)});
     });
     select.form.addEventListener('reset', () => queueMicrotask(sync));
     window.assetloopDialog?.initialize(select.closest('dialog') || select.closest('section'));

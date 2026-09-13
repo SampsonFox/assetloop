@@ -11,11 +11,11 @@ test('asset drawers stack preview above usable fields independent of viewport wi
   assert.match(css,/dialog\[data-drawer-kind="asset-editor"\] > \.drawer-panel\s*\{[^}]*width:min\(720px,100%\)/);
 });
 
-test('asset detail uses a compact alias-only heading without changing other pages',()=>{
+test('asset detail uses a compact custom-name or model heading without changing other pages',()=>{
   const template=readFileSync(new URL('./templates/asset.html',import.meta.url),'utf8');
   const header=template.split('<section class="card asset-profile">')[0];
   assert.ok(header.includes('asset-detail-heading'));
-  assert.ok(header.includes('<h1>{{.Asset.DisplayName}}</h1>'));
+  assert.ok(header.includes('<h1>{{assetTitle .Asset}}</h1>'));
   assert.ok(!header.includes('assets.concrete'));
   assert.ok(header.includes('aria-label="{{t $s "assets.edit"}}"'));
   const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');

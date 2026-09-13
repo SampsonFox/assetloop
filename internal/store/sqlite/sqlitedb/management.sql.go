@@ -9,6 +9,105 @@ import (
 	"context"
 )
 
+const assetDeletionExists = `-- name: AssetDeletionExists :one
+SELECT COUNT(*) FROM asset_deletions WHERE tenant_id = ?1 AND asset_id = ?2
+`
+
+type AssetDeletionExistsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) AssetDeletionExists(ctx context.Context, arg AssetDeletionExistsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, assetDeletionExists, arg.TenantID, arg.AssetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const assetDeletionTransactions = `-- name: AssetDeletionTransactions :many
+SELECT transaction_id FROM asset_events WHERE asset_events.tenant_id = ?1 AND asset_events.asset_id = ?2
+UNION SELECT confirmed_transaction_id AS transaction_id FROM import_drafts WHERE import_drafts.tenant_id = ?1 AND asset_id = ?2 AND confirmed_transaction_id IS NOT NULL
+`
+
+type AssetDeletionTransactionsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) AssetDeletionTransactions(ctx context.Context, arg AssetDeletionTransactionsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, assetDeletionTransactions, arg.TenantID, arg.AssetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var transaction_id string
+		if err := rows.Scan(&transaction_id); err != nil {
+			return nil, err
+		}
+		items = append(items, transaction_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const assetManagementReceipts = `-- name: AssetManagementReceipts :many
+SELECT user_id,request_key,result_json FROM management_requests WHERE tenant_id = ?1
+`
+
+type AssetManagementReceiptsRow struct {
+	UserID     string
+	RequestKey string
+	ResultJson string
+}
+
+func (q *Queries) AssetManagementReceipts(ctx context.Context, tenantID string) ([]AssetManagementReceiptsRow, error) {
+	rows, err := q.db.QueryContext(ctx, assetManagementReceipts, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AssetManagementReceiptsRow
+	for rows.Next() {
+		var i AssetManagementReceiptsRow
+		if err := rows.Scan(&i.UserID, &i.RequestKey, &i.ResultJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deletedLifecycleRequestExists = `-- name: DeletedLifecycleRequestExists :one
+SELECT COUNT(*) FROM deleted_lifecycle_requests WHERE tenant_id = ?1 AND user_id = ?2 AND request_key = ?3
+`
+
+type DeletedLifecycleRequestExistsParams struct {
+	TenantID   string
+	UserID     string
+	RequestKey string
+}
+
+func (q *Queries) DeletedLifecycleRequestExists(ctx context.Context, arg DeletedLifecycleRequestExistsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, deletedLifecycleRequestExists, arg.TenantID, arg.UserID, arg.RequestKey)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const findManagementRequest = `-- name: FindManagementRequest :one
 SELECT request_hash, result_json FROM management_requests
 WHERE tenant_id = ?1 AND user_id = ?2 AND request_key = ?3
@@ -30,6 +129,161 @@ func (q *Queries) FindManagementRequest(ctx context.Context, arg FindManagementR
 	var i FindManagementRequestRow
 	err := row.Scan(&i.RequestHash, &i.ResultJson)
 	return i, err
+}
+
+const markAssetDeleted = `-- name: MarkAssetDeleted :exec
+INSERT INTO asset_deletions (tenant_id, asset_id, actor_user_id, deleted_at) VALUES (?1, ?2, ?3, ?4)
+`
+
+type MarkAssetDeletedParams struct {
+	TenantID    string
+	AssetID     string
+	ActorUserID string
+	DeletedAt   string
+}
+
+func (q *Queries) MarkAssetDeleted(ctx context.Context, arg MarkAssetDeletedParams) error {
+	_, err := q.db.ExecContext(ctx, markAssetDeleted,
+		arg.TenantID,
+		arg.AssetID,
+		arg.ActorUserID,
+		arg.DeletedAt,
+	)
+	return err
+}
+
+const purgeAsset = `-- name: PurgeAsset :execrows
+DELETE FROM assets WHERE tenant_id = ?1 AND id = ?2
+`
+
+type PurgeAssetParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) PurgeAsset(ctx context.Context, arg PurgeAssetParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, purgeAsset, arg.TenantID, arg.AssetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const purgeAssetDrafts = `-- name: PurgeAssetDrafts :exec
+DELETE FROM import_drafts WHERE import_drafts.tenant_id = ?1 AND asset_id = ?2
+`
+
+type PurgeAssetDraftsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) PurgeAssetDrafts(ctx context.Context, arg PurgeAssetDraftsParams) error {
+	_, err := q.db.ExecContext(ctx, purgeAssetDrafts, arg.TenantID, arg.AssetID)
+	return err
+}
+
+const purgeAssetEvents = `-- name: PurgeAssetEvents :exec
+DELETE FROM asset_events WHERE tenant_id = ?1 AND asset_id = ?2
+`
+
+type PurgeAssetEventsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) PurgeAssetEvents(ctx context.Context, arg PurgeAssetEventsParams) error {
+	_, err := q.db.ExecContext(ctx, purgeAssetEvents, arg.TenantID, arg.AssetID)
+	return err
+}
+
+const purgeAssetMarket = `-- name: PurgeAssetMarket :exec
+DELETE FROM asset_market_bindings WHERE tenant_id = ?1 AND asset_id = ?2
+`
+
+type PurgeAssetMarketParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) PurgeAssetMarket(ctx context.Context, arg PurgeAssetMarketParams) error {
+	_, err := q.db.ExecContext(ctx, purgeAssetMarket, arg.TenantID, arg.AssetID)
+	return err
+}
+
+const purgeAssetTags = `-- name: PurgeAssetTags :exec
+DELETE FROM asset_specification_tags WHERE tenant_id = ?1 AND asset_id = ?2
+`
+
+type PurgeAssetTagsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) PurgeAssetTags(ctx context.Context, arg PurgeAssetTagsParams) error {
+	_, err := q.db.ExecContext(ctx, purgeAssetTags, arg.TenantID, arg.AssetID)
+	return err
+}
+
+const purgeLifecycleRequests = `-- name: PurgeLifecycleRequests :exec
+DELETE FROM lifecycle_requests WHERE lifecycle_requests.tenant_id = ?1 AND event_id IN (SELECT id FROM asset_events WHERE asset_events.tenant_id = ?1 AND asset_id = ?2)
+`
+
+type PurgeLifecycleRequestsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) PurgeLifecycleRequests(ctx context.Context, arg PurgeLifecycleRequestsParams) error {
+	_, err := q.db.ExecContext(ctx, purgeLifecycleRequests, arg.TenantID, arg.AssetID)
+	return err
+}
+
+const purgeUnusedTransaction = `-- name: PurgeUnusedTransaction :exec
+DELETE FROM asset_transactions WHERE asset_transactions.tenant_id = ?1 AND asset_transactions.id = ?2
+AND NOT EXISTS (SELECT 1 FROM asset_events e WHERE e.tenant_id = asset_transactions.tenant_id AND e.transaction_id = asset_transactions.id)
+AND NOT EXISTS (SELECT 1 FROM import_drafts d WHERE d.tenant_id = asset_transactions.tenant_id AND d.confirmed_transaction_id = asset_transactions.id)
+`
+
+type PurgeUnusedTransactionParams struct {
+	TenantID      string
+	TransactionID string
+}
+
+func (q *Queries) PurgeUnusedTransaction(ctx context.Context, arg PurgeUnusedTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, purgeUnusedTransaction, arg.TenantID, arg.TransactionID)
+	return err
+}
+
+const redactManagementReceipt = `-- name: RedactManagementReceipt :exec
+UPDATE management_requests SET result_json = '{"asset_deleted":true}' WHERE tenant_id = ?1 AND user_id = ?2 AND request_key = ?3
+`
+
+type RedactManagementReceiptParams struct {
+	TenantID   string
+	UserID     string
+	RequestKey string
+}
+
+func (q *Queries) RedactManagementReceipt(ctx context.Context, arg RedactManagementReceiptParams) error {
+	_, err := q.db.ExecContext(ctx, redactManagementReceipt, arg.TenantID, arg.UserID, arg.RequestKey)
+	return err
+}
+
+const saveDeletedLifecycleRequests = `-- name: SaveDeletedLifecycleRequests :exec
+INSERT INTO deleted_lifecycle_requests (tenant_id,user_id,request_key,request_hash)
+SELECT lifecycle_requests.tenant_id,user_id,request_key,request_hash FROM lifecycle_requests
+WHERE lifecycle_requests.tenant_id = ?1 AND event_id IN (SELECT id FROM asset_events WHERE asset_events.tenant_id = ?1 AND asset_id = ?2)
+`
+
+type SaveDeletedLifecycleRequestsParams struct {
+	TenantID string
+	AssetID  string
+}
+
+func (q *Queries) SaveDeletedLifecycleRequests(ctx context.Context, arg SaveDeletedLifecycleRequestsParams) error {
+	_, err := q.db.ExecContext(ctx, saveDeletedLifecycleRequests, arg.TenantID, arg.AssetID)
+	return err
 }
 
 const saveManagementRequest = `-- name: SaveManagementRequest :exec

@@ -124,8 +124,8 @@ func RunEventTypeManagement(t *testing.T, first, second Store, db *sql.DB, drive
 	}
 	editor := owner
 	editor.Role = application.RoleEditor
-	if _, err := service.UpdateEventType(ctx, editor, item.ID, application.UpdateEventType{Name: "Type renamed", Cashflow: domain.AssetEventExpense}); err != nil {
-		t.Fatal(err)
+	if _, err := service.UpdateEventType(ctx, editor, item.ID, application.UpdateEventType{Name: "Type renamed", Cashflow: domain.AssetEventExpense}); err != application.ErrForbidden {
+		t.Fatalf("worker modified public event type: %v", err)
 	}
 
 	for n := 0; n < 4; n++ {

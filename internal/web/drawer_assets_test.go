@@ -23,7 +23,7 @@ func TestDrawerAssetAndLifecycleFragments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := pageData{Strings: stringsFor(application.LocaleEn), CanManageCatalog: true, CanManageLifecycle: true, BaseCurrency: "CNY",
+	data := pageData{Strings: stringsFor(application.LocaleEn), CanManageAssets: true, CanManageCatalog: true, CanManageLifecycle: true, BaseCurrency: "CNY",
 		Asset:           &domain.Asset{ID: "asset-a", ModelID: "model-a", CategoryID: "category-a", DisplayName: "My camera"},
 		Models:          []domain.ProductModel{{ID: "model-a", CategoryID: "category-a", CategoryName: "Cameras", Name: "Camera"}},
 		AssetFormAction: "/assets/asset-a", AssetFormEditing: true, CSRFToken: "test-csrf",
@@ -83,7 +83,7 @@ func TestDrawerAssetAndLifecycleFragments(t *testing.T) {
 	if strings.Contains(render("event_types", "fragment-event-type-manage"), `<form`) {
 		t.Fatal("built-in type exposed mutation form")
 	}
-	data.CanManageCatalog, data.CanManageLifecycle = false, false
+	data.CanManageAssets, data.CanManageCatalog, data.CanManageLifecycle = false, false, false
 	data.EditingEventType.BuiltIn = false
 	if strings.Contains(render("event_types", "fragment-event-type-manage"), `<form`) {
 		t.Fatal("viewer exposed lifecycle mutation form")
@@ -181,6 +181,10 @@ func TestDrawerAssetAndLifecycleHTTP(t *testing.T) {
 	form.Set("display_name", "Updated asset")
 	check(send("POST", "/assets/"+saved.ID, "asset-editor", form), 200, `"name":"Updated asset"`)
 	form.Set("display_name", "")
+	check(send("POST", "/assets/"+saved.ID, "asset-editor", form), 200, `"name":"Nested camera"`)
+	check(send("GET", "/assets/"+saved.ID, "asset-detail", nil), 200, `>Nested camera</h2>`)
+	check(send("GET", "/assets/"+saved.ID, "", nil), 200, `>Nested camera</h1>`)
+	form.Set("display_name", strings.Repeat("x", 201))
 	check(send("POST", "/assets/"+saved.ID, "asset-editor", form), 422, `data-error-summary`)
 	form.Set("display_name", "Still present")
 	form.Set("variant_id", "retired")
@@ -224,8 +228,8 @@ func TestDrawerAssetAndLifecycleHTTP(t *testing.T) {
 	check(send("POST", typeURL, "event-type-manage", typeForm), 422, `data-error-summary`)
 	cookies = []*http.Cookie{{Name: sessionCookie, Value: viewer.Token}, ownerCookies[1]}
 	readOnly := send("GET", "/admin/event-types?edit_type_id="+saved.ID, "event-type-manage", nil)
-	check(readOnly, 200, "Renamed type")
-	if strings.Contains(readOnly.Body.String(), `<form`) {
+	check(readOnly, 403, "")
+	if strings.Contains(readOnly.Body.String(), `action="/admin/event-types`) {
 		t.Fatal("viewer receives mutation form")
 	}
 	typeForm.Set("name", "Viewer change")

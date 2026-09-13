@@ -9,8 +9,9 @@ import (
 	"testing"
 )
 
-func TestMarketUpgradeFromV14PreservesData(t *testing.T)      { testMarketUpgradeFromBaseline(t, 14) }
-func TestMarketUpgradeFromMCPUAT17PreservesData(t *testing.T) { testMarketUpgradeFromBaseline(t, 17) }
+func TestAssetDeletionUpgradeFromV19PreservesData(t *testing.T) { testMarketUpgradeFromBaseline(t, 19) }
+func TestMarketUpgradeFromV14PreservesData(t *testing.T)        { testMarketUpgradeFromBaseline(t, 14) }
+func TestMarketUpgradeFromMCPUAT17PreservesData(t *testing.T)   { testMarketUpgradeFromBaseline(t, 17) }
 func testMarketUpgradeFromBaseline(t *testing.T, version int) {
 	for _, driver := range []string{"sqlite", "postgres"} {
 		t.Run(driver, func(t *testing.T) {
@@ -35,7 +36,7 @@ func testMarketUpgradeFromBaseline(t *testing.T, version int) {
 			if driver == "sqlite" {
 				mustSpecificationExec(t, db, "PRAGMA foreign_keys=ON")
 			}
-			if version == 17 {
+			if version >= 17 {
 				mustSpecificationExec(t, db, "INSERT INTO oauth_grants(id,tenant_id,user_id,client_id,scope,resource,created_at,expires_at) VALUES('12345678-1234-4234-8234-123456789012','"+resourceUpgradeTenant+"','88888888-8888-4888-8888-888888888888','existing-client','assetloop:read','http://127.0.0.1/mcp','2026-09-01T00:00:00Z','2030-09-01T00:00:00Z')")
 				mustSpecificationExec(t, db, "INSERT INTO oauth_credentials(hash,tenant_id,grant_id,kind,expires_at) VALUES('synthetic-hash','"+resourceUpgradeTenant+"','12345678-1234-4234-8234-123456789012','access','2030-09-01T00:00:00Z')")
 				mustSpecificationExec(t, db, `INSERT INTO management_requests(tenant_id,user_id,request_key,request_hash,result_json) VALUES('`+resourceUpgradeTenant+`','88888888-8888-4888-8888-888888888888','preserved-request','synthetic-hash','{"id":"original-result"}')`)
@@ -55,9 +56,9 @@ func testMarketUpgradeFromBaseline(t *testing.T, version int) {
 			for table, n := range counts {
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM "+table, n)
 			}
-			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 19)
+			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 20)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM market_items", 0)
-			if version == 17 {
+			if version >= 17 {
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM oauth_grants WHERE client_id='existing-client'", 1)
 				assertSpecificationCount(t, db, "SELECT COUNT(*) FROM oauth_credentials WHERE hash='synthetic-hash'", 1)
 				var receipt string

@@ -100,11 +100,11 @@ func TestSetupLoginMemberPermissionsAndCSRF(t *testing.T) {
 	}
 	editorSession := responseCookie(t, response, sessionCookie)
 	editorHome := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{editorSession, csrf})
-	if !strings.Contains(editorHome.Body.String(), `href="/settings"`) || strings.Contains(editorHome.Body.String(), `href="/imports"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
+	if strings.Contains(editorHome.Body.String(), `href="/settings"`) || strings.Contains(editorHome.Body.String(), `href="/imports"`) || strings.Contains(editorHome.Body.String(), `href="/admin/members"`) {
 		t.Fatalf("editor account menu has incorrect entries: %s", editorHome.Body.String())
 	}
 	forbidden := request(t, handler, http.MethodGet, "/admin/members", nil, []*http.Cookie{editorSession, csrf})
-	if forbidden.Code != http.StatusForbidden || !strings.Contains(forbidden.Body.String(), "只有 Owner") {
+	if forbidden.Code != http.StatusForbidden {
 		t.Fatalf("editor member access: status=%d body=%s", forbidden.Code, forbidden.Body.String())
 	}
 }
@@ -570,7 +570,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("used allowance removal: %d", blockedDelete.Code)
 	}
 	catalog = request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
-	if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), "我的主力手机") || !strings.Contains(catalog.Body.String(), "WEB-SERIAL-001") {
+	if catalog.Code != http.StatusOK || !strings.Contains(catalog.Body.String(), "我的主力手机") || strings.Contains(catalog.Body.String(), "WEB-SERIAL-001") {
 		t.Fatalf("catalog asset list: status=%d body=%s", catalog.Code, catalog.Body.String())
 	}
 	match := regexp.MustCompile(`/assets/([0-9a-f-]{36})`).FindStringSubmatch(catalog.Body.String())
@@ -631,10 +631,17 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		}
 	}
 	updatedList := request(t, handler, http.MethodGet, "/", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{"备用手机", "移动设备", "iPhone 17 Pro Max", "512GB", "WEB-SERIAL-EDITED", `category-icons.svg#tablet`} {
+	for _, want := range []string{"备用手机", "移动设备", "iPhone 17 Pro Max", "512GB", `category-icons.svg#tablet`} {
 		if !strings.Contains(updatedList.Body.String(), want) {
 			t.Fatalf("updated asset list missing %q: %s", want, updatedList.Body.String())
 		}
+	}
+	if strings.Contains(updatedList.Body.String(), "WEB-SERIAL-EDITED") {
+		t.Fatal("updated list exposes serial number")
+	}
+	detailAfterEdit := request(t, handler, http.MethodGet, "/assets/"+match[1], nil, []*http.Cookie{ownerSession, csrf})
+	if detailAfterEdit.Code != 200 || !strings.Contains(detailAfterEdit.Body.String(), "WEB-SERIAL-EDITED") {
+		t.Fatal("edited serial missing from detail")
 	}
 	for _, restore := range []struct {
 		path string

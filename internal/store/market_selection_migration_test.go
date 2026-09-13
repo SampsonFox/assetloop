@@ -79,7 +79,7 @@ func testLegacyMarketUpgrade(t *testing.T, version int) {
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM oauth_grants", 0)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM oauth_credentials", 0)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM management_requests", 0)
-			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 19)
+			assertSpecificationCount(t, db, "SELECT MAX(version_id) FROM goose_db_version", 20)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM market_prices WHERE max_minor=645800", 1)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM asset_market_bindings WHERE market_item_id='legacy-market'", 1)
 			assertSpecificationCount(t, db, "SELECT COUNT(*) FROM asset_events WHERE base_amount_minor=-12345", 1)
