@@ -25,7 +25,8 @@
     if (revealed) return;
     revealed = true;
     footer.hidden = false;
-    footer.scrollIntoView({block:'end', behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+    // Always settle at the same stop, including the footer's bottom clearance.
+    root.scrollTo({top:root.scrollHeight - root.clientHeight, behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
     if (keyboard) footer.querySelector('a').focus({preventScroll:true});
   }
   // Wheel momentum remains one gesture until events have been quiet for 260ms.
@@ -46,6 +47,7 @@
     }
     lastWheel = now;
     if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || !eligible(event.target)) return;
+    if (revealed && event.deltaY > 0) { event.preventDefault(); return; }
     if (event.deltaY < 0) {
       hide();
       wheelStartedAtBottom = false;
@@ -54,9 +56,9 @@
     if (event.deltaY > 0 && wheelStartedAtBottom && atBottom()) {
       // Normalize line/page wheels; a light nudge must not cross the anchor.
       wheelPull += event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? root.clientHeight : 1);
-      if (wheelPull >= 240) reveal();
+      if (wheelPull >= 240) { event.preventDefault(); reveal(); }
     }
-  }, {passive:true});
+  }, {passive:false});
   let touchY = null, lastTouchY = null;
   window.addEventListener('touchstart', event => {
     touchY = event.touches.length === 1 && (revealed || atBottom()) && eligible(event.target) ? event.touches[0].clientY : null;
@@ -69,8 +71,8 @@
     lastTouchY = event.touches[0].clientY;
     const distance = touchY - event.touches[0].clientY;
     if (distance < -8) { hide(); touchY = null; }
-    else if (distance >= 96 && atBottom()) reveal();
-  }, {passive:true});
+    else if (revealed || (distance >= 96 && atBottom())) { event.preventDefault(); reveal(); }
+  }, {passive:false});
   for (const type of ['touchend', 'touchcancel']) window.addEventListener(type, () => { touchY = null; }, {passive:true});
   window.addEventListener('keydown', event => {
     if (eligible(event.target) && (['ArrowUp', 'PageUp', 'Home', 'Escape'].includes(event.key) || (event.key === ' ' && event.shiftKey))) hide();

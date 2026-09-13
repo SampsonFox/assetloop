@@ -10,6 +10,7 @@ function page() {
   const target = {closest:()=>null, parentElement:root};
   const link = {focus(){this.focused=true;}};
   const footer = {hidden:true, calls:[], scrollIntoView(options){this.calls.push(options);}, querySelector:()=>link};
+  root.scrollTo = options => footer.calls.push(options);
   vm.runInNewContext(source, {
     document:{scrollingElement:root,body:root,querySelector:selector=>selector==='[data-delete-reveal]' ? footer : modal},
     window:{addEventListener:(type,fn)=>listeners[type]=fn}, performance:{now:()=>now},
@@ -45,7 +46,7 @@ test('touch requires a fresh upward swipe starting at the bottom',()=>{
 });
 test('keyboard repeat cannot expose it on first arrival; a fresh key reveals and focuses it',()=>{
   const p=page();p.send('keydown',{key:'End'});p.bottom();p.send('keydown',{key:'End',repeat:true});assert.equal(p.footer.hidden,true);
-  p.reduced();p.send('keydown',{key:'ArrowDown'});assert.equal(p.footer.hidden,false);assert.equal(p.link.focused,true);assert.equal(p.footer.calls[0].behavior,'auto');
+  p.reduced();p.send('keydown',{key:'ArrowDown'});assert.equal(p.footer.hidden,false);assert.equal(p.link.focused,true);assert.equal(p.footer.calls[0].behavior,'instant');
   let prevented=false;p.send('keydown',{key:'ArrowDown',preventDefault(){prevented=true;}});assert.equal(prevented,false);
 });
 test('Tab at bottom reveals the link without moving focus out of normal tab order',()=>{
@@ -90,4 +91,32 @@ test('line and page wheel units also cross the anchor',()=>{
   for(const values of [{deltaY:15,deltaMode:1},{deltaY:1,deltaMode:2}]){
     const p=page();p.bottom();p.wait(300);p.send('wheel',values);assert.equal(p.footer.hidden,false);
   }
+});
+test('reveal uses the same document-end stop and consumes downward wheel input while latched',()=>{
+  for(const deltaY of [240,1200]){
+    const p=page();p.bottom();p.wait(300);let prevented=false;
+    p.send('wheel',{deltaY,preventDefault(){prevented=true;}});
+    assert.equal(prevented,true);
+    assert.equal(p.footer.calls[0].top,p.root.scrollHeight-p.root.clientHeight);
+    assert.equal(p.footer.calls[0].behavior,'smooth');
+    prevented=false;p.send('wheel',{deltaY:50,preventDefault(){prevented=true;}});
+    assert.equal(prevented,true);assert.equal(p.footer.calls.length,1);
+    prevented=false;p.send('wheel',{deltaY:-10,preventDefault(){prevented=true;}});
+    assert.equal(prevented,false);assert.equal(p.footer.hidden,true);
+  }
+});
+test('delete footer has a clear separator and consistent spacing',()=>{
+  const css=readFileSync(new URL('./static/app.css',import.meta.url),'utf8');
+  assert.match(css,/\.asset-delete-reveal\s*\{[^}]*border-top:1px solid var\(--muted\)/);
+  assert.match(css,/\.asset-delete-reveal\s*\{[^}]*padding:24px 0/);
+});
+test('touch reveal consumes further downward motion but allows reversal',()=>{
+  const p=page();p.bottom();p.send('touchstart',{touches:[{clientY:300}]});
+  for(const clientY of [200,180]){
+    let prevented=false;p.send('touchmove',{touches:[{clientY}],preventDefault(){prevented=true;}});
+    assert.equal(prevented,true);assert.equal(p.footer.hidden,false);
+  }
+  assert.equal(p.footer.calls.length,1);
+  let prevented=false;p.send('touchmove',{touches:[{clientY:200}],preventDefault(){prevented=true;}});
+  assert.equal(prevented,false);assert.equal(p.footer.hidden,true);
 });
