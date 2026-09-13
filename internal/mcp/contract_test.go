@@ -56,7 +56,11 @@ func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
 		assertMeaning(decode(input.Properties["type_id"]).Description, "reusable", "not a product")
 		assertMeaning(decode(input.Properties["notes"]).Description, "product or service", "purchase")
 	case "correct_event":
-		assertMeaning(tool.Description, "does not change", "event type")
+		assertMeaning(tool.Description, "original asset", "event type", "type_id", "custom")
+		if slices.Contains(input.Required, "type_id") {
+			t.Fatal("correct_event must keep the reclassification type optional")
+		}
+		assertMeaning(decode(input.Properties["type_id"]).Description, "Optional", "custom", "built-in")
 		replacement := decode(input.Properties["replacement"])
 		assertMeaning(decode(replacement.Properties["notes"]).Description, "product or service")
 	case "create_event_type":

@@ -25,7 +25,7 @@ func Run(t *testing.T, store Store) {
 	t.Run("auth", func(t *testing.T) { runAuth(t, store) })
 	t.Run("catalog", func(t *testing.T) { runCatalog(t, store) })
 	t.Run("lifecycle", func(t *testing.T) { runLifecycle(t, store) })
-	t.Run("multiple purchases", func(t *testing.T) { RunMultiplePurchases(t, store) })
+	t.Run("custom lifecycle costs", func(t *testing.T) { RunCustomLifecycleCosts(t, store) })
 	t.Run("concurrent lifecycle", func(t *testing.T) { runConcurrentLifecycle(t, store) })
 }
 

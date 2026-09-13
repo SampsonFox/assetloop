@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -110,9 +109,10 @@ func TestLifecycleFormsRetryWithoutDuplicateEvents(t *testing.T) {
 	}
 }
 
-// A free gift is a zero built-in purchase; every other cash-flow type keeps its
-// positive amount requirement, and the form works without JavaScript.
-func TestLifecycleFormsAcceptZeroPurchaseOnlyForGifts(t *testing.T) {
+// A second built-in purchase is rejected, a purchase keeps its positive amount
+// requirement, and a user-confirmed custom neutral type records the zero gift
+// through the same no-JavaScript form.
+func TestLifecycleFormsEnforceUniquePurchaseAndNeutralGift(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.Database{Driver: "sqlite", DSN: filepath.Join(t.TempDir(), "gift.db")}
 	db, err := basestore.Open(cfg)
@@ -147,6 +147,10 @@ func TestLifecycleFormsAcceptZeroPurchaseOnlyForGifts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	empty, err := spec.SaveAsset(ctx, owner, application.SaveSpecificationAsset{ModelID: model.ID, DisplayName: "Ungifted phone"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	lifecycle := application.NewLifecycleService(adapter)
 	server, err := New(auth, catalog, lifecycle, db, Options{AuthMode: "local", Specifications: spec})
 	if err != nil {
@@ -165,35 +169,45 @@ func TestLifecycleFormsAcceptZeroPurchaseOnlyForGifts(t *testing.T) {
 		}
 		return match[1]
 	}
-	// The purchase option carries its immutable system code, and the no-JavaScript
-	// amount control already accepts zero for it.
-	for _, want := range []string{`data-system-code="purchase"`, `pattern="(?:0*[0-9]+(?:[.][0-9]*)?|0*[.][0-9]+)"`, `data-nonnegative-pattern=`, `data-nonnegative-title=`, `data-positive-pattern=`} {
+	// The no-JavaScript purchase amount control requires a positive magnitude and
+	// states the same translated rule the server reports, punctuation included.
+	amountTitle := `title="` + textFor(application.LocaleZhCN, "validation.amount_positive") + `"`
+	for _, want := range []string{`data-positive-pattern=`, amountTitle, `pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)"`} {
 		if !strings.Contains(page.Body.String(), want) {
 			t.Fatalf("purchase amount control missing %q: %s", want, page.Body.String())
 		}
 	}
-	post := func(values url.Values) *httptest.ResponseRecorder {
-		t.Helper()
-		values.Set("csrf_token", csrf.Value)
-		return request(t, handler, http.MethodPost, "/assets/"+asset.ID+"/events", values, cookies)
+	if strings.Contains(page.Body.String(), "data-system-code=") || strings.Contains(page.Body.String(), "data-nonnegative-pattern=") {
+		t.Fatalf("purchase must not advertise a zero-amount policy: %s", page.Body.String())
 	}
-	base := url.Values{"event_type": {"purchase"}, "amount": {"0"}, "currency": {"CNY"}, "occurred_at": {"2026-08-26T12:00"}, "source": {"manual"}, "notes": {"free gift"}}
-	base.Set("request_key", keyFrom(page.Body.String()))
-	if gift := post(base); gift.Code != http.StatusSeeOther {
-		t.Fatalf("zero purchase: %d %s", gift.Code, gift.Body.String())
+	purchase := url.Values{"request_key": {"web-purchase"}, "event_type": {"purchase"}, "amount": {"100.00"}, "currency": {"CNY"}, "occurred_at": {"2026-08-26T12:00"}, "source": {"manual"}, "notes": {"device"}}
+	purchase.Set("csrf_token", csrf.Value)
+	if response := request(t, handler, http.MethodPost, "/assets/"+asset.ID+"/events", purchase, cookies); response.Code != http.StatusSeeOther {
+		t.Fatalf("first purchase: %d %s", response.Code, response.Body.String())
 	}
-	repair := url.Values{"request_key": {"web-zero-repair"}, "event_type": {"repair"}, "amount": {"0"}, "currency": {"CNY"}, "occurred_at": {"2026-08-26T12:00"}, "source": {"manual"}}
-	if rejected := post(repair); rejected.Code != http.StatusUnprocessableEntity || !strings.Contains(rejected.Body.String(), "金额必须大于 0") {
-		t.Fatalf("zero repair: %d %s", rejected.Code, rejected.Body.String())
-	}
-	// A second distinct purchase on the same item stays valid.
-	next := request(t, handler, http.MethodGet, "/assets/"+asset.ID, nil, cookies)
-	second := url.Values{"request_key": {keyFrom(next.Body.String())}, "event_type": {"purchase"}, "amount": {"19.99"}, "currency": {"CNY"}, "occurred_at": {"2026-08-26T12:30"}, "source": {"manual"}, "notes": {"screen protection service"}}
-	if response := post(second); response.Code != http.StatusSeeOther {
+	// The built-in purchase means acquiring the item, so it stays unique.
+	second := request(t, handler, http.MethodGet, "/assets/"+asset.ID, nil, cookies)
+	secondPurchase := url.Values{"csrf_token": {csrf.Value}, "request_key": {keyFrom(second.Body.String())}, "event_type": {"purchase"}, "amount": {"19.99"}, "currency": {"CNY"}, "occurred_at": {"2026-08-26T12:30"}, "source": {"manual"}}
+	if response := request(t, handler, http.MethodPost, "/assets/"+asset.ID+"/events", secondPurchase, cookies); response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "物品已经存在有效买入记录") {
 		t.Fatalf("second purchase: %d %s", response.Code, response.Body.String())
 	}
+	zeroPurchase := url.Values{"csrf_token": {csrf.Value}, "request_key": {"web-zero-purchase"}, "event_type": {"purchase"}, "amount": {"0"}, "currency": {"CNY"}, "occurred_at": {"2026-08-26T12:00"}, "source": {"manual"}}
+	if response := request(t, handler, http.MethodPost, "/assets/"+empty.ID+"/events", zeroPurchase, cookies); response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "金额必须大于 0") {
+		t.Fatalf("zero purchase on a fresh item: %d %s", response.Code, response.Body.String())
+	}
+	// Purchased services and a free gift are reusable custom cost categories.
+	created := url.Values{"csrf_token": {csrf.Value}, "asset_id": {asset.ID}, "name": {"赠品"}, "cashflow": {"neutral"}}
+	createdType := request(t, handler, http.MethodPost, "/admin/event-types", created, cookies)
+	location, err := url.Parse(createdType.Header().Get("Location"))
+	if err != nil || createdType.Code != http.StatusSeeOther || location.Query().Get("event_type") == "" {
+		t.Fatalf("create neutral type: %d %s", createdType.Code, createdType.Body.String())
+	}
+	gift := url.Values{"csrf_token": {csrf.Value}, "request_key": {"web-gift"}, "event_type": {location.Query().Get("event_type")}, "amount": {"0"}, "currency": {"CNY"}, "occurred_at": {"2026-08-27T12:00"}, "source": {"manual"}, "notes": {"free gift"}}
+	if response := request(t, handler, http.MethodPost, "/assets/"+asset.ID+"/events", gift, cookies); response.Code != http.StatusSeeOther {
+		t.Fatalf("neutral gift: %d %s", response.Code, response.Body.String())
+	}
 	events, summary, err := lifecycle.Timeline(ctx, owner, asset.ID)
-	if err != nil || len(events) != 2 || summary.ExpenseMinor != 1999 || summary.Status != "active" {
+	if err != nil || len(events) != 2 || summary.ExpenseMinor != 10000 || summary.Status != "active" || events[1].BaseAmountMinor != 0 {
 		t.Fatalf("gift lifecycle mismatch: %d %+v %v", len(events), summary, err)
 	}
 }

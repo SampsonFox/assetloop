@@ -299,6 +299,75 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	if page.StatusCode != 200 || !strings.Contains(string(body), "5100.00") {
 		t.Fatal("MCP market price not visible in Web")
 	}
+	denied := func(name string, input any) {
+		t.Helper()
+		result, err := mcpClient.CallTool(ctx, &sdk.CallToolParams{Name: name, Arguments: input})
+		if err != nil || !result.IsError {
+			t.Fatalf("MCP %s should have been refused", name)
+		}
+	}
+	// The earlier modeling mistake recorded service and accessory purchases as
+	// built-in purchases. Reusable custom cost categories are the supported model,
+	// and an already recorded purchase is reclassified through the optional
+	// top-level type_id of correct_event.
+	var serviceType, accessoryType, giftType struct {
+		Data domain.AssetEventTypeDefinition
+	}
+	call("create_event_type", transport.CreateEventTypeInput{RequestKey: "full-mcp-service-type", Name: "Device service", Cashflow: "expense"}, &serviceType)
+	call("create_event_type", transport.CreateEventTypeInput{RequestKey: "full-mcp-accessory-type", Name: "Phone accessory", Cashflow: "expense"}, &accessoryType)
+	call("create_event_type", transport.CreateEventTypeInput{RequestKey: "full-mcp-gift-type", Name: "Free gift", Cashflow: "neutral"}, &giftType)
+	if serviceType.Data.ID == "" || accessoryType.Data.ID == "" || giftType.Data.ID == "" {
+		t.Fatal("MCP custom cost types were not created")
+	}
+	customCosts := []transport.EventInput{
+		{AssetID: assetID, TypeID: serviceType.Data.ID, EventFields: transport.EventFields{RequestKey: "full-mcp-service-warranty", AmountMinor: 19_900, Currency: "CNY", OccurredAt: "2026-08-02T10:00:00Z", Notes: "extended warranty service"}},
+		{AssetID: assetID, TypeID: serviceType.Data.ID, EventFields: transport.EventFields{RequestKey: "full-mcp-service-setup", AmountMinor: 5_900, Currency: "CNY", OccurredAt: "2026-08-02T11:00:00Z", Notes: "setup service"}},
+		{AssetID: assetID, TypeID: serviceType.Data.ID, EventFields: transport.EventFields{RequestKey: "full-mcp-service-shield", AmountMinor: 9_900, Currency: "CNY", OccurredAt: "2026-08-03T10:00:00Z", Notes: "screen protection service"}},
+		{AssetID: assetID, TypeID: accessoryType.Data.ID, EventFields: transport.EventFields{RequestKey: "full-mcp-accessory-case", AmountMinor: 8_900, Currency: "CNY", OccurredAt: "2026-08-03T11:00:00Z", Notes: "protective case"}},
+		{AssetID: assetID, TypeID: accessoryType.Data.ID, EventFields: transport.EventFields{RequestKey: "full-mcp-accessory-charger", AmountMinor: 14_900, Currency: "CNY", OccurredAt: "2026-08-04T10:00:00Z", Notes: "charger"}},
+	}
+	for _, cost := range customCosts {
+		call("record_event", cost, &event)
+		call("record_event", cost, &event)
+	}
+	call("record_event", transport.EventInput{AssetID: assetID, TypeID: giftType.Data.ID, EventFields: transport.EventFields{RequestKey: "full-mcp-gift", AmountMinor: 0, Currency: "CNY", OccurredAt: "2026-08-05T10:00:00Z", Notes: "free gift"}}, &event)
+	if event.Data.TypeID != giftType.Data.ID || event.Data.BaseAmountMinor != 0 {
+		t.Fatalf("MCP neutral gift mismatch: %+v", event.Data)
+	}
+	reclassify := replacement
+	reclassify.RequestKey = "full-mcp-reclassify-service"
+	reclassified := transport.CorrectEventInput{EventID: replacementID, TypeID: serviceType.Data.ID, Replacement: reclassify}
+	call("correct_event", reclassified, &event)
+	if event.Data.TypeID != serviceType.Data.ID || event.Data.BaseAmountMinor != -1424 || event.Data.FX == nil {
+		t.Fatalf("MCP reclassification mismatch: %+v", event.Data)
+	}
+	reclassifiedID := event.Data.ID
+	call("correct_event", reclassified, &event)
+	if event.Data.ID != reclassifiedID {
+		t.Fatal("MCP reclassification replay changed identity")
+	}
+	// A built-in target stays refused, and the original purchase keeps its evidence.
+	denied("correct_event", transport.CorrectEventInput{EventID: reclassifiedID, TypeID: purchaseID, Replacement: transport.EventFields{RequestKey: "full-mcp-reclassify-builtin", AmountMinor: 200, Currency: "USD", OccurredAt: "2026-08-01T10:00:00Z", FXRateScaled: 712000000, FXRateDate: "2026-08-01", FXRateSource: "full-element-fixture", FXConfirmed: true}})
+	voidedPurchase, err := lifecycle.GetEvent(ctx, session.Principal, replacementID)
+	if err != nil || !voidedPurchase.IsVoided || voidedPurchase.BaseAmountMinor != -1424 || voidedPurchase.FX == nil {
+		t.Fatalf("MCP reclassification overwrote the original purchase: %+v %v", voidedPurchase, err)
+	}
+	customCost, err := lifecycle.CostDashboard(ctx, session.Principal, assetID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grouped := map[string]int64{}
+	for _, category := range customCost.Categories {
+		grouped[category.TypeID] = category.AmountMinor
+	}
+	// The acquisition is now a custom service cost, so no purchase category remains.
+	if len(customCost.Categories) != 2 || grouped[serviceType.Data.ID] != 37_124 || grouped[accessoryType.Data.ID] != 23_800 {
+		t.Fatalf("MCP custom cost grouping mismatch: %+v", customCost.Categories)
+	}
+	_, customSummary, err := lifecycle.Timeline(ctx, session.Principal, assetID)
+	if err != nil || customSummary.ExpenseMinor != 60_924 || customSummary.IncomeMinor != 0 {
+		t.Fatalf("MCP custom cost totals mismatch: %+v %v", customSummary, err)
+	}
 
 	call("bind_asset_market", transport.BindMarketInput{AssetID: assetID, MarketItemID: "", RequestKey: "mcp-market-finish-unbind"}, new(any))
 	for _, tool := range list.Tools {

@@ -147,27 +147,33 @@ These meanings are shipped in the MCP `tools/list` descriptions and JSON Schema
 field descriptions, so a new client does not need prior chat history or a personal
 skill to discover them.
 
-- `type_id` identifies a reusable action category: purchase (买入), repair (维修),
-  or sale (卖出). Query `list_event_types` and reuse a matching enabled type.
+- `type_id` identifies a reusable lifecycle category, including built-in purchase
+  (买入), repair (维修), sale (卖出), and user-confirmed custom cost types.
+  Query `list_event_types` and reuse a matching enabled type.
 - `notes` describes the individual event: the product or service name and context.
-  For example, buying an extended-warranty service uses 买入, with 延保服务 in
-  `notes`; the service name is not a new lifecycle type.
+  For example, an extended warranty uses a reusable 服务 expense type, with
+  延保服务 in `notes`; do not create a separate type for each purchased product.
 - `create_event_type.name` names a reusable action category, not a purchased item.
   Create a custom type only if no suitable enabled type exists and the user
   explicitly confirms adding that category. Permission to record a purchase is
   not permission to expand the type catalog.
-- `correct_event` preserves the original asset and type. It cannot reclassify an
-  event; never rename a shared type as a workaround for one incorrect record.
-- One item may have several purchase records: record the device, each purchased
-  service, accessories and a free gift as separate `record_event` purchases of the
-  same type. `amount_minor` may be 0 only for such a gift purchase, and only in the
-  base currency because persisted FX evidence requires a positive original amount.
-  Repair and sale still require a positive amount; after a sale no new built-in
+- `correct_event` preserves the original asset and historical record. Omit its
+  optional top-level `type_id` to retain the original type. An explicit different
+  type must be an enabled tenant-owned custom type with the same cash-flow
+  direction, or a neutral type when both original and replacement amounts are zero.
+  Built-in targets are rejected. The last acquisition cannot be reclassified away
+  while a repair or sale depends on it. Never rename a shared type to correct one
+  record. Type changes use the same atomic void, replacement and replay receipt.
+- The built-in purchase represents acquiring the item and is unique per item.
+  Services and accessories use user-confirmed custom expense types. A free gift
+  uses a custom neutral type with amount 0. Every expense or income requires a
+  positive magnitude. After a sale no new built-in
   purchase, repair or sale is accepted, while custom post-sale cost events remain
   recordable.
 
 中文：事件类型回答“发生了什么行为”，备注回答“具体买了什么、有什么补充”。
-购买服务也可以使用已有“买入”类型，把服务商品名写在备注，不要一单一类型。
+手机本体使用唯一的“买入”；服务、配件使用可复用的自定义支出类型，
+赠品使用无金额类型。具体商品名仍写在备注，不要一单一类型。
 
 ### Server-side GLB import
 
@@ -242,7 +248,8 @@ touch 3D resources, bindings or lifecycle events.
   creation followed by a failed purchase leaves the asset; retry the purchase,
   not creation with a new key. Core data has no second pending-review stage.
 - `correct_event` appends a void and replacement while preserving the original
-  economic event. It does not change the original asset or event type.
+  economic event and asset. The optional top-level `type_id` applies the scoped
+  custom-type reclassification described above; omission keeps the original type.
 - Saves replace complete tag/category selections. Read current configuration
   first. Omit an asset's `resource_id` to retain its binding; use an empty string
   to clear its override and restore inheritance.

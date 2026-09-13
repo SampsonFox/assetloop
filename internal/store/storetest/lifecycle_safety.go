@@ -214,45 +214,26 @@ func runConcurrentLifecycle(t *testing.T, store Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Distinct purchase records are all valid on one item, so both concurrent
-	// commands must commit. Only one effective sale may win.
-	barrier := &lifecycleReadBarrier{LifecycleStore: store, ready: make(chan struct{})}
-	service := application.NewLifecycleService(barrier)
-	errs := make(chan error, 2)
-	for range 2 {
-		go func() {
-			_, err := service.Record(ctx, owner, application.RecordEvent{AssetID: asset.ID, Type: domain.AssetEventPurchase, AmountMinor: 100, Currency: "CNY", OccurredAt: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)})
-			errs <- err
-		}()
-	}
-	succeeded := 0
-	for range 2 {
-		if <-errs == nil {
-			succeeded++
+	// The built-in purchase means acquiring the item, so two concurrent purchase
+	// commands can only have one winner. Only one effective sale may win too.
+	for _, eventType := range []domain.AssetEventType{domain.AssetEventPurchase, domain.AssetEventSale} {
+		barrier := &lifecycleReadBarrier{LifecycleStore: store, ready: make(chan struct{})}
+		service := application.NewLifecycleService(barrier)
+		errs := make(chan error, 2)
+		for range 2 {
+			go func() {
+				_, err := service.Record(ctx, owner, application.RecordEvent{AssetID: asset.ID, Type: eventType, AmountMinor: 100, Currency: "CNY", OccurredAt: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)})
+				errs <- err
+			}()
 		}
-	}
-	if succeeded != 2 {
-		t.Fatalf("concurrent distinct purchases: want two successes, got %d", succeeded)
-	}
-	events, _, err := application.NewLifecycleService(store).Timeline(ctx, owner, asset.ID)
-	if err != nil || len(events) != 2 {
-		t.Fatalf("concurrent purchases did not persist distinct records: %d %v", len(events), err)
-	}
-	barrier = &lifecycleReadBarrier{LifecycleStore: store, ready: make(chan struct{})}
-	service = application.NewLifecycleService(barrier)
-	for range 2 {
-		go func() {
-			_, err := service.Record(ctx, owner, application.RecordEvent{AssetID: asset.ID, Type: domain.AssetEventSale, AmountMinor: 100, Currency: "CNY", OccurredAt: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)})
-			errs <- err
-		}()
-	}
-	succeeded = 0
-	for range 2 {
-		if <-errs == nil {
-			succeeded++
+		succeeded := 0
+		for range 2 {
+			if <-errs == nil {
+				succeeded++
+			}
 		}
-	}
-	if succeeded != 1 {
-		t.Fatalf("concurrent %s: want one success, got %d", domain.AssetEventSale, succeeded)
+		if succeeded != 1 {
+			t.Fatalf("concurrent %s: want one success, got %d", eventType, succeeded)
+		}
 	}
 }

@@ -67,28 +67,56 @@ func testLifecycleTools(t *testing.T, s Services, owner application.Principal, c
 	}
 	input.AmountMinor = 11000
 	call("record_event", input, true)
-	// A second distinct purchase on the same item is a separate valid record.
+	// The built-in purchase means acquiring the item, so a second one is refused.
 	input.RequestKey = "mcp-second-purchase"
-	second := call("record_event", input, false)
-	if second.ID == "" || second.ID == first.ID {
-		t.Fatal("distinct purchase was rejected")
-	}
+	call("record_event", input, true)
 	input.RequestKey = "mcp-correction"
 	replacement := CorrectEventInput{EventID: first.ID, Replacement: input.EventFields}
 	corrected := call("correct_event", replacement, false)
 	if again := call("correct_event", replacement, false); again.ID != corrected.ID {
 		t.Fatal("retry duplicated correction")
 	}
+	// Omitting the optional type_id keeps the original type and amount direction.
+	if corrected.TypeID != purchase || corrected.BaseAmountMinor != -11_000 {
+		t.Fatalf("default correction changed the original type: %+v", corrected)
+	}
 	events, _, err := s.Lifecycle.Timeline(ctx, owner, asset.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 4 {
+	if len(events) != 3 {
 		t.Fatalf("append-only history has %d rows", len(events))
 	}
 	original, err := s.Lifecycle.GetEvent(ctx, owner, first.ID)
 	if err != nil || !original.IsVoided {
 		t.Fatal("original not preserved as voided")
+	}
+	// Purchased services are reusable custom cost categories, and the optional
+	// top-level type_id reclassifies the already recorded purchase into one.
+	serviceType := call("create_event_type", CreateEventTypeInput{RequestKey: "mcp-service-type", Name: "Device service", Cashflow: "expense"}, false)
+	serviceExpense := call("record_event", EventInput{AssetID: asset.ID, TypeID: serviceType.ID, EventFields: EventFields{RequestKey: "mcp-service-warranty", AmountMinor: 2_500, Currency: "CNY", OccurredAt: "2026-01-03T12:00:00Z", Notes: "extended warranty service"}}, false)
+	if serviceExpense.TypeID != serviceType.ID || serviceExpense.BaseAmountMinor != -2_500 {
+		t.Fatalf("custom service cost mismatch: %+v", serviceExpense)
+	}
+	reclassify := input.EventFields
+	reclassify.RequestKey = "mcp-reclassify-service"
+	target := CorrectEventInput{EventID: corrected.ID, TypeID: serviceType.ID, Replacement: reclassify}
+	reclassified := call("correct_event", target, false)
+	if reclassified.TypeID != serviceType.ID || reclassified.BaseAmountMinor != -11_000 || reclassified.OccurredAt.IsZero() {
+		t.Fatalf("reclassification did not keep the economic evidence: %+v", reclassified)
+	}
+	if replay := call("correct_event", target, false); replay.ID != reclassified.ID {
+		t.Fatal("reclassification retry changed identity")
+	}
+	if voided, err := s.Lifecycle.GetEvent(ctx, owner, corrected.ID); err != nil || !voided.IsVoided || voided.BaseAmountMinor != -11_000 {
+		t.Fatalf("reclassification overwrote the original: %+v %v", voided, err)
+	}
+	// Three rows before the custom cost (purchase, correction void and
+	// replacement), plus the custom service cost, plus the reclassification void
+	// and its replacement.
+	events, _, err = s.Lifecycle.Timeline(ctx, owner, asset.ID)
+	if err != nil || len(events) != 6 {
+		t.Fatalf("reclassification history has %d rows: %v", len(events), err)
 	}
 	identity.Scopes = []string{ScopeRead}
 	input.RequestKey = "denied-write"
@@ -140,5 +168,8 @@ func testLifecycleTools(t *testing.T, s Services, owner application.Principal, c
 	call("update_event_type", UpdateEventTypeInput{ID: custom.ID, CreateEventTypeInput: CreateEventTypeInput{RequestKey: "http-type-direction", Name: "Cleaning fee", Cashflow: "income"}}, true)
 	call("set_event_type_enabled", EnableEventTypeInput{RequestKey: "http-type-disable", ID: custom.ID, Enabled: false}, false)
 	call("set_event_type_enabled", EnableEventTypeInput{RequestKey: "http-type-disable", ID: custom.ID, Enabled: false}, false)
+	// A disabled custom type or a built-in type cannot be a reclassification target.
+	call("correct_event", CorrectEventInput{EventID: serviceExpense.ID, TypeID: custom.ID, Replacement: EventFields{RequestKey: "mcp-reclassify-disabled", AmountMinor: 500, Currency: "CNY", OccurredAt: "2026-01-02T12:00:00Z"}}, true)
+	call("correct_event", CorrectEventInput{EventID: serviceExpense.ID, TypeID: purchase, Replacement: EventFields{RequestKey: "mcp-reclassify-builtin", AmountMinor: 500, Currency: "CNY", OccurredAt: "2026-01-02T12:00:00Z"}}, true)
 	call("set_event_type_enabled", EnableEventTypeInput{RequestKey: "http-builtin-disable", ID: purchase, Enabled: false}, true)
 }

@@ -247,7 +247,13 @@ Category-specific condition schemes remain separate from configuration descripti
 Transactions group related cash and lifecycle effects, while asset events remain the append-only lifecycle record.
 Confirmed events cannot ordinarily be updated or deleted at either Store or database level. The sole deletion exception is an administrator-confirmed whole-item purge through the application service. A correction
 atomically appends a zero-value void event plus a replacement economic event that references the
-original; the original row remains unchanged and queryable.
+original; the original row remains unchanged and queryable, and the correction normally keeps the
+original event type. An explicit different type ID is a scoped reclassification of an already recorded
+misclassification: the replacement target must be an enabled tenant-owned custom type, keep the original
+cash-flow direction, or be a neutral custom type when the original and replacement amounts are both zero.
+Built-in targets and expense/income direction changes are refused, and the last effective acquisition
+cannot be reclassified away while a repair or sale still depends on it. The target is part of the command
+fingerprint, so a different target is a different command rather than a retry.
 User-facing lifecycle collections never render the technical void row as a separate event. Their
 default effective view excludes voided originals; an explicit history option adds those originals
 back with a voided marker while preserving the same server-side filtering, sorting, and pagination.
@@ -259,28 +265,30 @@ its current label everywhere without rewriting historical economic events. Legac
 is retained for compatibility; new writes use only fixed technical markers. System types are read-only.
 Custom directions (expense, income, neutral) lock after any reference, including voided history.
 Types may be disabled/restored but never physically deleted. Disabled types remain readable/filterable
-and may be used only to correct their existing original events, not to create unrelated new records.
+and may be used only to correct their existing original events, not to create unrelated new records,
+and never as a reclassification target for another event.
 Management and event writes share the tenant lifecycle transaction lock. Historical signed amounts
 and FX evidence remain immutable. Neutral records remain zero and do not lock the base currency;
 custom types never implicitly change built-in acquired, repairing or sold transitions. Cost categories
 are grouped by stable type ID. Migration 12 preserves old event identities and links and rejects
 unresolvable legacy names before upgrading.
 
-One physical item legitimately carries several purchase records — the device itself, purchased
-services, a case, a charger or a free gift — all recorded through the same built-in purchase type,
-so purchase is not unique per item. Acquisition state is still derived from the presence of any
-effective purchase: repair and sale require one, only one effective sale is possible, and no new
-purchase, repair or sale may follow a sale. A zero magnitude is allowed only for the built-in
-purchase type as a gift recorded in the tenant base currency — persisted FX evidence requires a
-positive original amount — while every other expense or income type still requires a positive
-amount and neutral records stay zero. Zero-magnitude events never lock the base currency, and cost
-duration always starts from the earliest effective purchase.
+The built-in purchase type means acquiring the item, so an item has exactly one effective purchase per
+physical item — the device itself. Purchased services, accessories and comparable recurring costs use
+reusable custom expense types that the user confirmed once, and a free gift is a custom neutral type
+recorded as zero; the individual product or service name stays in the event notes. Acquisition state
+derives from that effective purchase: repair and sale require one, only one effective sale is possible,
+and no new built-in purchase, repair or sale may follow a sale, while custom cost events (for example
+post-sale shipping, disposal or further service fees) remain recordable. Every expense or income record
+requires a positive magnitude — including a foreign-currency record, because persisted FX evidence
+requires a positive original amount — and a neutral record stays exactly zero. Zero-magnitude events
+never lock the base currency, and cost duration always starts from the acquisition.
 
 Lifecycle commands treat a supplied monetary amount as an unsigned magnitude. Before idempotency
 fingerprinting, conversion, or persistence, the application service takes its absolute value and then
 derives the stored sign exclusively from the resolved event type's cash-flow effect: expenses are
-negative, income is positive, and neutral events are zero. Web controls accept a zero amount only for
-the built-in purchase gift case and positive input for every other cash-flow type, while MCP and other
+negative, income is positive, and neutral events are zero. Web controls require a positive amount for
+every expense or income type and switch to zero only for the selected neutral type, while MCP and other
 transport adapters receive the same normalization through the shared use case.
 
 ## 6. Money architecture

@@ -143,9 +143,25 @@ func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID
 	if original.TypeID != "" {
 		value = domain.AssetEventType(original.TypeID)
 	}
-	eventType, err := s.resolveEventType(ctx, actor.TenantID, value)
+	originalType, err := s.resolveEventType(ctx, actor.TenantID, value)
 	if err != nil {
 		return domain.AssetEvent{}, err
+	}
+	eventType := originalType
+	// An optional different type ID is the scoped reclassification of an already
+	// recorded event. Omitting it, or repeating the original type, keeps the
+	// previous same-type correction behavior, including for a disabled type.
+	if requested := strings.TrimSpace(cmd.TypeID); requested != "" {
+		target, err := s.resolveEventType(ctx, actor.TenantID, domain.AssetEventType(requested))
+		if err != nil {
+			return domain.AssetEvent{}, err
+		}
+		if target.ID != originalType.ID {
+			if err := s.validateReclassification(ctx, actor, original, originalType, target, cmd.AmountMinor); err != nil {
+				return domain.AssetEvent{}, err
+			}
+			eventType = target
+		}
 	}
 	transaction, replacement, err := s.prepareEvent(ctx, actor, cmd, eventType, original.ID)
 	if err != nil {
@@ -168,6 +184,53 @@ func (s *LifecycleService) correct(ctx context.Context, actor Principal, eventID
 		return domain.AssetEvent{}, fmt.Errorf("correct asset event: %w", err)
 	}
 	return replacement, nil
+}
+
+// validateReclassification scopes the optional different-type correction to
+// repairing an already recorded misclassification. The replacement type must be
+// an enabled tenant-owned custom type in the same cash-flow direction; a legacy
+// zero-magnitude record may instead move to a neutral custom type with a zero
+// replacement. Built-in targets and, through the amount rules, expense/income
+// sign changes are refused. Reclassifying the last effective built-in purchase
+// away is refused while a repair or sale still depends on it, but accidental
+// duplicate purchases can be repaired one at a time.
+func (s *LifecycleService) validateReclassification(ctx context.Context, actor Principal, original domain.AssetEvent, originalType, target domain.AssetEventTypeDefinition, amountMinor int64) error {
+	if target.BuiltIn || target.SystemCode != "" {
+		return NewInputError("validation.event_type")
+	}
+	if !target.Enabled {
+		return NewInputError("validation.event_type_disabled")
+	}
+	if target.Cashflow == domain.AssetEventNeutral {
+		if original.BaseAmountMinor != 0 || amountMinor != 0 {
+			return NewInputError("validation.event_cashflow")
+		}
+	} else if target.Cashflow != originalType.Cashflow {
+		return NewInputError("validation.event_cashflow")
+	}
+	if originalType.SystemCode != domain.AssetEventPurchase {
+		return nil
+	}
+	events, err := s.store.ListAssetEvents(ctx, actor.TenantID, original.AssetID)
+	if err != nil {
+		return fmt.Errorf("list asset events: %w", err)
+	}
+	otherPurchase, dependent := false, false
+	for _, event := range events {
+		if event.ID == original.ID || event.IsVoided || event.Kind() == domain.AssetEventVoid {
+			continue
+		}
+		switch event.Kind() {
+		case domain.AssetEventPurchase:
+			otherPurchase = true
+		case domain.AssetEventRepair, domain.AssetEventSale:
+			dependent = true
+		}
+	}
+	if !otherPurchase && dependent {
+		return NewInputError("validation.event_purchase_first")
+	}
+	return nil
 }
 
 func (s *LifecycleService) Timeline(ctx context.Context, actor Principal, assetID string) ([]domain.AssetEvent, domain.AssetSummary, error) {
@@ -319,9 +382,7 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	if _, err := s.store.GetAsset(ctx, actor.TenantID, cmd.AssetID); err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, fmt.Errorf("get asset: %w", err)
 	}
-	// A zero magnitude is a gift only for the built-in purchase event. Every other
-	// expense or income type still requires a positive amount, and neutral stays zero.
-	if eventType.Cashflow != domain.AssetEventNeutral && (cmd.AmountMinor < 0 || (cmd.AmountMinor == 0 && eventType.SystemCode != domain.AssetEventPurchase)) {
+	if eventType.Cashflow != domain.AssetEventNeutral && cmd.AmountMinor <= 0 {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_positive")
 	}
 	if eventType.Cashflow == domain.AssetEventNeutral && cmd.AmountMinor != 0 {
@@ -338,11 +399,6 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	baseCurrency, err = domain.NormalizeCurrency(baseCurrency)
 	if err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, err
-	}
-	// Persisted FX evidence requires a positive original amount, so a zero gift is
-	// only representable in the base currency. Neutral events carry no evidence.
-	if eventType.Cashflow != domain.AssetEventNeutral && cmd.AmountMinor == 0 && currency != baseCurrency {
-		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_positive")
 	}
 	baseAmount := cmd.AmountMinor
 	var fx *domain.FXEvidence
@@ -408,15 +464,15 @@ func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principa
 			sold = true
 		}
 	}
-	// One physical item legitimately has several purchase records (device, services,
-	// case, charger, gifts), so purchase is not unique. Repair and sale still need an
-	// acquisition first, and after a sale no new built-in purchase, repair or sale is
-	// accepted; custom cost events (for example post-sale shipping or disposal fees)
-	// remain recordable through this same command.
+	// One physical item has exactly one effective acquisition record. Purchased
+	// services and accessories are reusable custom cost types, not extra built-in
+	// purchases. Repair and sale still need an acquisition first, and after a sale
+	// no new built-in purchase, repair or sale is accepted; custom cost events
+	// (for example post-sale shipping or disposal fees) remain recordable.
 	switch eventType {
 	case domain.AssetEventPurchase:
-		if sold {
-			return NewInputError("validation.event_after_sale")
+		if hasPurchase {
+			return NewInputError("validation.event_purchase_exists")
 		}
 	case domain.AssetEventRepair, domain.AssetEventSale:
 		if !hasPurchase {
