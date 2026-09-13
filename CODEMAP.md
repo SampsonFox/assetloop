@@ -16,6 +16,11 @@ Status: Core assets, lifecycle, media and OAuth MCP are implemented. Zhuanzhuan 
 
 ## Entry points
 
+Local development: `scripts/start-preview.ps1` builds to `dist/local/` and runs
+with per-port databases/media in `data/preview-<port>/`. Logs and caches belong in
+`.cache/`; auxiliary Git worktrees in `.worktrees/`. See
+`docs/DEVELOPMENT_WORKFLOW.md` for the complete generated-file layout.
+
 `docs/MCP_RELEASE_NOTES.md` records the 2026-09-12 MCP UAT batch capabilities,
 changes and exclusions; setup and acceptance guides ship under `docs/` in packages.
 
