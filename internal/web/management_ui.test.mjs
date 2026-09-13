@@ -10,7 +10,7 @@ test('member management uses compact management controls and a separate create p
   assert.match(html, /class="members-layout"/);
   assert.match(html, /class="card stack member-create"/);
   assert.match(html, /{{template "ui-icon" "save"}}/);
-  assert.match(html, /name="password"[^>]*minlength="12"/);
+  assert.match(html, /name="password"[^>]*minlength="8"/);
   assert.match(html, /name="csrf_token"/);
 });
 

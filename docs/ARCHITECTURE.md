@@ -266,11 +266,22 @@ custom types never implicitly change built-in acquired, repairing or sold transi
 are grouped by stable type ID. Migration 12 preserves old event identities and links and rejects
 unresolvable legacy names before upgrading.
 
+One physical item legitimately carries several purchase records — the device itself, purchased
+services, a case, a charger or a free gift — all recorded through the same built-in purchase type,
+so purchase is not unique per item. Acquisition state is still derived from the presence of any
+effective purchase: repair and sale require one, only one effective sale is possible, and no new
+purchase, repair or sale may follow a sale. A zero magnitude is allowed only for the built-in
+purchase type as a gift recorded in the tenant base currency — persisted FX evidence requires a
+positive original amount — while every other expense or income type still requires a positive
+amount and neutral records stay zero. Zero-magnitude events never lock the base currency, and cost
+duration always starts from the earliest effective purchase.
+
 Lifecycle commands treat a supplied monetary amount as an unsigned magnitude. Before idempotency
 fingerprinting, conversion, or persistence, the application service takes its absolute value and then
 derives the stored sign exclusively from the resolved event type's cash-flow effect: expenses are
-negative, income is positive, and neutral events are zero. Web controls accept only positive input,
-while MCP and other transport adapters receive the same normalization through the shared use case.
+negative, income is positive, and neutral events are zero. Web controls accept a zero amount only for
+the built-in purchase gift case and positive input for every other cash-flow type, while MCP and other
+transport adapters receive the same normalization through the shared use case.
 
 ## 6. Money architecture
 
@@ -469,9 +480,25 @@ private caches so replacement and clear do not leave a stale active image.
 The server-side HTTPS image downloader reuses the GLB downloader's public-address,
 redirect, timeout and no-credential policies with an 8 MiB response limit. A domain
 resolved to reserved/fake-IP space is rejected; browser download plus file upload is
-the explicit fallback, not an SSRF exception. A source page is attribution only and
-is never used as the stored blob location. This image slice currently exposes Web
-actions; image-specific MCP tools have not yet been added.
+the explicit fallback, not an SSRF exception. The same fallback is available to the
+AI Harness as bounded base64 content through `upload_model_image`, which performs the
+identical validation and atomic replacement with no network I/O, so the downloader,
+DNS and proxy policy is never weakened. A source page is attribution only and
+is never used as the stored blob location.
+
+`ModelImageImportService` adds receipt-backed, idempotent image replacement for the
+three semantic MCP image tools (`get_model_image`, `import_model_image_from_url` and
+the no-network bounded-content `upload_model_image`).
+Authorization and the management fingerprint are checked before any network or blob I/O;
+the bounded download never holds a database transaction; the verified immutable blob
+is then committed with the receipt, the cleared previous binding and the new active
+revision in one management transaction. A same-key retry returns the original
+revision metadata without downloading or writing again or replacing a later image, a changed
+payload conflicts, and concurrent identical imports leave one active revision while
+cleaning only the losing uncommitted blob. The public result exposes image identity,
+model, content type, size, checksum and attribution only — never tenant, store or
+object keys. The Web upload/import path reuses the same verified upload step, and MCP
+never touches 3D resources or lifecycle events.
 
 ```text
 Attachment or product-model media use case

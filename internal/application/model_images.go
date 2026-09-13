@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
@@ -93,6 +94,33 @@ func (s *ModelImageService) Model(ctx context.Context, a Principal, model string
 	}
 	return s.store.GetProductModel(ctx, a.TenantID, model)
 }
+
+// validateImportTarget confirms the shared model exists inside the tenant and
+// that the attribution source is a safe public URL. It performs no I/O, so an
+// invalid URL import is rejected before the downloader is ever called.
+func (s *ModelImageService) validateImportTarget(ctx context.Context, a Principal, model, source string) error {
+	if err := validID("model ID", model); err != nil {
+		return err
+	}
+	if _, err := s.store.GetProductModel(ctx, a.TenantID, model); err != nil {
+		return err
+	}
+	_, err := validateModelImageSource(source)
+	return err
+}
+
+// validateModelImageSource normalizes the attribution page and rejects
+// credential-bearing URLs. It is shared by the direct upload and URL import.
+func validateModelImageSource(source string) (string, error) {
+	normalized, err := modelMediaURL(source)
+	if err != nil {
+		return "", NewInputError("image.invalid_source")
+	}
+	if u, _ := url.Parse(normalized); u != nil && u.User != nil {
+		return "", NewInputError("image.invalid_source")
+	}
+	return normalized, nil
+}
 func (s *ModelImageService) Open(ctx context.Context, a Principal, model string) (io.ReadCloser, ModelImage, error) {
 	m, err := s.Get(ctx, a, model)
 	if err != nil {
@@ -119,6 +147,25 @@ func validateModelImage(data []byte) (string, error) {
 	return "image/" + format, nil
 }
 func (s *ModelImageService) Upload(ctx context.Context, a Principal, model string, data []byte, source string) (ModelImage, error) {
+	return s.uploadWithCommit(ctx, a, model, data, source, func(m ModelImage) (ModelImage, error) {
+		err := s.store.WithImageWrite(ctx, a.TenantID, func(tx ModelImageStore) error {
+			if _, e := tx.GetProductModel(ctx, a.TenantID, model); e != nil {
+				return e
+			}
+			if e := tx.ClearModelImage(ctx, a.TenantID, model); e != nil {
+				return e
+			}
+			return tx.InsertModelImage(ctx, m)
+		})
+		return m, err
+	})
+}
+
+// uploadWithCommit writes and verifies the immutable blob before invoking commit.
+// commit persists the revision and returns the winner, because an identical
+// concurrent command may already have committed a different revision. A failed
+// commit cleans only the new blob, after positively confirming it was not stored.
+func (s *ModelImageService) uploadWithCommit(ctx context.Context, a Principal, model string, data []byte, source string, commit func(ModelImage) (ModelImage, error)) (ModelImage, error) {
 	if err := a.Require(CapabilityManageCatalog); err != nil {
 		return ModelImage{}, err
 	}
@@ -129,12 +176,9 @@ func (s *ModelImageService) Upload(ctx context.Context, a Principal, model strin
 	if err != nil {
 		return ModelImage{}, err
 	}
-	source, err = modelMediaURL(source)
+	source, err = validateModelImageSource(source)
 	if err != nil {
-		return ModelImage{}, NewInputError("image.invalid_source")
-	}
-	if u, _ := url.Parse(source); u != nil && u.User != nil {
-		return ModelImage{}, NewInputError("image.invalid_source")
+		return ModelImage{}, err
 	}
 	hash := sha256.Sum256(data)
 	m := ModelImage{ID: newID(), TenantID: a.TenantID, ModelID: model, StoreID: s.defaultStore, SHA256: hex.EncodeToString(hash[:]), ContentType: mime, SizeBytes: int64(len(data)), SourceURL: source}
@@ -162,24 +206,16 @@ func (s *ModelImageService) Upload(ctx context.Context, a Principal, model strin
 		_ = cleanupModelBlob(ctx, b, m.ObjectKey)
 		return ModelImage{}, ErrModel3DUnavailable
 	}
-	err = s.store.WithImageWrite(ctx, a.TenantID, func(tx ModelImageStore) error {
-		if _, e := tx.GetProductModel(ctx, a.TenantID, model); e != nil {
-			return e
-		}
-		if e := tx.ClearModelImage(ctx, a.TenantID, model); e != nil {
-			return e
-		}
-		return tx.InsertModelImage(ctx, m)
-	})
+	committed, err := commit(m)
 	if err != nil {
 		probe, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		if _, e := s.store.GetImageRevision(probe, a.TenantID, m.ID); errors.Is(e, ErrImageNotFound) {
 			_ = cleanupModelBlob(ctx, b, m.ObjectKey)
 		}
-		return ModelImage{}, err
+		return ModelImage{}, fmt.Errorf("save model image: %w", err)
 	}
-	return m, nil
+	return committed, nil
 }
 func (s *ModelImageService) Clear(ctx context.Context, a Principal, model string) error {
 	if err := a.Require(CapabilityManageCatalog); err != nil {

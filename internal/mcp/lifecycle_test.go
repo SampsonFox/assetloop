@@ -67,8 +67,12 @@ func testLifecycleTools(t *testing.T, s Services, owner application.Principal, c
 	}
 	input.AmountMinor = 11000
 	call("record_event", input, true)
-	input.RequestKey = ""
-	call("record_event", input, true)
+	// A second distinct purchase on the same item is a separate valid record.
+	input.RequestKey = "mcp-second-purchase"
+	second := call("record_event", input, false)
+	if second.ID == "" || second.ID == first.ID {
+		t.Fatal("distinct purchase was rejected")
+	}
 	input.RequestKey = "mcp-correction"
 	replacement := CorrectEventInput{EventID: first.ID, Replacement: input.EventFields}
 	corrected := call("correct_event", replacement, false)
@@ -79,7 +83,7 @@ func testLifecycleTools(t *testing.T, s Services, owner application.Principal, c
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 3 {
+	if len(events) != 4 {
 		t.Fatalf("append-only history has %d rows", len(events))
 	}
 	original, err := s.Lifecycle.GetEvent(ctx, owner, first.ID)

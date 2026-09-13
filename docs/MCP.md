@@ -1,8 +1,10 @@
 # MCP setup and tool contract
 
 For the 2026-09-12 UAT batch capabilities, changes and exclusions, see
-[MCP release notes](MCP_RELEASE_NOTES.md). Product-model images remain a
-[Web configuration feature](model-images.md), not an MCP upload tool.
+[MCP release notes](MCP_RELEASE_NOTES.md). Product-model images ship as the
+[Web configuration feature](model-images.md) plus three tools: the `get_model_image`
+read, the `import_model_image_from_url` confirmed import and the bounded-content
+`upload_model_image` replacement that needs no network.
 
 AssetLoop exposes opt-in Streamable HTTP at `/mcp` in the existing Go server.
 It uses the same application services, database and authorization rules as Web.
@@ -68,7 +70,7 @@ Codex configuration is not a substitute for server-side revocation.
 ## Permissions and tools
 
 Client scopes never grant more authority than the signed-in account. Tool inputs
-cannot supply the acting tenant or user. All 50 tools remain discoverable, but
+cannot supply the acting tenant or user. All 53 tools remain discoverable, but
 unauthorized calls fail. Ask for only the scopes needed for the intended workflow.
 
 | Scope | Tools |
@@ -79,8 +81,10 @@ unauthorized calls fail. Ask for only the scopes needed for the intended workflo
 | `assets:read` — 3D | `list_3d_resources`, `get_3d_resource`, `get_3d_references`, `get_asset_appearance`, `get_3d_binding`, `search_appearance_candidates` |
 | `assets:catalog` | `create_category`, `update_category`, `create_product_model`, `save_tag_type`, `save_specification_tag`, `save_model_configuration`, `save_asset`, `save_appearance_default`, `delete_appearance_default`, `save_3d_resource_metadata`, `bind_3d_resource`, `delete_3d_resource` |
 | `assets:lifecycle` | `create_event_type`, `update_event_type`, `set_event_type_enabled`, `record_event`, `correct_event` |
-| `assets:catalog` — URL import | `import_3d_resource_from_url` |
+| `assets:catalog` — URL import | `import_3d_resource_from_url`, `import_model_image_from_url` |
 | `assets:read` — market | `list_market_items`, `get_market_item`, `get_asset_market_price` |
+| `assets:read` — model image | `get_model_image` |
+| `assets:catalog` — model image | `upload_model_image` (bounded base64 content, no network) |
 | `assets:catalog` — market preparation | `search_market_products`, `select_market_product`, `preview_market_price` (temporary drafts, no business writes) |
 | `assets:catalog` — market writes | `create_market_item`, `update_market_item`, `bind_asset_market`, `refresh_market_price` |
 
@@ -89,13 +93,16 @@ and cap page size at 200. Read all required pages before selecting IDs. Complete
 configuration queries return the full association set; do not replace it with a
 partial search result. An absent appearance override inherits the tag type's
 default; explicit `false` overrides it. Resource descriptions/candidates never
-automatically bind a resource. Uploads remain in Web.
+automatically bind a resource. Binary uploads stay in Web except the bounded
+base64 `upload_model_image`; only the listed URL-import tools retrieve content
+server-side.
 
 ## Secondhand prices
 
-The combined development version adds 10 market tools (50 total: 28 read-only
-annotations and 22 persistent writes). Existing OAuth scopes are reused; catalog
-permission is required for external discovery/preview and market management.
+The combined development version adds 10 market tools plus the three model-image
+tools (53 total: 29 read-only annotations and 24 persistent writes). Existing
+OAuth scopes are reused; catalog permission is required for external discovery/preview,
+market management, model-image import and model-image content upload.
 Saved prices remain readable without configured provider credentials. Configure
 `ZHUANZHUAN_MCP_TOKEN` through the same ignored configuration/environment as Web;
 no token, provider metric, page token, lease token or raw provider evidence is
@@ -151,6 +158,13 @@ skill to discover them.
   not permission to expand the type catalog.
 - `correct_event` preserves the original asset and type. It cannot reclassify an
   event; never rename a shared type as a workaround for one incorrect record.
+- One item may have several purchase records: record the device, each purchased
+  service, accessories and a free gift as separate `record_event` purchases of the
+  same type. `amount_minor` may be 0 only for such a gift purchase, and only in the
+  base currency because persisted FX evidence requires a positive original amount.
+  Repair and sale still require a positive amount; after a sale no new built-in
+  purchase, repair or sale is accepted, while custom post-sale cost events remain
+  recordable.
 
 中文：事件类型回答“发生了什么行为”，备注回答“具体买了什么、有什么补充”。
 购买服务也可以使用已有“买入”类型，把服务商品名写在备注，不要一单一类型。
@@ -175,6 +189,45 @@ changing any input needs a new command key, not a retry. Bad URL/size/encoding/G
 errors are `invalid_input`; network/status/timeouts return sanitized `unavailable`.
 No ZIP, webpage extraction, client file upload or authenticated-site downloading.
 HTTP security primitives follow [Go net/http](https://pkg.go.dev/net/http#Transport).
+
+### Server-side model-image import
+
+`import_model_image_from_url` requires `assets:catalog` and catalog capability.
+Inputs: `model_id`, `url`, `source_url`, `request_key`. Before importing, visually
+verify that the image shows the correct model and color, and confirm the shared model
+scope: the image belongs to the product model, so every item of that model uses it.
+Only supply user-confirmed publicly downloadable HTTPS image links; `source_url` is
+attribution, not a credential-bearing download link.
+The server downloads at most 8 MiB using the same public-address, redirect, deadline and
+no-credential policy as GLB import, and the actual PNG/JPEG/WebP bytes determine the
+stored type. A successful call replaces the model's active image and returns only safe
+metadata (`id`, `model_id`, `content_type`, `size_bytes`, `sha256`, `source_url`).
+Same-key successful retries return the original revision without downloading again or
+replacing a later image; a changed payload conflicts. Authorization and the request
+fingerprint are checked before any network access, and the download never holds a
+database transaction. The tool does not touch 3D resources, bindings or lifecycle
+events. `get_model_image` reads the current metadata and returns null when the model has
+no image. No storage path, store ID or tenant ID is returned, and no clear or arbitrary
+binary-upload tool exists; confirmed content replacement uses `upload_model_image`.
+
+### Model-image content upload
+
+`upload_model_image` requires `assets:catalog` and catalog capability. Inputs:
+`model_id`, `content_base64`, optional `source_url`, `request_key`. It applies the same
+validated replacement as the URL import without any download, which is the fallback when
+the local DNS resolver cannot reach a public image host — never a reason to weaken the
+downloader, DNS or proxy policy. Visually verify the exact model and color and confirm the
+shared model scope before calling; the image belongs to the product model, so every item
+of that model uses it. At most 8 MiB of decoded PNG/JPEG/WebP content is accepted; an
+impossible encoded length is rejected before decoding and the existing validator still
+enforces the size, format and pixel limits. No local path, fetch URL, credential, tenant
+or store input is accepted, and the result returns only the same safe metadata
+(`id`, `model_id`, `content_type`, `size_bytes`, `sha256`, `source_url`). Authorization,
+the request-key check and the content fingerprint run before any blob I/O; the verified
+blob and the receipt commit atomically. Same-key retries return the original revision
+without writing again or replacing a later image, changed content under the same key
+conflicts, and concurrent identical uploads leave one active revision. The tool does not
+touch 3D resources, bindings or lifecycle events.
 
 ### Existing write rules
 

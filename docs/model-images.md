@@ -12,8 +12,11 @@ Assets inherit this image in their detail/editor view and list thumbnails. A rea
 3D viewer takes precedence; unavailable 3D leaves the image fallback visible.
 Replacement and removal do not modify 3D bindings or economic events. Removal
 detaches the current image but retains revisions and blobs; restoration and garbage
-collection UI are not implemented. This is a Web slice, not a completed MCP image
-tool contract. Trade-in linking remains a separate proposed feature.
+collection UI are not implemented. Web and MCP share this use case: `get_model_image`
+reads the current revision, `import_model_image_from_url` performs a confirmed,
+receipt-backed HTTPS import of the same validated image, and `upload_model_image`
+applies the same validated replacement from at most 8 MiB of bounded base64 content
+with no network access. Trade-in linking remains a separate proposed feature.
 
 ## Import constraints and recovery
 
@@ -23,9 +26,13 @@ tool contract. Trade-in linking remains a separate proposed feature.
 - URL imports reuse the existing public HTTPS downloader with bounded redirects,
   timeouts, pinned public DNS answers and no inherited credentials/proxy.
 - Reserved/fake-IP DNS results are rejected. If a browser can open a public image
-  but the server cannot retrieve it, download in the browser and use file upload.
+  but the server cannot retrieve it, download in the browser and use file upload
+  (Web) or the bounded `upload_model_image` content path (MCP).
   Do not relax private-address or TLS checks to make a preview work.
 - A public source page is attribution, not a credential-bearing download URL.
+- Content upload accepts only base64 PNG, JPEG or WebP bytes with the same size,
+  format and decode limits; an impossible encoded length is rejected before decoding.
+  It accepts no local path, fetch URL or credential and performs no network I/O.
 
 ## Real-world findings
 
@@ -39,7 +46,8 @@ other assets sharing this model before replacing a shared image.
 
 The initial multi-color illustration was rejected; a complete white front/back
 product image was subsequently inspected and uploaded, with the asset view
-verified. No economic records changed. This was Web acceptance, not MCP upload.
+verified. No economic records changed. That acceptance was Web-based; the MCP import
+tool reuses the same validated upload use case with a durable request receipt.
 
 The Xiaomi 15 specifications page presents a multi-color model illustration. Its
 color swatches are tiny images, not product photos. Inspect the actual image and
@@ -58,8 +66,16 @@ Automated coverage includes three-format decoding, invalid/truncated/oversized
 inputs, authorization before download, download failure recovery, public URL and
 response-size checks, CSRF, upload/read/replace/clear, tenant isolation, revision
 retention, storage-default switching and old-schema upgrades. The named full-element
-scenario includes image operations for both Store implementations. Local Go tests,
-Web interaction tests and SQLite scenario passed. Live PostgreSQL verification
+scenario includes image operations for both Store implementations. Receipt-backed MCP
+import is covered for both databases and over HTTP: absent-image null, replay without
+re-downloading, changed-payload conflict, concurrent identical import with one surviving
+revision, failed-receipt rollback, role/scope denial and the public metadata projection.
+The bounded content upload is covered over the same MCP HTTP session and both databases:
+input validation (bad base64, empty, non-image, oversize), no downloader call, same-key
+replay, changed-content conflict, one surviving concurrent revision, denial by scope and
+role, no content/path/metadata leakage, and an older-key replay that must not replace a
+later active image.
+Local Go tests, Web interaction tests and SQLite scenario passed. Live PostgreSQL verification
 remains required before UAT; a locally skipped PostgreSQL test is not a pass.
 
 The current local browser showed the saved image on the detail and list views.

@@ -14,7 +14,7 @@
     {{else}}<div class="form-field">
       <label for="correction-amount">{{t $s "asset.amount"}}</label>
       <div class="money-input-group">
-        <input id="correction-amount" name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)" data-positive-pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)" title="{{t $s "validation.amount_positive"}}">
+        <input id="correction-amount" name="amount" value="{{.EventForm.Amount}}" inputmode="decimal" required pattern="{{if eq .EventForm.SystemCode "purchase"}}(?:0*[0-9]+(?:[.][0-9]*)?|0*[.][0-9]+){{else}}(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*){{end}}" data-system-code="{{.EventForm.SystemCode}}" data-positive-pattern="(?:0*[1-9][0-9]*(?:[.][0-9]*)?|0*[.][0-9]*[1-9][0-9]*)" data-nonnegative-pattern="(?:0*[0-9]+(?:[.][0-9]*)?|0*[.][0-9]+)" title="{{if eq .EventForm.SystemCode "purchase"}}{{t $s "validation.amount_nonnegative"}}{{else}}{{t $s "validation.amount_positive"}}{{end}}">
         <input class="currency-suffix" name="currency" value="{{.EventForm.Currency}}" list="correction-currencies" maxlength="3" pattern="[A-Za-z]{3}" autocomplete="off" spellcheck="false" required data-currency-select data-base-currency="{{.BaseCurrency}}" aria-label="{{t $s "asset.original_currency"}}">
         <datalist id="correction-currencies">{{range currencyOptions}}<option value="{{.}}"></option>{{end}}</datalist>
       </div>

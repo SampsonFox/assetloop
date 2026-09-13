@@ -93,6 +93,7 @@ func TestCatalogTransactionRollback(t *testing.T) {
 			}
 			testManagementConcurrentReplay(t, store.(application.ManagementStore), other, account.Principal)
 			testModelImport(t, store.(application.ManagementStore), other, account.Principal)
+			testModelImageImport(t, store.(application.ManagementStore), other, account.Principal, original.ID)
 			testMarketManagement(t, store.(application.ManagementStore), other, account.Principal)
 		})
 	}

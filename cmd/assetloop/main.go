@@ -122,9 +122,10 @@ func run(args []string) error {
 			blobStores["aliyun"] = ossStore
 		}
 		modelMedia := application.NewModelMediaService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
+		modelImages := application.NewModelImageService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
 		marketService := newMarketService(appStore, cfg)
 		options := webtransport.Options{Market: marketService, AuthMode: cfg.AuthMode, SecureCookies: cfg.Environment != "local", ModelMedia: modelMedia, Specifications: application.NewSpecificationService(appStore)}
-		options.ModelImages = application.NewModelImageService(appStore, blobStores, blob.ObjectKeyMapper{}, cfg.Blob.DefaultStore)
+		options.ModelImages = modelImages
 		options.ImageDownloader = modeldownload.New()
 		var oauthHTTP *mcptransport.OAuthHTTP
 		if cfg.MCP.Enabled {
@@ -159,7 +160,8 @@ func run(args []string) error {
 			mux.Handle("/oauth/revoke", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Revoke)))
 			management := application.NewManagementService(appStore, blobStores)
 			importer := application.NewModelImportService(management, modelMedia, modeldownload.New())
-			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Market: marketService, Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: management, Import: importer}, oauthHTTP.Authenticate)))
+			imageImporter := application.NewModelImageImportService(management, modelImages, modeldownload.New())
+			mux.Handle("/mcp", oauthHTTP.Protected(mcptransport.NewHandler(mcptransport.Services{Market: marketService, Catalog: catalog, Specifications: options.Specifications, Lifecycle: lifecycle, Media: modelMedia, Management: management, Import: importer, Images: modelImages, ImageImport: imageImporter}, oauthHTTP.Authenticate)))
 			handler = mux
 		}
 		return serveWithMarket(cfg.HTTPAddr, handler, marketService)

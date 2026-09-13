@@ -11,7 +11,7 @@ import (
 
 type EventFields struct {
 	RequestKey        string `json:"request_key" jsonschema:"Stable unique key for this confirmed command. Reuse exactly on retries; never reuse for different content."`
-	AmountMinor       int64  `json:"amount_minor" jsonschema:"Nonnegative integer minor units, never decimal major units. Event type determines income or expense."`
+	AmountMinor       int64  `json:"amount_minor" jsonschema:"Nonnegative integer minor units, never decimal major units. Event type determines income or expense. 0 is valid only for a base-currency gift purchase."`
 	Currency          string `json:"currency" jsonschema:"ISO currency code for the original amount."`
 	OccurredAt        string `json:"occurred_at" jsonschema:"RFC3339 timestamp with explicit timezone."`
 	FXRateScaled      int64  `json:"fx_rate_scaled,omitempty" jsonschema:"Base currency per original currency unit multiplied by 100000000, required for foreign currency."`
@@ -52,7 +52,7 @@ func (input EventFields) command() (application.RecordEvent, error) {
 }
 
 func registerLifecycle(server *sdk.Server, s Services) {
-	register(server, "record_event", "Persist a user-confirmed lifecycle event. First use list_event_types and reuse a matching enabled action category. Buying a product or service is a purchase; put its specific name in notes, not a new event type. Confirm screenshot-derived fields with the user before calling. Asset creation is a separate command. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, input EventInput) (any, error) {
+	register(server, "record_event", "Persist a user-confirmed lifecycle event. First use list_event_types and reuse a matching enabled action category. Buying a product or service is a purchase; put its specific name in notes, not a new event type. One item may have several purchase records (device, services, case, charger, free gift); record each separately, and use amount_minor 0 only for a base-currency gift purchase. Repair and sale require a prior purchase; after a sale no new built-in purchase, repair or sale is accepted, while custom post-sale cost events stay available. Confirm screenshot-derived fields with the user before calling. Asset creation is a separate command. Reuse request_key on retries.", ScopeLifecycle, application.CapabilityManageLifecycle, func(ctx context.Context, p application.Principal, input EventInput) (any, error) {
 		cmd, err := input.command()
 		if err != nil {
 			return nil, err

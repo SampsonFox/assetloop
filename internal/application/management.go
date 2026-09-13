@@ -11,12 +11,17 @@ import (
 )
 
 type ManagementRequest struct{ TenantID, UserID, Key, Hash, ResultJSON string }
+
+// ManagementStore is the transaction-bound surface shared by management writes.
+// Model image revisions are part of it so receipt-backed image import commits the
+// active binding and its receipt in one transaction.
 type ManagementStore interface {
 	MarketStore
 	CatalogStore
 	SpecificationStore
 	LifecycleStore
 	ModelMediaStore
+	ModelImageStore
 	WithManagementWrite(context.Context, string, func(ManagementStore) error) error
 	FindManagementRequest(context.Context, string, string, string) (ManagementRequest, bool, error)
 	SaveManagementRequest(context.Context, ManagementRequest) error

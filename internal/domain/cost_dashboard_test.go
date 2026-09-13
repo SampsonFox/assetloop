@@ -37,6 +37,7 @@ func TestCostDashboard(t *testing.T) {
 		valid            bool
 	}{
 		{"sold", []AssetEvent{sale, purchase, repair}, 100, 210000, 2100, true},
+		{"multiple purchases use the earliest", []AssetEvent{sale, event(AssetEventPurchase, -50000, 10), event(AssetEventPurchase, 0, 40), repair, purchase}, 100, 260000, 2600, true},
 		{"holding", []AssetEvent{purchase, repair}, 201, 1010000, 5025, true},
 		{"refund after sale", []AssetEvent{purchase, repair, sale, event("refund", 10000, 110)}, 100, 200000, 2000, true},
 		{"negative", []AssetEvent{purchase, event(AssetEventSale, 1100000, 99)}, 100, -100000, -1000, true},

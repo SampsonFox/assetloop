@@ -29,8 +29,13 @@ immutable blob revisions and active model binding. `internal/web/model_images.go
 and `templates/model_image.html` expose upload/replace/detach and HTTPS import;
 `internal/store/{sqlite,postgres}/images.{go,sql}` implement tenant-scoped storage.
 Migration 00017 adds images independently of 3D and lifecycle events.
-Regression coverage: `model_images_test.go` in application, Web and integration;
-the named full-element scenario calls the shared image scenario on both databases.
+`internal/application/model_image_import.go` adds receipt-backed idempotent URL
+import and bounded-content upload; `internal/mcp/model_images.go` exposes the
+read-only `get_model_image` and the write `import_model_image_from_url` and
+`upload_model_image` (base64 content, no network) tools with a safe public projection.
+Regression coverage: `model_images_test.go` in application, MCP, Web and integration;
+the named full-element scenario calls the shared image scenario on both databases and
+the MCP walkthrough imports, uploads, replays and re-reads the image offline.
 
 | Path | Responsibility |
 |---|---|
@@ -50,6 +55,7 @@ the named full-element scenario calls the shared image scenario on both database
 | `internal/mcp/media_results.go` | Explicit public model/resource/appearance DTOs omit blob store IDs, object keys and checksums from both direct and nested results |
 | `internal/mcp/contract_test.go` | SDK-discovered input/result-envelope checks, required mutation keys, integer money/FX schemas and safe business-error mapping over HTTP |
 | `internal/application/specification_configuration.go`, `internal/mcp/configuration.go`, `internal/integration/mcp_configuration_test.go` | Model/resource edit-state projections and paged tag/type references reuse specification snapshots; HTTP tests preserve explicit false overrides, complete associations and tenant/scope isolation |
+| `internal/store/storetest/multiple_purchases.go` | One item may carry several built-in purchase records (device, services, accessories, gift); sale uniqueness, append-only correction, gift-only zero amounts, tenant base-currency locking and earliest-purchase duration on both databases |
 | `internal/integration/catalog_transaction_test.go` | Catalog services composed inside a Store transaction see their own writes and roll back category changes/model creation together; both catalog adapters use the current query handle |
 | `internal/integration/management_concurrency_test.go` | Two independent Store connections race same-key creation, conflicting payloads and recoverable deletion; reconstructed service replays persisted deletion intent |
 | `internal/web/oauth.go`, `templates/oauth.html`, `oauth_test.go` | Account-authenticated consent and per-user authorized-client revocation; native forms reuse CSRF and login continuation; bilingual content inherits existing theme |
@@ -133,8 +139,8 @@ Event types: `internal/application/event_types.go` owns paged management, rename
 | `internal/web/i18n.go` | registered locales, stable message keys, browser/cookie locale matching, and zh-CN fallback |
 | `internal/web/*_test.go` | auth, CSRF, locale/theme preferences, role-scoped account menu, asset-list states, shared drawers, catalog, GLB upload/read and fallback, progressive FX evidence, correction, totals, and role denial |
 | `internal/web/viewer_mechanics.test.mjs` | Dependency-free Node test harness for viewer framing, keyboard controls, reduced motion, idle rendering and failure fallback |
-| `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → typed model allowances → direct items with different capacity tags sharing an appearance GLB → dedicated override/inheritance → foreign purchase → repair correction → sale scenario on both databases |
-| `internal/integration/mcp_full_element_test.go` | Extends the same full-element scenario with HTTP Web consent/PKCE exchange, authenticated SDK discovery/write/retry/correction, Web visibility and client revocation without ending the Web session |
+| `internal/integration/full_element_test.go` | cumulative auth → persisted preferences → typed model allowances → direct items with different capacity tags sharing an appearance GLB → dedicated override/inheritance → foreign purchase → repair correction → sale → multiple purchases and gift scenario on both databases |
+| `internal/integration/mcp_full_element_test.go` | Extends the same full-element scenario with HTTP Web consent/PKCE exchange, authenticated SDK discovery/write/retry/correction, offline receipt-backed model-image import, bounded content upload and read with Web visibility, and client revocation without ending the Web session |
 | `internal/integration/mcp_walkthrough_test.go` | Calls every discovered MCP tool over the full-element OAuth HTTP connection; checks saved values, write replay, configuration/binding cleanup and resource deletion; fails on an uncalled tool |
 
 ## Read paths by task
@@ -276,7 +282,7 @@ bridge for already-used market-branch 15/16 databases; it preserves Goose histor
 prices and selection snapshots while supplying missing OAuth/receipt tables.
 Migration tests cover old market 15/16, accepted MCP 17, rollback and retry.
 `internal/integration/mcp_market_test.go` extends the same OAuth full-element
-scenario to all 50 tools, Web-visible prices and unchanged lifecycle costs;
+scenario to all 53 tools, Web-visible prices and unchanged lifecycle costs;
 the transaction suite covers failed receipts, cross-connection replay and policy.
 
 

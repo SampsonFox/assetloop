@@ -16,6 +16,11 @@ const (
 	ScopeLifecycle = application.OAuthLifecycle
 )
 
+// maxRequestBodyBytes is the single HTTP request-size cap shared by the outer
+// reader and the SDK transport. An 8 MiB image arrives as roughly 11 MiB of
+// base64 content, so a 12 MiB ceiling admits it; the SDK default is only 4 MiB.
+const maxRequestBodyBytes = 12 << 20
+
 // Identity is supplied by the token verifier, never by tool arguments.
 type Identity struct {
 	Principal application.Principal
@@ -31,6 +36,8 @@ type Services struct {
 	Media          *application.ModelMediaService
 	Management     *application.ManagementService
 	Import         *application.ModelImportService
+	Images         *application.ModelImageService
+	ImageImport    *application.ModelImageImportService
 }
 
 type identityKey struct{}
@@ -56,8 +63,9 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 	registerMedia(server, services)
 	registerConfiguration(server, services)
 	registerImport(server, services)
+	registerModelImages(server, services)
 	registerMarket(server, services)
-	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, &sdk.StreamableHTTPOptions{Stateless: true})
+	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, &sdk.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: maxRequestBodyBytes})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if authenticate == nil {
@@ -69,7 +77,9 @@ func NewHandler(services Services, authenticate Authenticate) http.Handler {
 			http.Error(w, "MCP authorization required", http.StatusUnauthorized)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		// Authenticated only: the finite cap still bounds every request, but an
+		// 8 MiB image arrives as roughly 11 MiB of base64 content.
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 		transport.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), identityKey{}, identity)))
 	})
 }

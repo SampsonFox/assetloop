@@ -66,6 +66,13 @@ func assertToolSchema(t *testing.T, tool *sdk.Tool, write bool) {
 		assertMeaning(decode(input.Properties["name"]).Description, "reusable", "not a product")
 	case "list_event_types":
 		assertMeaning(tool.Description, "reusable", "notes")
+	case "get_model_image":
+		assertMeaning(tool.Description, "null", "metadata", "shared")
+	case "import_model_image_from_url":
+		assertMeaning(tool.Description, "visually verify", "color", "shared model", "3D", "lifecycle")
+	case "upload_model_image":
+		assertMeaning(tool.Description, "visually verify", "color", "shared model", "3D", "lifecycle", "Reuse request_key")
+		assertMeaning(decode(input.Properties["content_base64"]).Description, "Base64", "8 MiB", "No local path")
 	}
 	if input.Type != "object" || output.Type != "object" || output.Properties["data"] == nil || output.Properties["error"] == nil {
 		t.Fatalf("%s has an invalid input/result envelope", tool.Name)

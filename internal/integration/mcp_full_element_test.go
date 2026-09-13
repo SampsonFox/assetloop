@@ -1,16 +1,20 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"image"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,6 +35,21 @@ type modelDownloadFixture struct{}
 
 func (modelDownloadFixture) Download(context.Context, string) ([]byte, error) {
 	return fullElementGLB(), nil
+}
+
+// The full-element MCP scenario must stay offline; this deterministic image
+// downloader also proves that a same-key retry performs no network I/O.
+type modelImageFixture struct {
+	calls atomic.Int32
+}
+
+func (f *modelImageFixture) DownloadImage(context.Context, string) ([]byte, error) {
+	f.calls.Add(1)
+	var b bytes.Buffer
+	if err := png.Encode(&b, image.NewRGBA(image.Rect(0, 0, 3, 3))); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }
 
 func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -63,16 +82,19 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	media := application.NewModelMediaService(store, blobs, blob.ObjectKeyMapper{}, "local")
 	management := application.NewManagementService(store.(application.ManagementStore), blobs)
 	importer := application.NewModelImportService(management, media, modelDownloadFixture{})
+	images := application.NewModelImageService(store.(application.ModelImageStore), blobs, blob.ObjectKeyMapper{}, "local")
+	imageFixture := &modelImageFixture{}
+	imageImporter := application.NewModelImageImportService(management, images, imageFixture)
 	marketFixture := newMCPMarketFixture()
 	market := application.NewMarketService(store, marketFixture, nil, application.MarketOptions{})
-	web, err := webtransport.New(auth, catalog, lifecycle, db, webtransport.Options{Market: market, AuthMode: "local", Specifications: specs, OAuth: oauth, OAuthIssuer: issuer})
+	web, err := webtransport.New(auth, catalog, lifecycle, db, webtransport.Options{Market: market, AuthMode: "local", Specifications: specs, OAuth: oauth, OAuthIssuer: issuer, ModelImages: images})
 	if err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", web.Handler())
 	mux.Handle("/oauth/token", oauthHTTP.Guard(http.HandlerFunc(oauthHTTP.Token)))
-	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Market: market, Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Media: media, Management: management, Import: importer}, oauthHTTP.Authenticate)))
+	mux.Handle("/mcp", oauthHTTP.Protected(transport.NewHandler(transport.Services{Market: market, Catalog: catalog, Specifications: specs, Lifecycle: lifecycle, Media: media, Management: management, Import: importer, Images: images, ImageImport: imageImporter}, oauthHTTP.Authenticate)))
 	host.Config.Handler = mux
 	host.Start()
 	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -135,7 +157,7 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	}
 	defer mcpClient.Close()
 	list, err := mcpClient.ListTools(ctx, &sdk.ListToolsParams{})
-	if err != nil || len(list.Tools) != 50 {
+	if err != nil || len(list.Tools) != 53 {
 		t.Fatal("OAuth MCP discovery failed")
 	}
 	called := map[string]bool{}
@@ -149,8 +171,8 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 		if err != nil || json.Unmarshal(data, output) != nil {
 			t.Fatalf("MCP %s result invalid", name)
 		}
-		if strings.Contains(name, "market") {
-			for _, hidden := range []string{"private-provider", "lease_token", "lease_until", "NextPageToken", "Metric"} {
+		if strings.Contains(name, "market") || strings.Contains(name, "image") {
+			for _, hidden := range []string{"private-provider", "lease_token", "lease_until", "NextPageToken", "Metric", "object_key", "store_id", "tenant_id", "ObjectKey", "StoreID"} {
 				if strings.Contains(string(data), hidden) {
 					t.Fatalf("%s leaked internal metadata", name)
 				}
@@ -220,6 +242,48 @@ func runMCPFullElement(t *testing.T, db *sql.DB, store scenarioStore, session ap
 	page, body := request("GET", "/assets/"+assetID, nil)
 	if page.StatusCode != 200 || !strings.Contains(string(body), assetInput.DisplayName) {
 		t.Fatal("MCP asset not visible through authenticated Web")
+	}
+	// A confirmed image import replaces the shared model image without touching
+	// 3D or lifecycle data; the same key replays without re-downloading.
+	imageInput := transport.ImportModelImageInput{ModelID: modelID, URL: "https://images.example/model.png", SourceURL: "https://example.com/product", RequestKey: "full-mcp-model-image"}
+	var image struct{ Data transport.ModelImageResult }
+	call("import_model_image_from_url", imageInput, &image)
+	imageID, downloads := image.Data.ID, imageFixture.calls.Load()
+	if imageID == "" || image.Data.ModelID != modelID || image.Data.SHA256 == "" || downloads == 0 {
+		t.Fatalf("MCP image import produced no active revision: %+v", image.Data)
+	}
+	call("import_model_image_from_url", imageInput, &image)
+	if image.Data.ID != imageID || imageFixture.calls.Load() != downloads {
+		t.Fatal("image import replay re-downloaded or replaced the revision")
+	}
+	call("get_model_image", transport.ModelImageInput{ModelID: modelID}, &image)
+	if image.Data.ID != imageID || image.Data.SHA256 == "" || image.Data.SizeBytes == 0 {
+		t.Fatalf("get_model_image lost the active revision: %+v", image.Data)
+	}
+	page, body = request("GET", "/assets/"+assetID, nil)
+	if imageURL := "/models/" + modelID + "/image?v=" + image.Data.SHA256; page.StatusCode != 200 || !strings.Contains(string(body), imageURL) {
+		t.Fatal("imported model image not visible through authenticated Web")
+	}
+	// A bounded base64 content upload replaces the same shared revision without any
+	// download; the same key replays the original revision and stays Web-visible.
+	uploadInput := transport.UploadModelImageInput{ModelID: modelID, ContentBase64: base64.StdEncoding.EncodeToString(testModelImagePNG(t)), SourceURL: "https://example.com/product", RequestKey: "full-mcp-model-image-upload"}
+	var uploaded struct{ Data transport.ModelImageResult }
+	call("upload_model_image", uploadInput, &uploaded)
+	uploadID, uploadSHA := uploaded.Data.ID, uploaded.Data.SHA256
+	if uploadID == "" || uploaded.Data.ModelID != modelID || uploadSHA == "" || uploaded.Data.SizeBytes == 0 {
+		t.Fatalf("MCP image upload produced no active revision: %+v", uploaded.Data)
+	}
+	call("upload_model_image", uploadInput, &uploaded)
+	if uploaded.Data.ID != uploadID || uploaded.Data.SHA256 != uploadSHA {
+		t.Fatal("image content upload replay replaced the original revision")
+	}
+	call("get_model_image", transport.ModelImageInput{ModelID: modelID}, &image)
+	if image.Data.ID != uploadID || image.Data.SHA256 != uploadSHA {
+		t.Fatalf("get_model_image lost the uploaded revision: %+v", image.Data)
+	}
+	page, body = request("GET", "/assets/"+assetID, nil)
+	if imageURL := "/models/" + modelID + "/image?v=" + uploadSHA; page.StatusCode != 200 || !strings.Contains(string(body), imageURL) {
+		t.Fatal("uploaded model image not visible through authenticated Web")
 	}
 	runMCPToolWalkthrough(t, call, resource.ID, assetID, originalID)
 	_, costsBefore, err := lifecycle.Timeline(ctx, session.Principal, assetID)

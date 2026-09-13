@@ -319,7 +319,9 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	if _, err := s.store.GetAsset(ctx, actor.TenantID, cmd.AssetID); err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, fmt.Errorf("get asset: %w", err)
 	}
-	if eventType.Cashflow != domain.AssetEventNeutral && cmd.AmountMinor <= 0 {
+	// A zero magnitude is a gift only for the built-in purchase event. Every other
+	// expense or income type still requires a positive amount, and neutral stays zero.
+	if eventType.Cashflow != domain.AssetEventNeutral && (cmd.AmountMinor < 0 || (cmd.AmountMinor == 0 && eventType.SystemCode != domain.AssetEventPurchase)) {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_positive")
 	}
 	if eventType.Cashflow == domain.AssetEventNeutral && cmd.AmountMinor != 0 {
@@ -336,6 +338,11 @@ func (s *LifecycleService) prepareEvent(ctx context.Context, actor Principal, cm
 	baseCurrency, err = domain.NormalizeCurrency(baseCurrency)
 	if err != nil {
 		return domain.AssetTransaction{}, domain.AssetEvent{}, err
+	}
+	// Persisted FX evidence requires a positive original amount, so a zero gift is
+	// only representable in the base currency. Neutral events carry no evidence.
+	if eventType.Cashflow != domain.AssetEventNeutral && cmd.AmountMinor == 0 && currency != baseCurrency {
+		return domain.AssetTransaction{}, domain.AssetEvent{}, NewInputError("validation.amount_positive")
 	}
 	baseAmount := cmd.AmountMinor
 	var fx *domain.FXEvidence
@@ -401,10 +408,15 @@ func (s *LifecycleService) validateLifecycle(ctx context.Context, actor Principa
 			sold = true
 		}
 	}
+	// One physical item legitimately has several purchase records (device, services,
+	// case, charger, gifts), so purchase is not unique. Repair and sale still need an
+	// acquisition first, and after a sale no new built-in purchase, repair or sale is
+	// accepted; custom cost events (for example post-sale shipping or disposal fees)
+	// remain recordable through this same command.
 	switch eventType {
 	case domain.AssetEventPurchase:
-		if hasPurchase {
-			return NewInputError("validation.event_purchase_exists")
+		if sold {
+			return NewInputError("validation.event_after_sale")
 		}
 	case domain.AssetEventRepair, domain.AssetEventSale:
 		if !hasPurchase {

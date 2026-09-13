@@ -697,7 +697,7 @@ func TestCatalogHierarchyAssetDetailAndViewerWriteDenial(t *testing.T) {
 		t.Fatalf("duplicate custom event type must reopen its form: status=%d body=%s", duplicateEventType.Code, duplicateEventType.Body.String())
 	}
 	detail = request(t, handler, http.MethodGet, "/assets/"+match[1]+"?dialog=event-drawer&event_type=%E4%BF%9D%E5%85%BB", nil, []*http.Cookie{ownerSession, csrf})
-	for _, want := range []string{`value="` + customTypeID + `" data-cashflow="neutral" selected`, `name="event_type"`, `新增类型`} {
+	for _, want := range []string{`value="` + customTypeID + `" data-cashflow="neutral" data-system-code="" selected`, `name="event_type"`, `新增类型`} {
 		if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), want) {
 			t.Fatalf("custom event type must be selectable %q: status=%d body=%s", want, detail.Code, detail.Body.String())
 		}

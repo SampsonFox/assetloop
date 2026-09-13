@@ -83,7 +83,10 @@
     select.dataset.selectedType = select.value;
     const create = select.querySelector('[data-event-type-create]');
     if (create) { create.hidden = false; create.disabled = false; }
-    const neutral = select.selectedOptions[0]?.dataset.cashflow === "neutral";
+    const option = select.selectedOptions[0];
+    const neutral = option?.dataset.cashflow === "neutral";
+    // A free gift is a zero purchase; other cash-flow types stay strictly positive.
+    const zeroAllowed = option?.dataset.systemCode === "purchase";
     const amount = select.form.elements.namedItem("amount");
     for (const field of select.form.querySelectorAll("[data-money-field]")) field.hidden = neutral;
     if (amount) {
@@ -93,9 +96,20 @@
         amount.required = false;
         amount.removeAttribute("pattern");
       } else {
-        if (amount.value === "0") amount.value = amount.dataset.previousValue || "";
+        // Returning from a neutral selection restores the amount the user had
+        // before; a purchase keeps 0 as a gift only when no prior amount exists.
+        if (amount.value === "0") {
+          if (amount.dataset.previousValue) amount.value = amount.dataset.previousValue;
+          else if (!zeroAllowed) amount.value = "";
+        }
         amount.required = true;
-        amount.pattern = amount.dataset.positivePattern;
+        if (zeroAllowed) {
+          amount.pattern = amount.dataset.nonnegativePattern;
+          amount.title = amount.dataset.nonnegativeTitle;
+        } else {
+          amount.pattern = amount.dataset.positivePattern;
+          amount.title = amount.dataset.positiveTitle;
+        }
       }
     }
     const currency = select.form.querySelector("[data-currency-select]");

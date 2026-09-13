@@ -171,6 +171,7 @@ type eventFormData struct {
 	RequestKey        string
 	Type              string
 	Cashflow          string
+	SystemCode        string
 	OccurredAt        string
 	Amount            string
 	Currency          string
@@ -744,7 +745,7 @@ func (s *Server) renderCorrectionForm(w http.ResponseWriter, r *http.Request, st
 	}
 	for _, eventType := range eventTypes {
 		if eventType.ID == event.TypeID {
-			form.Cashflow = string(eventType.Cashflow)
+			form.Cashflow, form.SystemCode = string(eventType.Cashflow), string(eventType.SystemCode)
 			break
 		}
 	}
@@ -757,7 +758,7 @@ func (s *Server) renderCorrectionForm(w http.ResponseWriter, r *http.Request, st
 
 func eventFormForCorrection(event domain.AssetEvent) eventFormData {
 	currency, amountMinor := event.BaseCurrency, event.BaseAmountMinor
-	form := eventFormData{RequestKey: randomToken(), Type: string(event.Type), OccurredAt: event.OccurredAt.Local().Format("2006-01-02T15:04"), Source: "manual-correction"}
+	form := eventFormData{RequestKey: randomToken(), Type: string(event.Type), SystemCode: string(event.SystemType), OccurredAt: event.OccurredAt.Local().Format("2006-01-02T15:04"), Source: "manual-correction"}
 	if event.FX != nil {
 		currency, amountMinor = event.FX.OriginalCurrency, event.FX.OriginalAmountMinor
 		form.FXRate = formatRate(event.FX.RateScaled)
@@ -822,6 +823,9 @@ func (s *Server) renderAsset(w http.ResponseWriter, r *http.Request, status int,
 		}
 		if eventType == item.Name {
 			eventType = item.ID
+		}
+		if form.Type == item.ID {
+			form.Cashflow, form.SystemCode = string(item.Cashflow), string(item.SystemCode)
 		}
 	}
 	var model3D *domain.ProductModel3D
