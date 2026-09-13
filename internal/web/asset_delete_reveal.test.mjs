@@ -7,6 +7,24 @@ const source = readFileSync(new URL('./static/asset-delete-reveal.js', import.me
 test('the deletion footer stays in document flow before the pull starts',()=>{
   assert.equal(page().footer.hidden,false);
 });
+test('initial arrival waits for a quiet debounce window before any preview or accumulated pull',()=>{
+  const p=page();p.bottom();
+  for(let n=0;n<4;n++){
+    p.wait(300);p.send('wheel',{deltaY:120});
+    assert.equal(p.root.scrollTop,1200);assert.equal(p.footer.inert,true);
+  }
+  p.wait(410);p.send('wheel',{deltaY:60});
+  assert.ok(p.root.scrollTop>1200 && p.root.scrollTop<1300);assert.equal(p.footer.inert,true);
+  p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.inert,false);
+});
+test('touch entry and native arrival scrolling also restart the debounce',()=>{
+  const p=page();p.bottom();p.wait(300);p.send('touchstart',{touches:[{clientY:300}]});
+  p.send('touchmove',{touches:[{clientY:180}]});assert.equal(p.root.scrollTop,1200);assert.equal(p.footer.inert,true);
+  p.send('touchend');p.wait(300);p.send('scroll');p.wait(200);
+  p.send('touchstart',{touches:[{clientY:300}]});p.send('touchmove',{touches:[{clientY:250}]});assert.equal(p.root.scrollTop,1200);
+  p.send('touchend');p.wait(410);p.send('touchstart',{touches:[{clientY:300}]});
+  p.send('touchmove',{touches:[{clientY:276}]});assert.ok(p.root.scrollTop>1200);assert.equal(p.footer.inert,true);
+});
 function page() {
   let now = 0, modal = false, reduced = false, timerID = 0; const timers = new Map();
   const listeners = {}, root = {scrollTop:0, clientHeight:600, scrollHeight:2000,calls:[]};
@@ -27,26 +45,26 @@ test('arriving at bottom and the rest of the same wheel gesture keep deletion hi
   const p=page();p.send('wheel',{deltaY:1200});p.bottom();
   for(let n=0;n<10;n++){p.wait(80);p.send('wheel',{deltaY:20});}
   assert.equal(p.footer.inert,true);
-  p.wait(300);p.send('wheel',{deltaY:240});assert.equal(p.footer.inert,false);assert.equal(p.footer.calls.length,1);
+  p.wait(500);p.send('wheel',{deltaY:240});assert.equal(p.footer.inert,false);assert.equal(p.footer.calls.length,1);
   p.send('wheel',{deltaY:50});assert.equal(p.footer.calls.length,1);
 });
 test('upward, horizontal, zoom and nested scroll gestures do not reveal',()=>{
   for(const values of [{deltaY:-240},{deltaX:1000,deltaY:240},{deltaY:240,ctrlKey:true},{deltaY:240,target:{closest:()=>null,scrollHeight:200,clientHeight:100}}]){
-    const p=page();p.bottom();p.wait(300);p.send('wheel',values);assert.equal(p.footer.inert,true);
+    const p=page();p.bottom();p.wait(500);p.send('wheel',values);assert.equal(p.footer.inert,true);
   }
-  const p=page();p.bottom();p.wait(300);p.modal(true);p.send('wheel',{deltaY:240});assert.equal(p.footer.inert,true);
+  const p=page();p.bottom();p.wait(500);p.modal(true);p.send('wheel',{deltaY:240});assert.equal(p.footer.inert,true);
 });
 test('a wheel event delivered just after reaching the bottom still belongs to the arrival',()=>{
   const p=page();p.bottom();p.send('wheel',{deltaY:100});assert.equal(p.footer.inert,true);
-  p.wait(300);p.send('wheel',{deltaY:240});assert.equal(p.footer.inert,false);
+  p.wait(500);p.send('wheel',{deltaY:240});assert.equal(p.footer.inert,false);
 });
 test('touch requires a fresh upward swipe starting at the bottom',()=>{
   const p=page();p.send('touchstart',{touches:[{clientY:300}]});p.bottom();p.send('touchmove',{touches:[{clientY:100}]});assert.equal(p.footer.inert,true);
-  p.send('touchend');p.send('touchstart',{touches:[{clientY:300}]});p.send('touchmove',{touches:[{clientY:280}]});assert.equal(p.footer.inert,true);
+  p.send('touchend');p.wait(500);p.send('touchstart',{touches:[{clientY:300}]});p.send('touchmove',{touches:[{clientY:280}]});assert.equal(p.footer.inert,true);
   p.send('touchmove',{touches:[{clientY:240}]});assert.equal(p.footer.inert,true);
   p.send('touchmove',{touches:[{clientY:200}]});assert.equal(p.footer.inert,false);
   p.send('touchmove',{touches:[{clientY:220}]});assert.equal(p.footer.inert,true);
-  p.send('touchend');p.send('touchstart',{touches:[{clientY:300}]});p.send('touchmove',{touches:[{clientY:200}]});assert.equal(p.footer.inert,false);
+  p.send('touchend');p.wait(500);p.send('touchstart',{touches:[{clientY:300}]});p.send('touchmove',{touches:[{clientY:200}]});assert.equal(p.footer.inert,false);
 });
 test('keyboard repeat cannot expose it on first arrival; a fresh key reveals and focuses it',()=>{
   const p=page();p.send('keydown',{key:'End'});p.bottom();p.send('keydown',{key:'End',repeat:true});assert.equal(p.footer.inert,true);
@@ -63,23 +81,23 @@ test('markup provides full-width action, initial hiding and a no-JavaScript fall
   assert.match(css,/\.asset-delete-reveal > \.button[^}]*width:100%/);
 });
 test('bottom anchor resists a light wheel pull and closes again on upward scrolling',()=>{
-  const p=page();p.bottom();p.wait(300);
+  const p=page();p.bottom();p.wait(500);
   p.send('wheel',{deltaY:60});assert.equal(p.footer.inert,true);
   p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.inert,false);
   p.send('wheel',{deltaY:-10});assert.equal(p.footer.inert,true);
-  p.wait(300);p.send('wheel',{deltaY:60});assert.equal(p.footer.inert,true);
+  p.wait(500);p.send('wheel',{deltaY:60});assert.equal(p.footer.inert,true);
   p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.inert,false);
 });
 test('passive scroll adjustments preserve the latch; keyboard return releases it and resets the pull',()=>{
-  const p=page();p.bottom();p.wait(300);p.send('wheel',{deltaY:100});p.wait(300);p.send('wheel',{deltaY:140});assert.equal(p.footer.inert,true);
+  const p=page();p.bottom();p.wait(500);p.send('wheel',{deltaY:100});p.wait(500);p.send('wheel',{deltaY:140});assert.equal(p.footer.inert,true);
   p.wait(50);p.send('wheel',{deltaY:100});assert.equal(p.footer.inert,false);
   p.root.scrollTop=1180;p.send('scroll');assert.equal(p.footer.inert,false);
   p.send('keydown',{key:'Home'});assert.equal(p.footer.inert,true);
-  p.bottom();p.wait(300);p.send('wheel',{deltaY:100});assert.equal(p.footer.inert,true);
+  p.bottom();p.wait(500);p.send('wheel',{deltaY:100});assert.equal(p.footer.inert,true);
 });
 test('reveal remains latched through smooth scrolling, layout adjustment and downward momentum',()=>{
   for(const reduced of [false,true]){
-    const p=page();if(reduced)p.reduced();p.bottom();p.wait(300);p.send('wheel',{deltaY:240});
+    const p=page();if(reduced)p.reduced();p.bottom();p.wait(500);p.send('wheel',{deltaY:240});
     p.root.scrollHeight=1900;
     for(const top of [1220,1250,1230,1300,1295,1300]){
       p.root.scrollTop=top;p.send('scroll');p.wait(30);p.send('wheel',{deltaY:20});assert.equal(p.footer.inert,false);
@@ -87,18 +105,18 @@ test('reveal remains latched through smooth scrolling, layout adjustment and dow
     p.wait(2000);p.send('scroll');assert.equal(p.footer.inert,false);assert.equal(p.footer.calls.length,1);
     p.send('wheel',{deltaY:-10});assert.equal(p.footer.inert,true);
     p.send('wheel',{deltaY:500});assert.equal(p.footer.inert,true);
-    p.wait(300);p.send('wheel',{deltaY:60});assert.equal(p.footer.inert,true);
+    p.wait(500);p.send('wheel',{deltaY:60});assert.equal(p.footer.inert,true);
     p.wait(50);p.send('wheel',{deltaY:180});assert.equal(p.footer.inert,false);
   }
 });
 test('line and page wheel units also cross the anchor',()=>{
   for(const values of [{deltaY:15,deltaMode:1},{deltaY:1,deltaMode:2}]){
-    const p=page();p.bottom();p.wait(300);p.send('wheel',values);assert.equal(p.footer.inert,false);
+    const p=page();p.bottom();p.wait(500);p.send('wheel',values);assert.equal(p.footer.inert,false);
   }
 });
 test('reveal uses the same document-end stop and consumes downward wheel input while latched',()=>{
   for(const deltaY of [240,1200]){
-    const p=page();p.bottom();p.wait(300);let prevented=false;
+    const p=page();p.bottom();p.wait(500);let prevented=false;
     p.send('wheel',{deltaY,preventDefault(){prevented=true;}});
     assert.equal(prevented,true);
     assert.equal(p.footer.calls[0].top,p.root.scrollHeight-p.root.clientHeight);
@@ -115,7 +133,7 @@ test('delete footer has a clear separator and consistent spacing',()=>{
   assert.match(css,/\.asset-delete-reveal\s*\{[^}]*padding:24px 0/);
 });
 test('touch reveal consumes further downward motion but allows reversal',()=>{
-  const p=page();p.bottom();p.send('touchstart',{touches:[{clientY:300}]});
+  const p=page();p.bottom();p.wait(500);p.send('touchstart',{touches:[{clientY:300}]});
   for(const clientY of [200,180]){
     let prevented=false;p.send('touchmove',{touches:[{clientY}],preventDefault(){prevented=true;}});
     assert.equal(prevented,true);assert.equal(p.footer.inert,false);
@@ -125,7 +143,7 @@ test('touch reveal consumes further downward motion but allows reversal',()=>{
   assert.equal(prevented,true);assert.equal(p.footer.inert,true);
 });
 test('wheel pressure progressively uncovers real footer content and an incomplete pull rebounds',()=>{
-  const p=page();p.bottom();p.wait(300);
+  const p=page();p.bottom();p.wait(500);
   p.send('wheel',{deltaY:60});const hint=p.root.scrollTop;
   assert.ok(hint>1200 && hint<1300);assert.equal(p.footer.hidden,false);assert.equal(p.footer.inert,true);
   p.wait(50);p.send('wheel',{deltaY:80});assert.ok(p.root.scrollTop>hint && p.root.scrollTop<1300);
@@ -134,7 +152,7 @@ test('wheel pressure progressively uncovers real footer content and an incomplet
 });
 test('a small touch drag follows the finger, cancels smoothly, and remains unclickable',()=>{
   for(const finish of ['touchend','touchcancel']){
-    const p=page();p.bottom();p.send('touchstart',{touches:[{clientY:300}]});
+    const p=page();p.bottom();p.wait(500);p.send('touchstart',{touches:[{clientY:300}]});
     p.send('touchmove',{touches:[{clientY:276}]});const hint=p.root.scrollTop;
     assert.ok(hint>1200 && hint<1300);assert.equal(p.footer.inert,true);
     p.send('touchmove',{touches:[{clientY:250}]});assert.ok(p.root.scrollTop>hint);

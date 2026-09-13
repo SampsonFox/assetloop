@@ -21,6 +21,10 @@
   let revealed = false, preview = 0, wheelPull = 0, releaseTimer;
   let lastWheel = -Infinity, wheelStartedAtBottom = false;
   let bottomSince = atAnchor() ? performance.now() : Infinity;
+  let lastInputAt = -Infinity;
+  // Debounce entry only: arriving momentum must stop before a fresh pull can
+  // start. Once armed, keep the preview responsive to every input event.
+  const readyToPull = () => performance.now() - Math.max(bottomSince, lastInputAt) >= 400;
   function release() {
     clearTimeout(releaseTimer);
     const wasRevealed = revealed;
@@ -56,7 +60,7 @@
       root.scrollTo({top:anchor() + preview, behavior:'instant'});
     }
     if (!atAnchor()) bottomSince = Infinity;
-    else if (!Number.isFinite(bottomSince)) bottomSince = performance.now();
+    else if (!Number.isFinite(bottomSince) || (!revealed && preview === 0)) bottomSince = performance.now();
     if (!revealed && root.scrollTop <= anchor() + 1) preview = 0;
   }
   window.addEventListener('scroll', constrainScroll, {passive:true});
@@ -66,10 +70,11 @@
     if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || !eligible(event.target)) return;
     const now = performance.now();
     if (now - lastWheel > 260) {
-      wheelStartedAtBottom = atAnchor() && now - bottomSince >= 260;
+      wheelStartedAtBottom = atAnchor() && readyToPull();
       wheelPull = 0;
     }
     lastWheel = now;
+    lastInputAt = now;
     if (event.deltaY < 0) {
       if (revealed || preview > 0) event.preventDefault();
       release();
@@ -94,10 +99,12 @@
   let touchY = null, lastTouchY = null;
   window.addEventListener('touchstart', event => {
     clearTimeout(releaseTimer);
-    touchY = event.touches.length === 1 && (revealed || atAnchor()) && eligible(event.target) ? event.touches[0].clientY : null;
+    touchY = event.touches.length === 1 && (revealed || (atAnchor() && readyToPull())) && eligible(event.target) ? event.touches[0].clientY : null;
+    lastInputAt = performance.now();
     lastTouchY = touchY;
   }, {passive:true});
   window.addEventListener('touchmove', event => {
+    lastInputAt = performance.now();
     if (touchY === null) return;
     if (event.touches.length !== 1 || !eligible(event.target)) { if (!revealed) release(); touchY = null; return; }
     const y = event.touches[0].clientY;
@@ -111,6 +118,7 @@
     }
   }, {passive:false});
   for (const type of ['touchend', 'touchcancel']) window.addEventListener(type, () => {
+    lastInputAt = performance.now();
     touchY = null;
     if (!revealed) release();
   }, {passive:true});
