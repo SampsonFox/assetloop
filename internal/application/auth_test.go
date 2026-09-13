@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -214,6 +215,44 @@ func TestPasswordHashRejectsMalformedAndWrongPassword(t *testing.T) {
 	}
 	if !verifyPassword(hash, "a long valid password") || verifyPassword(hash, "wrong") || verifyPassword("bad", "anything") {
 		t.Fatal("password verification result was incorrect")
+	}
+}
+
+// TestNewUserPasswordMinimumLength pins the shared validator to an eight-rune
+// minimum so both setup and member creation reject shorter passwords while the
+// Unicode case proves the limit counts runes rather than bytes.
+func TestNewUserPasswordMinimumLength(t *testing.T) {
+	now := time.Date(2026, 9, 1, 3, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name     string
+		password string
+		accepted bool
+	}{
+		{name: "seven ASCII characters", password: "abcdefg", accepted: false},
+		{name: "eight ASCII characters", password: "abcdefgh", accepted: true},
+		{name: "seven Unicode runes", password: strings.Repeat("密", 7), accepted: false},
+		{name: "eight Unicode runes", password: strings.Repeat("密", 8), accepted: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			user, err := newUser("member", test.password, now)
+			if test.accepted {
+				if err != nil {
+					t.Fatalf("password %q should be accepted: %v", test.password, err)
+				}
+				if user.PasswordHash == "" {
+					t.Fatalf("accepted password %q was not hashed", test.password)
+				}
+				return
+			}
+			var input InputError
+			if !errors.As(err, &input) || input.Code != "validation.password_length" {
+				t.Fatalf("password %q should fail with validation.password_length: %v", test.password, err)
+			}
+			if len(input.Args) != 1 || input.Args[0] != 8 {
+				t.Fatalf("validation.password_length must report the 8-rune minimum, got %v", input.Args)
+			}
+		})
 	}
 }
 

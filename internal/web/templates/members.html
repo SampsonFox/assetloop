@@ -18,7 +18,7 @@
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <header class="member-create-heading"><h2>{{t $s "members.add"}}</h2><button class="icon-button management-primary" type="submit" aria-label="{{t $s "members.create"}}" title="{{t $s "members.create"}}">{{template "ui-icon" "plus"}}</button></header>
     <label>{{t $s "members.username"}}<input name="username" required autocomplete="off"></label>
-    <label>{{t $s "members.initial_password"}}<input name="password" type="password" minlength="12" required autocomplete="new-password"></label>
+    <label>{{t $s "members.initial_password"}}<input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
     <label>{{t $s "members.role"}}<select name="role"><option value="editor">{{t $s "role.editor"}}</option><option value="viewer">{{t $s "role.viewer"}}</option><option value="owner">{{t $s "role.owner"}}</option></select></label>
     <p class="muted member-role-help">{{t $s "members.role_help"}}</p>
   </form>

@@ -385,8 +385,8 @@ func newUser(username, password string, now time.Time) (User, error) {
 	if err != nil {
 		return User{}, err
 	}
-	if utf8.RuneCountInString(password) < 12 {
-		return User{}, NewInputError("validation.password_length", 12)
+	if utf8.RuneCountInString(password) < 8 {
+		return User{}, NewInputError("validation.password_length", 8)
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
