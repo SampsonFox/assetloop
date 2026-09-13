@@ -528,6 +528,8 @@ button[aria-busy="true"]::after { content:" …"; }
 .asset-detail-heading .heading-actions { flex:none; align-self:center; flex-wrap:nowrap; gap:6px; }
 .asset-detail-heading .icon-button { width:34px; height:34px; min-height:34px; border-radius:8px; }
 .asset-detail-heading .icon-button svg { width:16px; height:16px; }
+.asset-detail-heading .icon-button.danger { color:var(--danger); }
+.asset-detail-heading .icon-button.danger:hover { border-color:var(--danger); background:var(--danger-bg); }
 @media (max-width:760px) { .shell:has(> .asset-detail-heading) { padding-top:16px; } .asset-detail-heading { gap:12px; margin-bottom:16px; } .asset-detail-heading h1 { font-size:22px; } }
 @media (pointer:coarse) { .asset-detail-heading .icon-button { width:44px; height:44px; min-height:44px; } }
 .timeline-trigger[aria-expanded="true"] .timeline-clock { display:inline; }
@@ -683,6 +685,3 @@ dialog .asset-editor-fields { grid-template-columns:repeat(auto-fit,minmax(min(1
 .market-specs dd { margin:0; overflow-wrap:anywhere; }
 .market-specs details { margin-top:8px; font-size:.85rem; }
 .market-selection h3,.market-preview h3 { margin-top:0; }
-
-.asset-delete-reveal { padding:24px 0; border-top:1px solid var(--muted); }
-.asset-delete-reveal > .button { display:block; width:100%; text-align:center; min-height:48px; }

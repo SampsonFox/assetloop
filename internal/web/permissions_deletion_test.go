@@ -64,6 +64,22 @@ func TestRolePagesAndConfirmedDeletion(t *testing.T) {
 			}
 			cookies := []*http.Cookie{{Name: sessionCookie, Value: login.Token}, adminCookies[1]}
 			body := request(t, h, "GET", path, nil, cookies).Body.String()
+			if strings.Contains(body, "asset-delete-reveal") || strings.Contains(body, "data-delete-reveal") {
+				t.Fatal("item detail must not load the retired pull-to-delete interaction")
+			}
+			actionsStart := strings.Index(body, `class="heading-actions asset-detail-actions"`)
+			if actionsStart < 0 {
+				t.Fatal("missing item heading action group")
+			}
+			actions := body[actionsStart:]
+			actions = actions[:strings.Index(actions, "</div>")]
+			deleteLink := `href="` + path + `/delete"`
+			if strings.Contains(actions, deleteLink) != (role == application.RoleOwner) {
+				t.Fatalf("heading delete action visibility for %s", role)
+			}
+			if role == application.RoleOwner && (strings.Count(body, deleteLink) != 1 || !strings.Contains(actions, `aria-label="`+textFor(admin.Locale, "asset.delete")+`"`)) {
+				t.Fatal("admin should have one accessible delete action in the heading")
+			}
 			if strings.Contains(body, textFor(admin.Locale, "asset.delete_warning")) || strings.Contains(body, "<h2>"+textFor(admin.Locale, "asset.delete")+"</h2>") {
 				t.Fatal("item detail should show only the delete button; explanation belongs on confirmation page")
 			}
