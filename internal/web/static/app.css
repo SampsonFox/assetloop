@@ -685,3 +685,33 @@ dialog .asset-editor-fields { grid-template-columns:repeat(auto-fit,minmax(min(1
 .market-specs dd { margin:0; overflow-wrap:anywhere; }
 .market-specs details { margin-top:8px; font-size:.85rem; }
 .market-selection h3,.market-preview h3 { margin-top:0; }
+
+.members-heading { margin-bottom:24px; }
+.members-heading h1 { margin:0; font-size:28px; letter-spacing:-.02em; }
+.members-heading p { margin:8px 0 0; }
+.members-filters > label:not(:first-of-type) { flex:1 1 130px; }
+.members-filters label,.member-create label { font-size:.85rem; font-weight:600; }
+.members-layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:start; }
+.members-list { padding:0; min-width:0; }
+.members-list th,.members-list td { padding:16px 20px; vertical-align:middle; }
+.members-list th { color:var(--muted); font-size:.8rem; font-weight:500; }
+.members-list tbody tr:last-child td { border-bottom:0; }
+.member-name { font-weight:600; overflow-wrap:anywhere; }
+.member-role-form { display:flex; align-items:center; gap:8px; }
+.member-role-form label { flex:1; min-width:0; }
+.member-role-form select { min-width:110px; padding:8px 10px; font-size:.85rem; }
+.member-role-form .icon-button { width:32px; height:32px; min-height:32px; }
+.members-list .table-pagination { padding:16px 20px; margin:0; }
+.member-create { margin:0; gap:20px; }
+.member-create-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.member-create-heading h2 { margin:0; font-size:18px; font-weight:600; }
+.member-role-help { margin:0; font-size:.8rem; line-height:1.65; }
+@media(max-width:900px) { .members-layout { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:520px) {
+  .members-list { border:0; background:transparent; overflow:visible; }
+  .members-list td { padding:10px 0; }
+  .members-list tbody tr:last-child td:not(:last-child) { border-bottom:1px solid var(--line); }
+  .member-role-form { flex:1; min-width:0; justify-content:flex-end; }
+  .member-role-form label { flex:0 1 170px; }
+}
+@media(pointer:coarse) { .member-role-form .icon-button { width:44px; height:44px; min-height:44px; } }

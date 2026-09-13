@@ -2,6 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
+test('member management uses compact management controls and a separate create panel', () => {
+  const html = read('./templates/members.html');
+  assert.doesNotMatch(html, /class="eyebrow"|class="two-column"/);
+  assert.match(html, /asset-filters management-filters members-filters/);
+  assert.match(html, /class="member-role-form"/);
+  assert.match(html, /class="members-layout"/);
+  assert.match(html, /class="card stack member-create"/);
+  assert.match(html, /{{template "ui-icon" "save"}}/);
+  assert.match(html, /name="password"[^>]*minlength="12"/);
+  assert.match(html, /name="csrf_token"/);
+});
 
 test('drawer actions have breathing room and the shell requests the updated stylesheet', () => {
   assert.match(read('./static/app.css'), /\.drawer-heading-actions \{[^}]*gap:12px/);
