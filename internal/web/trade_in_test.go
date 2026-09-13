@@ -446,6 +446,106 @@ func TestTradeInWebSelectionPreviewAndRecord(t *testing.T) {
 	}
 }
 
+// TestTradeInWebInitialReviewBindsEffectiveRecords proves the first review POST
+// resolves the same effective purchase and sale the rendered form submits: a
+// trade-in whose two sides already hold valid money must preview as ready with
+// the exact record IDs bound, no new-money inputs and no events written.
+func TestTradeInWebInitialReviewBindsEffectiveRecords(t *testing.T) {
+	f := newTradeInWebFixture(t)
+	newAsset, oldAsset := f.createAsset(t, "就绪新机"), f.createAsset(t, "就绪旧机")
+	newPurchase := f.record(t, newAsset, "purchase", "6000.00", "2026-08-05T10:00")
+	f.record(t, oldAsset, "purchase", "2400.00", "2026-01-06T10:00")
+	oldSale := f.record(t, oldAsset, "sale", "1900.00", "2026-08-06T10:00")
+	newBefore, oldBefore := len(f.events(t, newAsset)), len(f.events(t, oldAsset))
+
+	review := f.post(t, "/assets/"+newAsset+"/trade-in/preview", url.Values{
+		"direction": {"source"}, "page": {"1"}, "step": {"review"},
+		"selected": {oldAsset}, "displayed": {oldAsset},
+	})
+	if review.Code != http.StatusOK {
+		t.Fatalf("initial review: %d %s", review.Code, review.Body.String())
+	}
+	body := review.Body.String()
+	if !strings.Contains(body, "已具备全部买卖记录和关系信息，可以保存。") {
+		t.Fatalf("the initial review must render ready: %s", body)
+	}
+	if strings.Contains(body, "还有记录待补充") {
+		t.Fatalf("the initial review must not report missing records: %s", body)
+	}
+	// The rendered form submits exactly the resolved records, so the preview and
+	// the eventual write describe the same economic events.
+	if value := inputValue(t, body, "existing_"+newAsset); value != newPurchase {
+		t.Fatalf("existing_%s = %q, want %q: %s", newAsset, value, newPurchase, body)
+	}
+	if value := inputValue(t, body, "existing_"+oldAsset); value != oldSale {
+		t.Fatalf("existing_%s = %q, want %q: %s", oldAsset, value, oldSale, body)
+	}
+	if strings.Contains(body, `name="amount_`+newAsset+`"`) || strings.Contains(body, `name="amount_`+oldAsset+`"`) {
+		t.Fatal("a reused record must stay read-only instead of offering new-money inputs")
+	}
+	if value := inputValue(t, body, "association_date"); value == "" {
+		t.Fatalf("the review must submit the defaulted association date: %s", body)
+	}
+	if len(f.events(t, newAsset)) != newBefore || len(f.events(t, oldAsset)) != oldBefore {
+		t.Fatal("the initial review wrote events")
+	}
+}
+
+// TestTradeInWebRejectedFinalPostKeepsBlankSubmission proves a refused final
+// POST re-renders exactly what was submitted. The selection->review transition
+// is the only place allowed to resolve an implicit effective record or to
+// default an empty date, so the review form of a rejected command keeps its blank
+// association date, its request key and its explicit record IDs, does not bind
+// the effective record the reviewer never chose, and writes nothing.
+func TestTradeInWebRejectedFinalPostKeepsBlankSubmission(t *testing.T) {
+	f := newTradeInWebFixture(t)
+	current, counterpart := f.createAsset(t, "空白新机"), f.createAsset(t, "空白旧机")
+	purchase := f.record(t, current, "purchase", "4300.00", "2026-08-29T10:00")
+	f.record(t, counterpart, "purchase", "1500.00", "2026-02-05T10:00")
+	// The counterpart holds an effective sale, which a generic error renderer
+	// would otherwise infer and bind in place of the rejected submission.
+	f.record(t, counterpart, "sale", "1600.00", "2026-08-29T10:00")
+	currentBefore, counterpartBefore := len(f.events(t, current)), len(f.events(t, counterpart))
+
+	rejected := f.post(t, "/assets/"+current+"/trade-in", url.Values{
+		"direction": {"source"}, "counterpart_id": {counterpart},
+		"existing_" + current:   {purchase},
+		"amount_" + counterpart: {"not-an-amount"}, "currency_" + counterpart: {"CNY"},
+		"occurred_" + counterpart: {"2026-08-29T10:00"},
+		// The reviewer cleared the association date on purpose.
+		"association_date": {""}, "association_reference": {"KEEP-BLANK"}, "association_notes": {"空白日期"},
+		"request_key": {"trade-in-web-blank-date"},
+	})
+	if rejected.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("rejected final POST: %d %s", rejected.Code, rejected.Body.String())
+	}
+	body := rejected.Body.String()
+	if value := inputValue(t, body, "association_date"); value != "" {
+		t.Fatalf("a blank association date must stay blank, got %q: %s", value, body)
+	}
+	if value := inputValue(t, body, "request_key"); value != "trade-in-web-blank-date" {
+		t.Fatalf("request_key = %q, want the submitted key: %s", value, body)
+	}
+	if value := inputValue(t, body, "existing_"+current); value != purchase {
+		t.Fatalf("existing_%s = %q, want the submitted record %q: %s", current, value, purchase, body)
+	}
+	if strings.Contains(body, `name="existing_`+counterpart+`"`) {
+		t.Fatalf("the rejected submission must not bind an inferred record: %s", body)
+	}
+	if value := inputValue(t, body, "amount_"+counterpart); value != "not-an-amount" {
+		t.Fatalf("amount_%s = %q, want the submitted value: %s", counterpart, value, body)
+	}
+	for _, want := range []string{"金额格式无效", "空白日期", "KEEP-BLANK"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("a rejected final POST must report or keep %q: %s", want, body)
+		}
+	}
+	assertInputValues(t, body, "counterpart_id", counterpart)
+	if len(f.events(t, current)) != currentBefore || len(f.events(t, counterpart)) != counterpartBefore {
+		t.Fatal("a rejected final POST wrote events")
+	}
+}
+
 // latestPair returns the newest effective paired event of one asset.
 func (f *tradeInWebFixture) latestPair(t *testing.T, assetID string) domain.AssetEvent {
 	t.Helper()

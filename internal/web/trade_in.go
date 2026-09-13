@@ -149,6 +149,11 @@ type tradeInAttempt struct {
 	Reference  string
 	Notes      string
 	RequestKey string
+	// Initial marks the selection->review transition performed by the preview
+	// endpoint. Only that transition resolves an implicit effective record and
+	// defaults a blank association date or money group; a rejected final POST
+	// always re-renders exactly what was submitted, blanks included.
+	Initial bool
 }
 
 func normalizeTradeInDirection(value string) string {
@@ -492,6 +497,16 @@ func (s *Server) tradeInPreview(w http.ResponseWriter, r *http.Request) {
 		s.renderTradeInSelect(w, r, http.StatusUnprocessableEntity, principal, current, attempt, textFor(principal.Locale, "trade_in.no_selection"))
 		return
 	}
+	// This request is the selection->review transition, and the only place that
+	// resolves what the reviewer left implicit before the shared preview runs.
+	// The generic error renderer is never allowed to do it: a refused final POST
+	// must re-render its own blanks instead of inventing a record or a date.
+	attempt.Initial = true
+	attempt, err = s.resolveInitialTradeInReview(r.Context(), principal, current.ID, attempt)
+	if err != nil {
+		s.renderError(w, r, http.StatusInternalServerError, err)
+		return
+	}
 	s.renderTradeInReview(w, r, http.StatusOK, principal, current, attempt, "")
 }
 
@@ -663,6 +678,7 @@ func (s *Server) renderTradeInReview(w http.ResponseWriter, r *http.Request, sta
 		s.renderError(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	pairs, involved := tradeInPairs(current, attempt.Direction, counterparts)
 	// The shared preview is authoritative for the selection kinds and the still
 	// missing fields; an unmappable submitted value or a preview refusal is
 	// reported without losing the form or the retained selection.
@@ -683,7 +699,6 @@ func (s *Server) renderTradeInReview(w http.ResponseWriter, r *http.Request, sta
 		message = s.userError(principal.Locale, previewErr)
 		status = http.StatusUnprocessableEntity
 	}
-	pairs, involved := tradeInPairs(current, attempt.Direction, counterparts)
 	economics, err := s.tradeInEconomics(r.Context(), principal, involved, attempt, selections, baseCurrency)
 	if err != nil {
 		s.renderError(w, r, http.StatusInternalServerError, err)
@@ -714,9 +729,6 @@ func (s *Server) renderTradeInReview(w http.ResponseWriter, r *http.Request, sta
 		AssociationRef:   attempt.Reference,
 		AssociationNotes: attempt.Notes,
 		RequestKey:       requestKey,
-	}
-	if data.AssociationDate == "" {
-		data.AssociationDate = time.Now().Local().Format("2006-01-02T15:04")
 	}
 	s.renderTradeIn(w, status, principal, current, data, message, r)
 }
@@ -755,53 +767,87 @@ type tradeInInvolved struct {
 	Role  string
 }
 
-// tradeInEconomics projects every involved asset: an existing effective record
-// is shown read-only with its original evidence, an absent one exposes the money
-// fields a write still needs, and an explicitly submitted record that no longer
-// qualifies stays visible as stale instead of being replaced.
+// resolveInitialTradeInReview fills in what the selection->review transition
+// left implicit. A side submitted without an explicit record and without new
+// money is bound to its current effective record, and a blank association date
+// is defaulted, so the rendered review form and the shared preview describe the
+// same command. An explicit submitted ID is never replaced and submitted money
+// is never touched; only this transition calls the helper.
+func (s *Server) resolveInitialTradeInReview(ctx context.Context, principal application.Principal, currentID string, attempt tradeInAttempt) (tradeInAttempt, error) {
+	if strings.TrimSpace(attempt.Date) == "" {
+		attempt.Date = time.Now().Local().Format("2006-01-02T15:04")
+	}
+	if attempt.Existing == nil {
+		attempt.Existing = make(map[string]string, len(attempt.Selected)+1)
+	}
+	for _, assetID := range append([]string{currentID}, attempt.Selected...) {
+		if strings.TrimSpace(attempt.Existing[assetID]) != "" {
+			continue
+		}
+		if tradeInNewMoneySubmitted(attempt.Money[assetID]) {
+			continue
+		}
+		event, err := s.effectiveTradeInEvent(ctx, principal, assetID, tradeInKind(tradeInRole(attempt.Direction, assetID, currentID)))
+		if err != nil {
+			return attempt, err
+		}
+		if event != nil {
+			attempt.Existing[assetID] = event.ID
+		}
+	}
+	return attempt, nil
+}
+
+// tradeInNewMoneySubmitted reports whether the reviewer supplied any new-money
+// field for one side. Such a submission must never be replaced by an inferred
+// reuse of an existing record.
+func tradeInNewMoneySubmitted(form tradeInMoneyForm) bool {
+	return strings.TrimSpace(form.Amount) != "" || strings.TrimSpace(form.Currency) != "" || strings.TrimSpace(form.OccurredAt) != ""
+}
+
+// tradeInEconomics projects every involved asset: an explicitly submitted record
+// is shown read-only with its original evidence, a side without one exposes the
+// money fields a write still needs, and a submitted record that no longer
+// qualifies stays visible as stale instead of being replaced. Nothing is
+// inferred here: the selection->review transition has already bound every record
+// the form is allowed to carry.
 func (s *Server) tradeInEconomics(ctx context.Context, principal application.Principal, involved []tradeInInvolved, attempt tradeInAttempt, selections map[string]string, baseCurrency string) ([]tradeInEconomicView, error) {
-	defaultDate := time.Now().Local().Format("2006-01-02T15:04")
 	views := make([]tradeInEconomicView, 0, len(involved))
 	for _, item := range involved {
 		role := item.Role
 		kind := tradeInKind(role)
+		submitted := tradeInNewMoneySubmitted(attempt.Money[item.Asset.ID])
 		view := tradeInEconomicView{
 			AssetID: item.Asset.ID, AssetName: assetTitle(item.Asset), AssetSpec: item.Asset.TagSummary,
 			Role: role, RoleLabel: s.tradeInRoleLabel(principal.Locale, role),
-			Form: tradeInMoneyForm{Currency: baseCurrency, OccurredAt: defaultDate},
+			Form: attempt.Money[item.Asset.ID],
 		}
-		if form, found := attempt.Money[item.Asset.ID]; found {
-			view.Form = form
-		}
-		if strings.TrimSpace(view.Form.Currency) == "" {
-			view.Form.Currency = baseCurrency
-		}
-		if strings.TrimSpace(view.Form.OccurredAt) == "" {
-			view.Form.OccurredAt = defaultDate
+		if attempt.Initial {
+			// Only the selection->review transition closes an empty money group;
+			// a rejected final POST re-renders the submitted blanks unchanged.
+			if strings.TrimSpace(view.Form.Currency) == "" {
+				view.Form.Currency = baseCurrency
+			}
+			if strings.TrimSpace(view.Form.OccurredAt) == "" {
+				view.Form.OccurredAt = time.Now().Local().Format("2006-01-02T15:04")
+			}
 		}
 		existingID := strings.TrimSpace(attempt.Existing[item.Asset.ID])
 		if existingID != "" {
 			if err := s.resolveSubmittedTradeInEvent(ctx, principal, item.Asset.ID, kind, existingID, &view); err != nil {
 				return nil, err
 			}
-		} else {
-			// No explicit selection was submitted, so this is the initial review:
-			// the current effective record of the asset is resolved here and its
-			// exact ID is bound into the form the user confirms.
-			event, err := s.effectiveTradeInEvent(ctx, principal, item.Asset.ID, kind)
-			if err != nil {
-				return nil, err
-			}
-			view.Event = event
-			if event != nil {
-				view.ExistingID = event.ID
-			}
 		}
 		selection := selections[item.Asset.ID]
 		if selection == application.TradeInSelectionLinked {
 			selection = application.TradeInSelectionReuse
 		}
-		if selection == "" {
+		if existingID == "" && !submitted {
+			// This side was submitted with neither a record nor new money, so the
+			// form must ask for it again instead of adopting an inferred reuse the
+			// submitted command never carried.
+			selection = application.TradeInSelectionMissing
+		} else if selection == "" {
 			if view.Event != nil {
 				selection = application.TradeInSelectionReuse
 			} else {
